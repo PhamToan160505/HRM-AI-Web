@@ -1,0 +1,127 @@
+/*
+ * HRM AI — Design System
+ * Tailwind v4: dùng @theme directive để map CSS variables thành Tailwind utility classes.
+ * Sau khi khai báo @theme, có thể dùng: bg-primary, text-primary-dark, border-surface, v.v.
+ * KHÔNG hardcode màu rải rác — luôn dùng CSS variable qua Tailwind class.
+ *
+ * Bảng màu: XANH DƯƠNG & TRẮNG — theo SKILL_frontend-design.md mục 0.
+ * TUYỆT ĐỐI không dùng lại màu vàng ở bất kỳ đâu trong hệ thống.
+ */
+
+/* Google Fonts — Be Vietnam Pro (phải đứng TRƯỚC @import tailwindcss) */
+@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap');
+
+@import "tailwindcss";
+
+/* ─────────────────────────────────────────────────────────────
+   @theme — Map custom values thành Tailwind utility classes
+   Sau khai báo này có thể dùng:
+     bg-primary, bg-primary-dark, bg-primary-deeper, bg-primary-light
+     text-primary, text-primary-dark, text-muted
+     bg-surface, bg-bg-secondary
+     border-border
+     text-success, text-danger, text-warning
+     bg-warning-light
+   ──────────────────────────────────────────────────────────── */
+@theme {
+  /* Primary — Xanh dương */
+  --color-primary:         #2563EB;
+  --color-primary-dark:    #1D4ED8;
+  --color-primary-deeper:  #1E3A8A;
+  --color-primary-light:   #DBEAFE;
+  --color-primary-hover:   #1D4ED8;
+
+  /* Backgrounds */
+  --color-bg:              #FFFFFF;
+  --color-bg-secondary:    #F8FAFC;
+  --color-surface:         #FFFFFF;
+  --color-surface-hover:   #EFF6FF;
+
+  /* Borders */
+  --color-border:          #E2E8F0;
+  --color-border-light:    #F1F5F9;
+
+  /* Text */
+  --color-text:            #1E293B;
+  --color-text-secondary:  #64748B;
+  --color-muted:           #94A3B8;
+
+  /* Status — KHÔNG đổi thành xanh dương, giữ chuẩn thông thường */
+  --color-success:         #16A34A;
+  --color-success-light:   #DCFCE7;
+  --color-danger:          #DC2626;
+  --color-danger-light:    #FEE2E2;
+  --color-warning:         #D97706;
+  --color-warning-light:   #FEF3C7;
+
+  /* Sidebar */
+  --color-sidebar-bg:      #1E3A8A;
+  --color-sidebar-text:    #E0E7FF;
+  --color-sidebar-active:  #2563EB;
+  --color-sidebar-hover:   #1D4ED8;
+
+  /* Font */
+  --font-main: 'Be Vietnam Pro', sans-serif;
+
+  /* Shadows */
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.08), 0 1px 2px -1px rgb(0 0 0 / 0.06);
+  --shadow-dropdown: 0 4px 16px 0 rgb(0 0 0 / 0.12);
+
+  /* Border radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Global base styles
+   ──────────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 14px; /* Phần mềm doanh nghiệp dùng font nhỏ hơn app tiêu dùng */
+}
+
+body {
+  font-family: var(--font-main);
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Số liệu bảng — tabular-nums cho chấm công/lương */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Scrollbar tinh tế */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-border-light);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-muted);
+}
+
+/* Focus ring — Accessibility */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Transition mặc định cho interactive elements */
+button, a, input, select, textarea {
+  transition: all 0.15s ease;
+}
