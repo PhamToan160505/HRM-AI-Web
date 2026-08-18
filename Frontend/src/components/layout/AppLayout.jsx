@@ -59,7 +59,7 @@ function SidebarContent({ role, onClose }) {
   ];
   const managerNav = [
     { to: '/manager/dashboard', icon: LayoutDashboard, label: 'Tổng quan', end: true },
-    { to: '/manager/recruitment', icon: Users, label: 'Tuyển dụng' },
+    { to: '/manager/recruitment/overview', icon: Users, label: 'Tuyển dụng AI' },
     { to: '/manager/attendance', icon: ClipboardCheck, label: 'Chấm công' },
     { to: '/manager/payroll', icon: Banknote, label: 'Lương phòng' },
   ];

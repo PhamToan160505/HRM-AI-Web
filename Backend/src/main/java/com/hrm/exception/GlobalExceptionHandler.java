@@ -59,6 +59,16 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Lỗi tham số không hợp lệ (ví dụ: ngày bắt đầu sau ngày kết thúc).
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException ex) {
+        log.warn("IllegalArgumentException: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
+    /**
      * AppException — lỗi nghiệp vụ có HttpStatus cụ thể.
      */
     @ExceptionHandler(AppException.class)

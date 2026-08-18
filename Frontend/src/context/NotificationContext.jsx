@@ -5,6 +5,8 @@ import { useAuth } from './AuthContext';
 
 export const NotificationContext = createContext();
 
+export const useNotification = () => useContext(NotificationContext);
+
 export const NotificationProvider = ({ children }) => {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState([]);
@@ -60,9 +62,16 @@ export const NotificationProvider = ({ children }) => {
 
   const closeUrgentModal = () => {
     if (urgentNotification) {
-      markAsRead(urgentNotification.id);
+      if (!urgentNotification.isLocal) {
+        markAsRead(urgentNotification.id);
+      }
       setUrgentNotification(null);
     }
+  };
+
+  const showNotification = (title, message, type = 'info') => {
+    // Trigger urgentNotification with a synthetic object so NotificationModal can show it
+    setUrgentNotification({ tieuDe: title, noiDung: message, type, id: Date.now(), mucDo: 'khan', isLocal: true });
   };
 
   return (
@@ -73,6 +82,7 @@ export const NotificationProvider = ({ children }) => {
         urgentNotification,
         markAsRead,
         closeUrgentModal,
+        showNotification,
       }}
     >
       {children}

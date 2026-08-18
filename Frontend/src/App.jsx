@@ -12,8 +12,14 @@ import RequireRole from './components/common/RequireRole';
 
 // Pages
 import LoginPage from './pages/public/LoginPage';
+import PublicApplyForm from './pages/public/PublicApplyForm';
 import DirectorDashboardPage from './pages/director/DashboardPage';
 import ManagerDashboardPage from './pages/manager/DashboardPage';
+import RecruitmentLayout from './pages/manager/recruitment/RecruitmentLayout';
+import JobPostingList from './pages/manager/recruitment/JobPostingList';
+import JobPostingForm from './pages/manager/recruitment/JobPostingForm';
+import ApplicationListPage from './pages/manager/recruitment/ApplicationListPage';
+import ApplicationDetailPage from './pages/manager/recruitment/ApplicationDetailPage';
 import EmployeeDashboardPage from './pages/employee/DashboardPage';
 
 /**
@@ -40,7 +46,8 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
 
           {/* Placeholder cho trang public apply (Bước 4) */}
-          {/* <Route path="/public/apply/:jobSlug" element={<ApplyPage />} /> */}
+          {/* Placeholder cho trang public apply (Bước 4) */}
+          <Route path="/public/apply/:jobSlug" element={<PublicApplyForm />} />
 
           {/* ── Giám đốc ──────────────────────────────────── */}
           <Route
@@ -67,7 +74,20 @@ export default function App() {
           >
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<ManagerDashboardPage />} />
-            {/* Module Tuyển dụng (Bước 4): /manager/recruitment/... */}
+            {/* Module Tuyển dụng (Bước 4) */}
+            <Route path="recruitment" element={<RecruitmentLayout />}>
+              <Route index element={<Navigate to="overview" replace />} />
+              <Route path="overview" element={<div>Màn hình tổng quan (Đang xây dựng)</div>} />
+              <Route path="campaigns" element={<JobPostingList />} />
+              <Route path="campaigns/new" element={<JobPostingForm />} />
+              <Route path="applications" element={<ApplicationListPage />} />
+              <Route path="applications/:id" element={<ApplicationDetailPage />} />
+              {/* Other tabs placeholders */}
+              <Route path="review" element={<div>Đánh giá (Đang xây dựng)</div>} />
+              <Route path="approvals" element={<div>Phê duyệt (Đang xây dựng)</div>} />
+              <Route path="reports" element={<div>Báo cáo (Đang xây dựng)</div>} />
+              <Route path="settings" element={<div>Thiết lập (Đang xây dựng)</div>} />
+            </Route>
           </Route>
 
           {/* ── Nhân viên ─────────────────────────────────── */}
