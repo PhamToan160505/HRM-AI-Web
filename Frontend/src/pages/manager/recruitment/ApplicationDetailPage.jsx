@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Check, X, ShieldAlert, Sparkles, Loader2, FileText } from 'lucide-react';
 import { useNotification } from '../../../context/NotificationContext';
+import { useAuth } from '../../../context/AuthContext';
 import api, { apiAi } from '../../../services/api';
 
 import ApplicationAttachmentsBlock from './components/ApplicationAttachmentsBlock';
@@ -24,6 +25,10 @@ export default function ApplicationDetailPage() {
   const [decisionLogModal, setDecisionLogModal] = useState({ isOpen: false, log: null });
   const [runningAi, setRunningAi] = useState(false);
   const [showAiDrawer, setShowAiDrawer] = useState(false);
+  const { role } = useAuth();
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, status: null, currentLabel: '', newLabel: '' });
+  const [submitModal, setSubmitModal] = useState({ isOpen: false, isPriority: false });
+  const [rejectModal, setRejectModal] = useState({ isOpen: false, reason: '' });
 
   useEffect(() => {
     const fetchApp = api.get(`/api/recruitment/applications/${id}`);
@@ -48,14 +53,60 @@ export default function ApplicationDetailPage() {
   }, [id]);
 
   const handleUpdateDecision = async (status) => {
+    // legacy method, removed.
+  };
+
+  const executeSubmitToDirector = async () => {
     try {
-      const res = await api.patch(`/api/recruitment/applications/${id}/decision`, { status });
+      const res = await api.post(`/api/recruitment/applications/${id}/submit-to-director`, { isPriority: submitModal.isPriority });
       if (res.data.success) {
         setApplication(res.data.data);
-        showNotification('Thành công', 'Đã cập nhật quyết định', 'success');
+        showNotification('Thành công', 'Đã trình lên Giám đốc', 'success');
+        setSubmitModal({ isOpen: false, isPriority: false });
       }
     } catch (e) {
-      showNotification('Lỗi', 'Lỗi hệ thống', 'error');
+      showNotification('Lỗi', e.response?.data?.message || 'Không thể trình GĐ', 'error');
+    }
+  };
+
+  const executeHrReject = async () => {
+    try {
+      const res = await api.post(`/api/recruitment/applications/${id}/reject-hr`);
+      if (res.data.success) {
+        setApplication(res.data.data);
+        showNotification('Thành công', 'Đã loại hồ sơ', 'success');
+      }
+    } catch (e) {
+      showNotification('Lỗi', e.response?.data?.message || 'Không thể loại hồ sơ', 'error');
+    }
+  };
+
+  const executeDirectorApprove = async () => {
+    try {
+      const res = await api.post(`/api/recruitment/applications/${id}/approve-director`);
+      if (res.data.success) {
+        setApplication(res.data.data);
+        showNotification('Thành công', 'Đã phê duyệt hồ sơ', 'success');
+      }
+    } catch (e) {
+      showNotification('Lỗi', e.response?.data?.message || 'Không thể phê duyệt', 'error');
+    }
+  };
+
+  const executeDirectorReject = async () => {
+    if (!rejectModal.reason.trim()) {
+      showNotification('Lỗi', 'Vui lòng nhập lý do từ chối', 'error');
+      return;
+    }
+    try {
+      const res = await api.post(`/api/recruitment/applications/${id}/reject-director`, { reason: rejectModal.reason });
+      if (res.data.success) {
+        setApplication(res.data.data);
+        showNotification('Thành công', 'Đã từ chối hồ sơ', 'success');
+        setRejectModal({ isOpen: false, reason: '' });
+      }
+    } catch (e) {
+      showNotification('Lỗi', e.response?.data?.message || 'Không thể từ chối', 'error');
     }
   };
 
@@ -106,21 +157,85 @@ export default function ApplicationDetailPage() {
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <span className="text-sm text-slate-500">Trạng thái:</span>
-            <span className="font-bold text-slate-800 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
-              {application.decisionStatus}
+            <span className={`font-bold px-3 py-1.5 rounded-lg border text-sm ${
+              {
+                'PENDING_AI_REVIEW': 'bg-blue-50 text-blue-700 border-blue-200',
+                'AI_EVALUATED':      'bg-indigo-50 text-indigo-700 border-indigo-200',
+                'PENDING':           'bg-amber-50 text-amber-700 border-amber-200',
+                'NEEDS_VERIFICATION':'bg-purple-50 text-purple-700 border-purple-200',
+                'APPROVED':          'bg-emerald-50 text-emerald-700 border-emerald-200',
+                'REJECTED':          'bg-rose-50 text-rose-700 border-rose-200',
+              }[application.decisionStatus] || 'bg-slate-100 text-slate-700 border-slate-200'
+            }`}>
+              {application.approvalStatus === 'PENDING' && 'Chờ HR xử lý'}
+              {application.approvalStatus === 'PENDING_DIRECTOR' && 'Chờ GĐ duyệt'}
+              {application.approvalStatus === 'APPROVED' && 'Đã duyệt'}
+              {application.approvalStatus === 'REJECTED' && 'Đã loại'}
             </span>
+            {application.isPriority && (
+              <span className="font-bold px-3 py-1.5 rounded-lg border text-sm bg-rose-50 text-rose-700 border-rose-200 ml-2">Ưu tiên</span>
+            )}
+            {application.needsVerification && (
+              <span className="font-bold px-3 py-1.5 rounded-lg border text-sm bg-purple-50 text-purple-700 border-purple-200 ml-2">Cần xác minh</span>
+            )}
           </div>
-          
+          <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
+            {role === 'truong_phong' && application.approvalStatus === 'PENDING' && (
+              <>
+                <button 
+                  onClick={() => setSubmitModal({ isOpen: true, isPriority: false })}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-medium transition-colors text-sm border bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200"
+                >
+                  <Check size={16} /> Trình GĐ
+                </button>
+                <button 
+                  onClick={executeHrReject}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-medium transition-colors text-sm border bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200"
+                >
+                  <X size={16} /> Loại
+                </button>
+              </>
+            )}
+            {role === 'giam_doc' && application.approvalStatus === 'PENDING_DIRECTOR' && (
+              <>
+                <button 
+                  onClick={executeDirectorApprove}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-medium transition-colors text-sm border bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200"
+                >
+                  <Check size={16} /> Phê duyệt
+                </button>
+                <button 
+                  onClick={() => setRejectModal({ isOpen: true, reason: '' })}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-medium transition-colors text-sm border bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200"
+                >
+                  <X size={16} /> Từ chối
+                </button>
+              </>
+            )}
+          </div>
+
           <button
             onClick={() => setShowAiDrawer(true)}
-            className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-5 py-2.5 rounded-xl font-semibold transition-all shadow-md shadow-blue-200 hover:shadow-lg hover:-translate-y-0.5"
+            className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-5 py-2.5 rounded-xl font-semibold transition-all shadow-md shadow-blue-200 hover:shadow-lg hover:-translate-y-0.5 ml-2"
           >
-            <Sparkles size={18} /> Xem Đánh giá AI
+            <Sparkles size={18} /> Chẩn đoán AI
           </button>
         </div>
       </div>
 
       {/* Main Content Area */}
+      {application.approvalStatus === 'REJECTED' && (
+        <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 mb-6 flex items-start gap-3">
+          <X className="text-rose-600 mt-0.5 shrink-0" size={20} />
+          <div>
+            <h3 className="text-rose-800 font-bold text-sm">Hồ sơ đã bị từ chối</h3>
+            <p className="text-rose-700 text-sm mt-1">
+              Lý do: {aiLogs.find(l => l.actionType === 'MANUAL_REJECTION')?.decisionReason || 'Không có lý do chi tiết.'}
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
         <div className="flex flex-col lg:flex-row gap-12">
           
@@ -195,18 +310,29 @@ export default function ApplicationDetailPage() {
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" onClick={() => setShowAiDrawer(false)}></div>
           
           <div className="relative w-full max-w-md bg-slate-50 h-full shadow-2xl flex flex-col animate-slide-in-right">
-            <div className="bg-white border-b border-slate-200 p-5 flex justify-between items-center">
-              <div className="flex items-center gap-2 text-indigo-700">
-                <Sparkles size={24} />
-                <h2 className="text-xl font-bold">Chẩn đoán AI</h2>
+            <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 p-6 flex justify-between items-center text-white shadow-md relative overflow-hidden">
+              <div className="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 rounded-full bg-white opacity-10 blur-2xl"></div>
+              <div className="absolute bottom-0 left-0 -ml-8 -mb-8 w-24 h-24 rounded-full bg-white opacity-10 blur-xl"></div>
+              
+              <div className="flex items-center gap-3 relative z-10">
+                <div className="bg-white/20 p-2 rounded-xl backdrop-blur-sm border border-white/20 shadow-inner">
+                  <Sparkles size={22} className="text-white" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold tracking-wide">Chẩn đoán AI</h2>
+                  <p className="text-indigo-100 text-xs mt-0.5">Phân tích CV tự động</p>
+                </div>
               </div>
-              <button onClick={() => setShowAiDrawer(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors">
+              <button 
+                onClick={() => setShowAiDrawer(false)} 
+                className="p-2 text-indigo-100 hover:text-white hover:bg-white/20 rounded-full transition-colors relative z-10"
+              >
                 <X size={20} />
               </button>
             </div>
             
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {!application.extractedData || application.decisionStatus === 'PENDING_AI_REVIEW' ? (
+            <div className="flex-1 overflow-y-auto p-6 space-y-6 relative">
+              {!application.extractedData && application.approvalStatus === 'PENDING' ? (
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 flex flex-col items-center text-center gap-4">
                   <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center">
                     <Sparkles size={32} className="text-indigo-500" />
@@ -261,31 +387,6 @@ export default function ApplicationDetailPage() {
                 </div>
               )}
             </div>
-            
-            {/* Vùng Action phê duyệt */}
-            <div className="bg-white border-t border-slate-200 p-5 space-y-3">
-               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Quyết định thủ công</p>
-               <button 
-                  onClick={() => { handleUpdateDecision('APPROVED'); setShowAiDrawer(false); }}
-                  className="w-full flex items-center justify-center gap-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-4 py-2.5 rounded-lg font-medium transition-colors"
-                >
-                  <Check size={18} /> Duyệt hồ sơ
-                </button>
-                <div className="flex gap-3">
-                  <button 
-                    onClick={() => { handleUpdateDecision('REJECTED'); setShowAiDrawer(false); }}
-                    className="flex-1 flex items-center justify-center gap-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-4 py-2.5 rounded-lg font-medium transition-colors"
-                  >
-                    <X size={18} /> Từ chối
-                  </button>
-                  <button 
-                    onClick={() => { handleUpdateDecision('NEEDS_VERIFICATION'); setShowAiDrawer(false); }}
-                    className="flex-1 flex items-center justify-center gap-2 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 px-4 py-2.5 rounded-lg font-medium transition-colors text-sm"
-                  >
-                    <ShieldAlert size={16} /> Xác minh
-                  </button>
-                </div>
-            </div>
           </div>
         </div>
       )}
@@ -295,6 +396,71 @@ export default function ApplicationDetailPage() {
         onClose={() => setDecisionLogModal({ isOpen: false, log: null })}
         log={decisionLogModal.log}
       />
+
+      {/* Submit To Director Modal */}
+      {submitModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setSubmitModal({ isOpen: false, isPriority: false })}></div>
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold text-slate-800 mb-4">Trình Giám đốc phê duyệt</h3>
+            <p className="text-sm text-slate-600 mb-4">Bạn sắp gửi hồ sơ này cho Giám đốc. Vui lòng xác nhận.</p>
+            <label className="flex items-center gap-2 text-sm text-slate-700 font-medium cursor-pointer mb-6 p-3 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">
+              <input 
+                type="checkbox" 
+                checked={submitModal.isPriority} 
+                onChange={(e) => setSubmitModal({ ...submitModal, isPriority: e.target.checked })}
+                className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+              />
+              Đánh dấu Ưu tiên (Gấp)
+            </label>
+            <div className="flex justify-end gap-3">
+              <button 
+                onClick={() => setSubmitModal({ isOpen: false, isPriority: false })}
+                className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg"
+              >
+                Hủy
+              </button>
+              <button 
+                onClick={executeSubmitToDirector}
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg"
+              >
+                Gửi Giám đốc
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Director Modal */}
+      {rejectModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setRejectModal({ isOpen: false, reason: '' })}></div>
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold text-slate-800 mb-4">Từ chối hồ sơ</h3>
+            <p className="text-sm text-slate-600 mb-3">Vui lòng ghi rõ lý do từ chối để bộ phận nhân sự nắm thông tin.</p>
+            <textarea
+              className="w-full border border-slate-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-rose-500 focus:border-rose-500 min-h-[100px] mb-6 outline-none"
+              placeholder="Ví dụ: Chưa đủ kinh nghiệm quản lý dự án..."
+              value={rejectModal.reason}
+              onChange={(e) => setRejectModal({ ...rejectModal, reason: e.target.value })}
+            ></textarea>
+            <div className="flex justify-end gap-3">
+              <button 
+                onClick={() => setRejectModal({ isOpen: false, reason: '' })}
+                className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg"
+              >
+                Hủy
+              </button>
+              <button 
+                onClick={executeDirectorReject}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-medium rounded-lg"
+              >
+                Xác nhận Từ chối
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

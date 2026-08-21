@@ -2,6 +2,7 @@ import React, { createContext, useState, useEffect, useContext } from 'react';
 import { connectSocket, disconnectSocket } from '../services/socket';
 import { notificationService } from '../services/notification.service';
 import { useAuth } from './AuthContext';
+import { useToast } from '../components/common/Toast';
 
 export const NotificationContext = createContext();
 
@@ -12,6 +13,7 @@ export const NotificationProvider = ({ children }) => {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [urgentNotification, setUrgentNotification] = useState(null);
+  const [selectedNotification, setSelectedNotification] = useState(null);
 
   const fetchNotifications = async () => {
     try {
@@ -69,9 +71,26 @@ export const NotificationProvider = ({ children }) => {
     }
   };
 
+  const openNotification = (notif) => {
+    if (!notif.daDoc) markAsRead(notif.id);
+    setSelectedNotification(notif);
+  };
+
+  const closeNotification = () => {
+    setSelectedNotification(null);
+  };
+
+  const toast = useToast();
+
   const showNotification = (title, message, type = 'info') => {
-    // Trigger urgentNotification with a synthetic object so NotificationModal can show it
-    setUrgentNotification({ tieuDe: title, noiDung: message, type, id: Date.now(), mucDo: 'khan', isLocal: true });
+    // We only trigger the big urgent modal for actual system-level urgent messages (websocket)
+    // Local feedback should use the toast notification system.
+    if (type === 'error' && !toast) {
+       // fallback if toast isn't available
+       setUrgentNotification({ tieuDe: title, noiDung: message, type, id: Date.now(), mucDo: 'khan', isLocal: true });
+    } else if (toast) {
+       toast.show(title, message, type);
+    }
   };
 
   return (
@@ -80,8 +99,11 @@ export const NotificationProvider = ({ children }) => {
         notifications,
         unreadCount,
         urgentNotification,
+        selectedNotification,
         markAsRead,
         closeUrgentModal,
+        openNotification,
+        closeNotification,
         showNotification,
       }}
     >

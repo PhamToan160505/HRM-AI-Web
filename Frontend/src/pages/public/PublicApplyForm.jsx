@@ -55,9 +55,15 @@ export default function PublicApplyForm() {
       if (cvFile) data.append('cvFile', cvFile);
       if (cccdFile) data.append('cccdFile', cccdFile);
       
-      // Chú ý: Ở hệ thống thật, nếu Frontend có thư viện pdf.js thì có thể đọc text PDF gửi lên làm rawCvText. 
-      // Tạm thời truyền rawCvText = rỗng để BE tự handle hoặc truyền "Xin chao" để test.
-      data.append('rawCvText', 'Mô phỏng nội dung Text từ CV (Vì frontend chưa gắn thư viện PDF parser)... \nỨng viên: ' + formData.fullName);
+      // Backend sẽ tự động đọc file PDF để trích xuất chữ. Frontend không cần gửi rawCvText giả nữa.
+      data.append('rawCvText', '');
+      
+      // Gửi toàn bộ thông tin ứng viên đã nhập làm extractedData ban đầu
+      const formattedData = {};
+      Object.keys(formData).forEach(key => {
+        formattedData[key] = { value: formData[key], confidence: 100 };
+      });
+      data.append('extractedData', JSON.stringify(formattedData));
 
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
       const res = await fetch(`${apiUrl}/public/apply/${jobSlug}`, {
@@ -105,6 +111,57 @@ export default function PublicApplyForm() {
               <p className="text-sm font-medium text-rose-600 mt-2">
                 Hạn nộp: {new Date(job.hanNopHoSo).toLocaleString('vi-VN')}
               </p>
+            )}
+          </div>
+        </div>
+
+        {/* Job Details Card */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div className="p-3 bg-slate-50 rounded-lg">
+              <span className="text-slate-500 block mb-1">Cấp bậc</span>
+              <span className="font-semibold text-slate-800">{job.capBac}</span>
+            </div>
+            <div className="p-3 bg-slate-50 rounded-lg">
+              <span className="text-slate-500 block mb-1">Hình thức</span>
+              <span className="font-semibold text-slate-800">{job.hinhThucLamViec}</span>
+            </div>
+            <div className="p-3 bg-slate-50 rounded-lg">
+              <span className="text-slate-500 block mb-1">Mức lương</span>
+              <span className="font-semibold text-slate-800">{job.coThoaThuan ? 'Thoả thuận' : job.mucLuong}</span>
+            </div>
+            <div className="p-3 bg-slate-50 rounded-lg">
+              <span className="text-slate-500 block mb-1">Địa điểm</span>
+              <span className="font-semibold text-slate-800">{job.diaDiem}</span>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {job.description && (
+              <div>
+                <h3 className="font-bold text-slate-800 mb-2">Mô tả công việc</h3>
+                <div className="text-slate-600 text-sm whitespace-pre-line leading-relaxed">
+                  {job.description}
+                </div>
+              </div>
+            )}
+            
+            {job.requirements && (
+              <div>
+                <h3 className="font-bold text-slate-800 mb-2">Yêu cầu công việc</h3>
+                <div className="text-slate-600 text-sm whitespace-pre-line leading-relaxed">
+                  {job.requirements}
+                </div>
+              </div>
+            )}
+            
+            {job.quyenLoi && (
+              <div>
+                <h3 className="font-bold text-slate-800 mb-2">Quyền lợi</h3>
+                <div className="text-slate-600 text-sm whitespace-pre-line leading-relaxed">
+                  {job.quyenLoi}
+                </div>
+              </div>
             )}
           </div>
         </div>

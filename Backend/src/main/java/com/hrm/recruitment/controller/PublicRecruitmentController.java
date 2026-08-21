@@ -40,13 +40,21 @@ public class PublicRecruitmentController {
     @GetMapping("/{slug}")
     public ResponseEntity<ApiResponse<JobPosting>> getJobPosting(@PathVariable String slug) {
         JobPosting job = jobPostingService.getJobBySlug(slug);
-        
+        if (!"OPEN".equals(job.getStatus())) {
+            throw new IllegalArgumentException("Tin tuyển dụng này đã đóng");
+        }
+
         java.time.LocalDateTime now = java.time.LocalDateTime.now();
         if (now.isBefore(job.getNgayBatDau())) {
             throw new IllegalArgumentException("Chưa đến ngày nhận hồ sơ cho vị trí này");
         }
         if (now.isAfter(job.getHanNopHoSo())) {
             throw new IllegalArgumentException("Đã hết hạn nộp hồ sơ");
+        }
+        
+        long currentAppCount = applicationService.getApplicationsByJobPosting(job.getId()).size();
+        if (currentAppCount >= job.getSoLuongTuyen()) {
+            throw new IllegalArgumentException("Đợt tuyển dụng này đã nhận đủ giới hạn số lượng hồ sơ");
         }
 
         return ResponseEntity.ok(ApiResponse.ok(job, "Lấy thông tin thành công"));
@@ -61,6 +69,7 @@ public class PublicRecruitmentController {
             @RequestParam(value = "cvFile", required = false) MultipartFile cvFile,
             @RequestParam(value = "cccdFile", required = false) MultipartFile cccdFile,
             @RequestParam(value = "rawCvText", required = false) String rawCvText,
+            @RequestParam(value = "extractedData", required = false) String extractedData,
             HttpServletRequest request
     ) {
         JobPosting job = jobPostingService.getJobBySlug(slug);
@@ -79,7 +88,7 @@ public class PublicRecruitmentController {
         if (bucket.tryConsume(1)) {
             try {
                 Application app = applicationService.submitApplication(
-                        slug, fullName, email, phone, cvFile, cccdFile, rawCvText
+                        slug, fullName, email, phone, cvFile, cccdFile, rawCvText, extractedData
                 );
                 return ResponseEntity.status(HttpStatus.CREATED)
                         .body(ApiResponse.ok(app, "Nộp hồ sơ thành công, AI đang tiến hành phân tích"));

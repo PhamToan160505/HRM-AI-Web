@@ -19,3 +19,7 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local Configs
+*-local.yml
+application-local.yml

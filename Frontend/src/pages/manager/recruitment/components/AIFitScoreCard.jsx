@@ -14,7 +14,7 @@ export default function AIFitScoreCard({ fitScore, decisionLog, onOpenReasonModa
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-bold text-slate-800 flex items-center gap-2">
           <Star size={20} className={`${scoreColor} fill-current`} />
-          AI Semantic Fit Score
+          Điểm Phù Hợp (AI)
         </h3>
         <div className="text-3xl font-black text-slate-800">
           {fitScore}<span className="text-lg text-slate-500 font-medium">/100</span>

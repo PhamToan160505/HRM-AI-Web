@@ -7,7 +7,7 @@ export default function ApplicationAttachmentsBlock({ application }) {
     <div className="mb-8">
       <h3 className="text-lg font-bold text-slate-800 mb-4">File đính kèm</h3>
       
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* CV File */}
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-2">File CV</label>
@@ -47,28 +47,6 @@ export default function ApplicationAttachmentsBlock({ application }) {
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-r-lg text-sm font-medium transition-colors whitespace-nowrap flex items-center justify-center"
               >
                 Mở file
-              </a>
-            )}
-          </div>
-        </div>
-
-        {/* Link CV */}
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-2">Link CV</label>
-          <div className="flex">
-            <div className="flex-1 min-w-0 border border-slate-300 rounded-l-lg px-3 py-2 bg-white flex items-center">
-              <span className="text-sm text-slate-600 truncate">
-                {application.portfolioUrl ? application.portfolioUrl : 'Không có Link'}
-              </span>
-            </div>
-            {application.portfolioUrl && (
-              <a 
-                href={application.portfolioUrl.startsWith('http') ? application.portfolioUrl : `https://${application.portfolioUrl}`}
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-r-lg text-sm font-medium transition-colors whitespace-nowrap flex items-center justify-center"
-              >
-                Mở link
               </a>
             )}
           </div>

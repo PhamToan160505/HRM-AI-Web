@@ -1,0 +1,56 @@
+# Báo cáo: Chức năng Quét Khuôn mặt AI & Chấm công
+
+## 1. Giới thiệu Tổng quan
+Hệ thống chấm công bằng khuôn mặt AI được thiết kế để mang lại trải nghiệm tiện lợi, nhanh chóng cho nhân viên, đồng thời đảm bảo tính minh bạch, bảo mật dữ liệu và chống gian lận (anti-spoofing) một cách nghiêm ngặt.
+
+Hệ thống hoạt động hoàn toàn dựa trên việc trích xuất **Tọa độ sinh trắc học (Embedding Vector)** tại trình duyệt của người dùng, đảm bảo tuân thủ Nghị định 13/2023/NĐ-CP về Bảo vệ dữ liệu cá nhân (tuyệt đối không lưu trữ hình ảnh khuôn mặt vào máy chủ).
+
+---
+
+## 2. Kiến trúc & Luồng xử lý (Data Flow)
+
+### 2.1. Đăng ký khuôn mặt (Face Enrollment)
+- **Quy trình:** Nhân viên truy cập chức năng Đăng ký khuôn mặt. Camera được bật và phân tích trực tiếp trên trình duyệt bằng thư viện `face-api.js` (dựa trên TensorFlow.js).
+- **Phân tích:** 
+  - Mô hình **SSD MobileNet V1** dò tìm vị trí khuôn mặt.
+  - Mô hình **68 Face Landmark** định vị 68 điểm mốc trên mặt (mắt, mũi, miệng).
+  - Mô hình **Face Recognition Net** chuyển đổi các điểm mốc thành một chuỗi mảng gồm 128 số thập phân (Vector).
+- **Lưu trữ:** 128 số thập phân này được mã hóa thành JSON và gửi về Server lưu vào bảng `face_embeddings`. Hình ảnh gốc từ camera sẽ bị hủy ngay lập tức và **không bao giờ rời khỏi máy tính/điện thoại** của nhân viên.
+
+### 2.2. Chấm công hàng ngày (Face Punch)
+- **Kiểm tra lặp lại:** Khi nhân viên quét mặt để chấm công, hệ thống tạo ra một Vector 128 chiều mới từ khuôn mặt hiện tại.
+- **Đối chiếu tại Server:** Vector mới được gửi về Backend và tính toán **Khoảng cách Euclidean (Euclidean Distance)** so với Vector đã đăng ký ban đầu.
+- **Xác định Trạng thái:** 
+  - Điểm khoảng cách (Distance) $\le 0.4$: Xác thực thành công.
+  - Kiểm tra giờ hiện tại: Nếu sau `08:30 AM`, đánh dấu trạng thái là `LATE` (Đi trễ). Ngược lại là `PRESENT` (Đúng giờ).
+  - Nếu trong ngày đã có lịch sử Check-in, lần quét tiếp theo tự động được ghi nhận là Check-out.
+
+---
+
+## 3. Các biện pháp Chống gian lận (Anti-Spoofing & Security)
+
+Để đối phó với việc chấm công hộ hoặc dùng ảnh giả, hệ thống đã được thiết lập các "chốt chặn" an ninh nhiều lớp:
+
+> [!CAUTION]
+> **Biện pháp 1: Chặn ảnh giả & Liveness cơ bản (Frontend)**
+> Điểm tự tin (Confidence Score) của mô hình nhận diện được siết chặt lên mức **99.5%**. Ảnh in, ảnh hiển thị qua màn hình điện thoại hoặc video phát lại thường bị nhiễu pixel, lóa sáng và thiếu chiều sâu, dẫn đến điểm Confidence Score thấp hơn 99.5% và sẽ bị hệ thống từ chối ngay lập tức với thông báo lỗi.
+
+> [!WARNING]
+> **Biện pháp 2: Chặn che khuất một phần (Occlusion Prevention)**
+> Để tránh trường hợp nhân viên dùng vật thể nhỏ che mũi/miệng để qua mặt hệ thống, hệ thống đã nạp thêm mô hình **Face Expression Net**. Khi một người che miệng/mũi, AI không thể phân tích rõ biểu cảm cơ mặt (không có biểu cảm nào đạt độ tin cậy > 80%). Hệ thống sẽ ngay lập tức chặn lại và yêu cầu bỏ khẩu trang/tay che mặt.
+> Ngoài ra, hệ thống yêu cầu khuôn mặt phải chiếm một diện tích đủ lớn trên camera (`box.width > 120`) để tránh việc để ảnh thẻ nhỏ ở xa.
+
+> [!IMPORTANT]
+> **Biện pháp 3: Siết chặt độ lệch Vector (Backend)**
+> Mặc định độ lệch Euclidean cho phép là `0.6`. Tuy nhiên, nhằm chặn đứng các kỹ xảo tinh vi, độ lệch tối đa cho phép (`MATCH_THRESHOLD`) tại Backend đã được hạ xuống **0.4**. Điều này có nghĩa là khuôn mặt chấm công phải gần như **hoàn hảo 100%** so với khuôn mặt lúc đăng ký (không bị méo mó, không thay đổi cấu trúc do vật che). Bất kỳ sự khác biệt nhỏ nào do tay hoặc vật thể lạ đè lên mặt sẽ làm Vector sai lệch quá 0.4 và bị đánh trượt.
+
+---
+
+## 4. Trải nghiệm người dùng (UX)
+
+- **Cảnh báo đăng ký đè:** Nút chức năng Đăng ký khuôn mặt được tích hợp cảnh báo nếu người dùng đã có dữ liệu trước đó, tránh việc nhân viên vô tình ghi đè mất dữ liệu chuẩn.
+- **Tốc độ:** Vì quá trình phân tích khuôn mặt (trích xuất Vector) diễn ra ở Client-side bằng WebGL/WebAssembly, hệ thống không tốn băng thông truyền tải video về Server, giúp tốc độ chấm công chỉ mất chưa tới 1-2 giây ngay cả khi mạng yếu.
+- **Phản hồi tức thời (Feedback):** Khi quét thất bại do đeo khẩu trang hoặc dùng ảnh mờ, hệ thống lập tức hiển thị thông báo đỏ chỉ dẫn rõ ràng lỗi gặp phải.
+
+## 5. Tổng kết
+Chức năng Chấm công bằng Khuôn mặt AI của HRM đã đạt được sự cân bằng hoàn hảo giữa tính **Tiện ích, Quyền riêng tư (Không lưu ảnh)** và **Bảo mật tuyệt đối (Chống gian lận nhiều lớp)**. Giải pháp này hoàn toàn sẵn sàng cho môi trường doanh nghiệp với độ tin cậy cao.

@@ -1,15 +1,19 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Save, Copy, CheckCircle2, X } from 'lucide-react';
 import { useNotification } from '../../../context/NotificationContext';
 import api from '../../../services/api';
 
 export default function JobPostingForm() {
+  const { id } = useParams();
+  const isEditMode = !!id;
   const navigate = useNavigate();
   const { showNotification } = useNotification();
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(isEditMode);
   const [createdJob, setCreatedJob] = useState(null);
   const [isCopied, setIsCopied] = useState(false);
+  const [errors, setErrors] = useState({});
 
   const [formData, setFormData] = useState({
     title: '',
@@ -26,16 +30,82 @@ export default function JobPostingForm() {
     quyenLoi: ''
   });
 
+  useEffect(() => {
+    if (isEditMode) {
+      const fetchJobData = async () => {
+        try {
+          const res = await api.get(`/api/recruitment/jobs/${id}`);
+          if (res.data.success) {
+            const data = res.data.data;
+            setFormData({
+              title: data.title || '',
+              soLuongTuyen: data.soLuongTuyen || '',
+              diaDiem: data.diaDiem || '',
+              hinhThucLamViec: data.hinhThucLamViec || 'FULL_TIME',
+              ngayBatDau: data.ngayBatDau ? data.ngayBatDau.substring(0, 16) : '',
+              hanNopHoSo: data.hanNopHoSo ? data.hanNopHoSo.substring(0, 16) : '',
+              mucLuong: data.mucLuong || '',
+              coThoaThuan: data.coThoaThuan || false,
+              capBac: data.capBac || '',
+              description: data.description || '',
+              requirements: data.requirements || '',
+              quyenLoi: data.quyenLoi || ''
+            });
+          }
+        } catch (err) {
+          showNotification('Lỗi', 'Không thể tải dữ liệu chiến dịch', 'error');
+          navigate('/manager/recruitment/campaigns');
+        } finally {
+          setInitialLoading(false);
+        }
+      };
+      fetchJobData();
+    }
+  }, [id, isEditMode, navigate, showNotification]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
+    const newErrors = {};
+    if (!formData.title.trim()) newErrors.title = 'Vui lòng nhập vị trí tuyển dụng';
+    
+    if (!formData.soLuongTuyen) {
+      newErrors.soLuongTuyen = 'Vui lòng nhập số lượng cần tuyển';
+    } else if (isNaN(formData.soLuongTuyen) || Number(formData.soLuongTuyen) <= 0) {
+      newErrors.soLuongTuyen = 'Số lượng cần tuyển phải là một số lớn hơn 0';
+    }
+
+    if (!formData.hinhThucLamViec) newErrors.hinhThucLamViec = 'Vui lòng chọn hình thức làm việc';
+    if (!formData.diaDiem.trim()) newErrors.diaDiem = 'Vui lòng nhập địa điểm làm việc';
+    if (!formData.ngayBatDau) newErrors.ngayBatDau = 'Vui lòng chọn thời gian bắt đầu';
+    if (!formData.hanNopHoSo) newErrors.hanNopHoSo = 'Vui lòng chọn hạn nộp hồ sơ';
+    if (!formData.description.trim()) newErrors.description = 'Vui lòng nhập mô tả công việc (JD)';
+    
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      setLoading(false);
+      showNotification('Lỗi', 'Vui lòng điền đầy đủ các trường bắt buộc', 'error');
+      return;
+    }
+    
+    setErrors({});
+
     try {
-      const res = await api.post('/api/recruitment/jobs', formData);
+      let res;
+      if (isEditMode) {
+        res = await api.put(`/api/recruitment/jobs/${id}`, formData);
+      } else {
+        res = await api.post('/api/recruitment/jobs', formData);
+      }
       
       if (res.data.success) {
-        showNotification('Thành công', 'Đã tạo chiến dịch tuyển dụng mới', 'success');
-        setCreatedJob(res.data.data);
+        showNotification('Thành công', isEditMode ? 'Đã cập nhật chiến dịch' : 'Đã tạo chiến dịch tuyển dụng mới', 'success');
+        if (isEditMode) {
+          navigate('/manager/recruitment/campaigns');
+        } else {
+          setCreatedJob(res.data.data);
+        }
       } else {
         showNotification('Lỗi', res.data.message || 'Có lỗi xảy ra', 'error');
       }
@@ -54,6 +124,10 @@ export default function JobPostingForm() {
     setTimeout(() => setIsCopied(false), 2000);
   };
 
+  if (initialLoading) {
+    return <div className="flex justify-center items-center h-64 text-slate-500">Đang tải dữ liệu...</div>;
+  }
+
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-12">
       <div className="flex items-center gap-4">
@@ -64,12 +138,14 @@ export default function JobPostingForm() {
           <ArrowLeft size={20} />
         </button>
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Tạo chiến dịch tuyển dụng</h1>
+          <h1 className="text-2xl font-bold text-slate-800">
+            {isEditMode ? 'Sửa chiến dịch tuyển dụng' : 'Tạo chiến dịch tuyển dụng'}
+          </h1>
           <p className="text-sm text-slate-500 mt-1">Điền thông tin chi tiết (JD) để AI dùng làm cơ sở chấm điểm ứng viên.</p>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-6">
+      <form onSubmit={handleSubmit} noValidate className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-6">
         
         {/* Section 1: Thông tin cơ bản */}
         <div className="space-y-4">
@@ -83,10 +159,14 @@ export default function JobPostingForm() {
               <input 
                 type="text" 
                 required
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                className={`w-full px-4 py-2.5 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${errors.title ? 'border-red-500' : 'border-slate-200'}`}
                 value={formData.title}
-                onChange={(e) => setFormData({...formData, title: e.target.value})}
+                onChange={(e) => {
+                  setFormData({...formData, title: e.target.value});
+                  if (errors.title) setErrors({...errors, title: null});
+                }}
               />
+              {errors.title && <p className="mt-1 text-xs text-red-500">{errors.title}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -96,10 +176,19 @@ export default function JobPostingForm() {
                 type="number" 
                 min="1"
                 required
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                className={`w-full px-4 py-2.5 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${errors.soLuongTuyen ? 'border-red-500' : 'border-slate-200'}`}
                 value={formData.soLuongTuyen}
-                onChange={(e) => setFormData({...formData, soLuongTuyen: e.target.value})}
+                onKeyDown={(e) => {
+                  if (['e', 'E', '+', '-', '.', ','].includes(e.key)) {
+                    e.preventDefault();
+                  }
+                }}
+                onChange={(e) => {
+                  setFormData({...formData, soLuongTuyen: e.target.value});
+                  if (errors.soLuongTuyen) setErrors({...errors, soLuongTuyen: null});
+                }}
               />
+              {errors.soLuongTuyen && <p className="mt-1 text-xs text-red-500">{errors.soLuongTuyen}</p>}
             </div>
           </div>
 
@@ -126,15 +215,19 @@ export default function JobPostingForm() {
               </label>
               <select 
                 required
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                className={`w-full px-4 py-2.5 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${errors.hinhThucLamViec ? 'border-red-500' : 'border-slate-200'}`}
                 value={formData.hinhThucLamViec}
-                onChange={(e) => setFormData({...formData, hinhThucLamViec: e.target.value})}
+                onChange={(e) => {
+                  setFormData({...formData, hinhThucLamViec: e.target.value});
+                  if (errors.hinhThucLamViec) setErrors({...errors, hinhThucLamViec: null});
+                }}
               >
                 <option value="FULL_TIME">Toàn thời gian (Full-time)</option>
                 <option value="PART_TIME">Bán thời gian (Part-time)</option>
                 <option value="REMOTE">Làm việc từ xa (Remote)</option>
                 <option value="HYBRID">Linh hoạt (Hybrid)</option>
               </select>
+              {errors.hinhThucLamViec && <p className="mt-1 text-xs text-red-500">{errors.hinhThucLamViec}</p>}
             </div>
           </div>
 
@@ -146,10 +239,14 @@ export default function JobPostingForm() {
               <input 
                 type="text" 
                 required
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                className={`w-full px-4 py-2.5 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${errors.diaDiem ? 'border-red-500' : 'border-slate-200'}`}
                 value={formData.diaDiem}
-                onChange={(e) => setFormData({...formData, diaDiem: e.target.value})}
+                onChange={(e) => {
+                  setFormData({...formData, diaDiem: e.target.value});
+                  if (errors.diaDiem) setErrors({...errors, diaDiem: null});
+                }}
               />
+              {errors.diaDiem && <p className="mt-1 text-xs text-red-500">{errors.diaDiem}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -185,10 +282,14 @@ export default function JobPostingForm() {
               <input 
                 type="datetime-local" 
                 required
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                className={`w-full px-4 py-2.5 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${errors.ngayBatDau ? 'border-red-500' : 'border-slate-200'}`}
                 value={formData.ngayBatDau}
-                onChange={(e) => setFormData({...formData, ngayBatDau: e.target.value})}
+                onChange={(e) => {
+                  setFormData({...formData, ngayBatDau: e.target.value});
+                  if (errors.ngayBatDau) setErrors({...errors, ngayBatDau: null});
+                }}
               />
+              {errors.ngayBatDau && <p className="mt-1 text-xs text-red-500">{errors.ngayBatDau}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -197,10 +298,14 @@ export default function JobPostingForm() {
               <input 
                 type="datetime-local" 
                 required
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                className={`w-full px-4 py-2.5 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${errors.hanNopHoSo ? 'border-red-500' : 'border-slate-200'}`}
                 value={formData.hanNopHoSo}
-                onChange={(e) => setFormData({...formData, hanNopHoSo: e.target.value})}
+                onChange={(e) => {
+                  setFormData({...formData, hanNopHoSo: e.target.value});
+                  if (errors.hanNopHoSo) setErrors({...errors, hanNopHoSo: null});
+                }}
               />
+              {errors.hanNopHoSo && <p className="mt-1 text-xs text-red-500">{errors.hanNopHoSo}</p>}
             </div>
           </div>
         </div>
@@ -213,14 +318,18 @@ export default function JobPostingForm() {
             <label className="block text-sm font-medium text-slate-700 mb-2">
               Mô tả công việc (JD) <span className="text-red-500">*</span>
             </label>
-            <p className="text-xs text-slate-500 mb-2">AI sẽ dùng văn bản này để so khớp với CV ứng viên (Semantic Fit Score).</p>
+            <p className="text-xs text-slate-500 mb-2">AI sẽ dùng văn bản này để so khớp với CV ứng viên (Điểm phù hợp AI).</p>
             <textarea 
               required
               rows={6}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+              className={`w-full px-4 py-3 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${errors.description ? 'border-red-500' : 'border-slate-200'}`}
               value={formData.description}
-              onChange={(e) => setFormData({...formData, description: e.target.value})}
+              onChange={(e) => {
+                setFormData({...formData, description: e.target.value});
+                if (errors.description) setErrors({...errors, description: null});
+              }}
             />
+            {errors.description && <p className="mt-1 text-xs text-red-500">{errors.description}</p>}
           </div>
 
           <div>
@@ -262,7 +371,7 @@ export default function JobPostingForm() {
             className="flex items-center gap-2 bg-blue-600 text-white px-6 py-2.5 rounded-lg hover:bg-blue-700 transition-colors shadow-sm font-medium disabled:opacity-70"
           >
             <Save size={18} />
-            {loading ? 'Đang lưu...' : 'Lưu và Đăng tin'}
+            {loading ? 'Đang lưu...' : (isEditMode ? 'Lưu cập nhật' : 'Lưu và Đăng tin')}
           </button>
         </div>
       </form>

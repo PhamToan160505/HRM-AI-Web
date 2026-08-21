@@ -21,6 +21,10 @@ Theo đúng thứ tự mục 9 (Thứ tự triển khai). Không nhảy bước 
 
 ### 0.4. Không báo cáo bằng lời — luôn kèm bằng chứng chạy được (log, câu lệnh test, ảnh chụp màn hình mô tả).
 
+### 0.5. Tuyệt đối dùng DỮ LIỆU THẬT — Không được phép Hardcode giả định
+- Mọi logic xử lý, AI, hay hiển thị UI đều phải dựa trên dữ liệu thật lấy từ Database, API, hoặc thao tác của người dùng.
+- TUYỆT ĐỐI KHÔNG gõ cứng (hardcode) các nội dung giả định (dummy text, mock data, placeholder ảo) vào mã nguồn để lấp liếm những chức năng chưa hoàn thiện. Nếu tính năng yêu cầu đọc PDF, phải dùng thư viện đọc file PDF thực tế (ví dụ: pdfbox/pdfjs), tuyệt đối không gửi chuỗi văn bản giả.
+
 ---
 
 ## 1. TỔNG QUAN DỰ ÁN

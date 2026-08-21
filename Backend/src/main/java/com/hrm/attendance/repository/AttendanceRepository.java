@@ -1,0 +1,25 @@
+package com.hrm.attendance.repository;
+
+import com.hrm.attendance.entity.Attendance;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
+    Optional<Attendance> findFirstByEmployeeIdAndDateOrderByIdDesc(Long employeeId, LocalDate date);
+    List<Attendance> findByEmployeeIdOrderByDateDesc(Long employeeId);
+    List<Attendance> findByEmployeeIdInAndDate(List<Long> employeeIds, LocalDate date);
+    List<Attendance> findByEmployeeIdAndDateBetween(Long employeeId, LocalDate startDate, LocalDate endDate);
+    boolean existsByEmployeeIdAndDateBetweenAndExceptionStatus(Long employeeId, LocalDate startDate, LocalDate endDate, String exceptionStatus);
+    
+    long countByDateAndStatus(LocalDate date, String status);
+    
+    @org.springframework.data.jpa.repository.Query("SELECT COUNT(a) FROM Attendance a JOIN com.hrm.common.entity.User u ON a.employeeId = u.id WHERE a.exceptionStatus = :status AND u.departmentId = :departmentId")
+    long countByExceptionStatusAndDepartmentId(@org.springframework.data.repository.query.Param("status") String status, @org.springframework.data.repository.query.Param("departmentId") Long departmentId);
+
+    java.util.List<Attendance> findTop5ByIsExceptionTrueOrderByIdDesc();
+}

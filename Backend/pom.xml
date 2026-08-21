@@ -53,6 +53,13 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
+        <!-- ─── PDF Parser ────────────────────────────────────────────── -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>2.0.30</version>
+        </dependency>
+
         <!-- ─── WebSocket (STOMP) ─────────────────────────────────── -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -89,6 +96,16 @@
             <groupId>com.cloudinary</groupId>
             <artifactId>cloudinary-http45</artifactId>
             <version>1.39.0</version>
+        </dependency>
+
+        <!-- ─── Mail & Thymeleaf (Bước 6) ────────────────────────── -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-thymeleaf</artifactId>
         </dependency>
 
         <!-- ─── Bucket4j (Rate Limiting) ─────────────────────────── -->

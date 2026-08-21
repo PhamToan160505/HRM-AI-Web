@@ -61,22 +61,16 @@ public class SemanticFitScoreService {
     }
 
     private String extractJson(String aiResponse) throws Exception {
-        if (aiResponse == null) throw new RuntimeException("Empty response from AI");
-        if (aiResponse.contains("```json")) {
-            return aiResponse.substring(aiResponse.indexOf("{"), aiResponse.lastIndexOf("}") + 1);
+        String text = geminiClientService.extractTextFromGeminiResponse(aiResponse);
+        if (text == null || text.isEmpty()) {
+            throw new RuntimeException("Empty response from AI");
         }
-        JsonNode root = objectMapper.readTree(aiResponse);
-        if (root.has("candidates") && root.get("candidates").isArray() && root.get("candidates").size() > 0) {
-            JsonNode content = root.get("candidates").get(0).get("content");
-            if (content != null && content.has("parts") && content.get("parts").isArray() && content.get("parts").size() > 0) {
-                String text = content.get("parts").get(0).get("text").asText();
-                if (text.contains("```json")) {
-                    text = text.substring(text.indexOf("{"), text.lastIndexOf("}") + 1);
-                }
-                return text;
-            }
+        if (text.contains("```json")) {
+            return text.substring(text.indexOf("{"), text.lastIndexOf("}") + 1);
+        } else if (text.contains("{") && text.contains("}")) {
+            return text.substring(text.indexOf("{"), text.lastIndexOf("}") + 1);
         }
-        return aiResponse;
+        return text;
     }
 
     public record FitScoreResult(int score, String reason) {}

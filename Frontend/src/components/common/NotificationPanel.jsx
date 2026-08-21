@@ -4,7 +4,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { vi } from 'date-fns/locale/vi';
 
 const NotificationPanel = ({ onClose }) => {
-  const { notifications, markAsRead } = useContext(NotificationContext);
+  const { notifications, markAsRead, openNotification } = useContext(NotificationContext);
 
   return (
     <div className="flex flex-col h-96">
@@ -25,11 +25,7 @@ const NotificationPanel = ({ onClose }) => {
                 key={notif.id}
                 className={`p-4 hover:bg-gray-50 cursor-pointer transition-colors ${!notif.daDoc ? 'bg-blue-50/50' : ''}`}
                 onClick={() => {
-                  if (!notif.daDoc) markAsRead(notif.id);
-                  if (notif.lienKet) {
-                    // Navigate to link logic here
-                    console.log('Navigate to:', notif.lienKet);
-                  }
+                  openNotification(notif);
                 }}
               >
                 <div className="flex gap-3">

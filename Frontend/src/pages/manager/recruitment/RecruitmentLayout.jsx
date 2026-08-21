@@ -8,7 +8,6 @@ export default function RecruitmentLayout() {
     { path: '/manager/recruitment/review', label: 'Đánh giá', icon: <CheckSquare size={18} /> },
     { path: '/manager/recruitment/campaigns', label: 'Chiến dịch tuyển dụng', icon: <Briefcase size={18} /> },
     { path: '/manager/recruitment/applications', label: 'Quản lý', icon: <Users size={18} /> },
-    { path: '/manager/recruitment/approvals', label: 'Phê duyệt', icon: <FileText size={18} /> },
     { path: '/manager/recruitment/reports', label: 'Báo cáo', icon: <BarChart2 size={18} /> },
     { path: '/manager/recruitment/settings', label: 'Thiết lập', icon: <Settings size={18} /> },
   ];

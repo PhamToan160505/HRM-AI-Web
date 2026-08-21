@@ -9,4 +9,6 @@ import java.util.Optional;
 @Repository
 public interface JobPostingRepository extends JpaRepository<JobPosting, Long> {
     Optional<JobPosting> findBySlug(String slug);
+    java.util.List<JobPosting> findByStatus(String status);
+    long countByStatus(String status);
 }

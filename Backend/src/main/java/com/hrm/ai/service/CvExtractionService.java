@@ -22,7 +22,7 @@ public class CvExtractionService {
     private static final Pattern PHONE_PATTERN = Pattern.compile("^\\+?[0-9]{9,15}$");
     private static final Pattern CCCD_PATTERN = Pattern.compile("^[0-9]{12}$");
 
-    public String extractCvData(Long applicationId, String rawCvText) {
+    public String extractCvData(Long applicationId, String jobTitle, String rawCvText) {
         String prompt = "Trích xuất thông tin từ nội dung CV sau. \n" +
                 "Vui lòng trả về ĐÚNG MỘT JSON OBJECT theo cấu trúc sau, không có markdown (```json), chỉ chuỗi JSON thô:\n" +
                 "{\n" +
@@ -38,28 +38,18 @@ public class CvExtractionService {
                 "  \"suggestedQuestions\": [\"question 1\", \"question 2\", \"question 3\"]\n" +
                 "}\n" +
                 "Với các trường thông tin cơ bản, hãy đánh giá độ tự tin (confidence) từ 0 đến 100 dựa trên độ rõ ràng của thông tin.\n" +
-                "Ở mảng suggestedQuestions, hãy gợi ý 3-5 câu hỏi phỏng vấn thực tế, có độ khó cao, dựa trực tiếp vào kinh nghiệm và kỹ năng ghi trong CV này.\n" +
+                "Ở mảng suggestedQuestions, hãy đóng vai HR tuyển dụng vị trí '" + jobTitle + "'. Đặt 3-5 câu hỏi phỏng vấn thực tế, có độ khó cao, KHÉO LÉO liên kết giữa kinh nghiệm trong CV của họ với yêu cầu của vị trí '" + jobTitle + "'. Nếu CV không hề liên quan đến vị trí này, hãy hỏi tại sao họ lại chuyển hướng hoặc kinh nghiệm cũ giúp ích gì cho vị trí mới.\n" +
                 "Nội dung CV:\n" + rawCvText;
 
         try {
-            String aiResponse = geminiClientService.callGemini(prompt).block();
+            String rawResponse = geminiClientService.callGemini(prompt).block();
+            String aiResponse = geminiClientService.extractTextFromGeminiResponse(rawResponse);
             
             // Lọc bỏ markdown nếu có
             if (aiResponse != null && aiResponse.contains("```json")) {
                 aiResponse = aiResponse.substring(aiResponse.indexOf("{"), aiResponse.lastIndexOf("}") + 1);
-            } else if (aiResponse != null) {
-                // Gemini thường trả JSON nằm trong parts
-                JsonNode root = objectMapper.readTree(aiResponse);
-                if (root.has("candidates") && root.get("candidates").isArray() && root.get("candidates").size() > 0) {
-                    JsonNode content = root.get("candidates").get(0).get("content");
-                    if (content != null && content.has("parts") && content.get("parts").isArray() && content.get("parts").size() > 0) {
-                        String text = content.get("parts").get(0).get("text").asText();
-                        if (text.contains("```json")) {
-                            text = text.substring(text.indexOf("{"), text.lastIndexOf("}") + 1);
-                        }
-                        aiResponse = text;
-                    }
-                }
+            } else if (aiResponse != null && aiResponse.contains("{") && aiResponse.contains("}")) {
+                aiResponse = aiResponse.substring(aiResponse.indexOf("{"), aiResponse.lastIndexOf("}") + 1);
             }
 
             // Validate Regex & Modify Confidence

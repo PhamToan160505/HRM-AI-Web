@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { NotificationProvider } from './context/NotificationContext';
+import { ToastProvider } from './components/common/Toast';
 import NotificationModal from './components/common/NotificationModal';
 
 // Layout
@@ -15,12 +16,20 @@ import LoginPage from './pages/public/LoginPage';
 import PublicApplyForm from './pages/public/PublicApplyForm';
 import DirectorDashboardPage from './pages/director/DashboardPage';
 import ManagerDashboardPage from './pages/manager/DashboardPage';
+import DirectorRecruitmentPage from './pages/director/DirectorRecruitmentPage';
 import RecruitmentLayout from './pages/manager/recruitment/RecruitmentLayout';
 import JobPostingList from './pages/manager/recruitment/JobPostingList';
 import JobPostingForm from './pages/manager/recruitment/JobPostingForm';
 import ApplicationListPage from './pages/manager/recruitment/ApplicationListPage';
 import ApplicationDetailPage from './pages/manager/recruitment/ApplicationDetailPage';
 import EmployeeDashboardPage from './pages/employee/DashboardPage';
+import EmployeeListPage from './pages/manager/employees/EmployeeListPage';
+import FaceEnrollment from './pages/employee/FaceEnrollment';
+import EmployeeAttendancePage from './pages/employee/AttendancePage';
+import ManagerAttendancePage from './pages/manager/AttendancePage';
+import HolidayPage from './pages/manager/payroll/HolidayPage';
+import PayrollPage from './pages/manager/payroll/PayrollPage';
+import PayrollViewPage from './pages/manager/payroll/PayrollViewPage';
 
 /**
  * App Router — cấu trúc route theo SKILL_react-frontend-patterns.md mục 1.
@@ -36,9 +45,10 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <NotificationProvider>
-          <NotificationModal />
-          <Routes>
+        <ToastProvider>
+          <NotificationProvider>
+            <NotificationModal />
+            <Routes>
           {/* Root redirect */}
           <Route path="/" element={<Navigate to="/login" replace />} />
 
@@ -60,7 +70,12 @@ export default function App() {
           >
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<DirectorDashboardPage />} />
-            {/* Các route khác sẽ thêm theo từng Bước */}
+            <Route path="employees" element={<EmployeeListPage />} />
+            <Route path="recruitment" element={<DirectorRecruitmentPage />} />
+            <Route path="recruitment/applications/:id" element={<ApplicationDetailPage />} />
+            <Route path="attendance" element={<ManagerAttendancePage />} />
+            <Route path="holidays" element={<HolidayPage />} />
+            <Route path="payroll" element={<PayrollPage />} />
           </Route>
 
           {/* ── Trưởng phòng ──────────────────────────────── */}
@@ -74,12 +89,16 @@ export default function App() {
           >
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<ManagerDashboardPage />} />
+            <Route path="employees" element={<EmployeeListPage />} />
+            <Route path="attendance" element={<ManagerAttendancePage />} />
+            <Route path="payroll" element={<PayrollPage />} />
             {/* Module Tuyển dụng (Bước 4) */}
             <Route path="recruitment" element={<RecruitmentLayout />}>
               <Route index element={<Navigate to="overview" replace />} />
               <Route path="overview" element={<div>Màn hình tổng quan (Đang xây dựng)</div>} />
               <Route path="campaigns" element={<JobPostingList />} />
               <Route path="campaigns/new" element={<JobPostingForm />} />
+              <Route path="campaigns/edit/:id" element={<JobPostingForm />} />
               <Route path="applications" element={<ApplicationListPage />} />
               <Route path="applications/:id" element={<ApplicationDetailPage />} />
               {/* Other tabs placeholders */}
@@ -101,13 +120,20 @@ export default function App() {
           >
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<EmployeeDashboardPage />} />
-            {/* Module Chấm công (Bước 5): /employee/attendance */}
+            <Route path="face-enroll" element={
+                <div className="p-8">
+                    <FaceEnrollment />
+                </div>
+            } />
+            <Route path="attendance" element={<EmployeeAttendancePage />} />
+            <Route path="payroll" element={<PayrollViewPage />} />
           </Route>
 
           {/* Catch-all → login */}
           <Route path="*" element={<Navigate to="/login" replace />} />
-          </Routes>
-        </NotificationProvider>
+            </Routes>
+          </NotificationProvider>
+        </ToastProvider>
       </AuthProvider>
     </BrowserRouter>
   );

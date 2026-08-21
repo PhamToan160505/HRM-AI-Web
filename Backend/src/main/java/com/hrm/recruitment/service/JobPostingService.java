@@ -15,6 +15,7 @@ import java.util.regex.Pattern;
 public class JobPostingService {
 
     private final JobPostingRepository jobPostingRepository;
+    private final com.hrm.recruitment.repository.ApplicationRepository applicationRepository;
 
     private static final Pattern NONLATIN = Pattern.compile("[^\\w-]");
     private static final Pattern WHITESPACE = Pattern.compile("[\\s]");
@@ -69,11 +70,35 @@ public class JobPostingService {
                 .mucLuong(request.mucLuong())
                 .coThoaThuan(request.coThoaThuan())
                 .quyenLoi(request.quyenLoi())
-                .capBac(request.capBac() != null ? com.hrm.recruitment.entity.CapBac.valueOf(request.capBac()) : null)
+                .capBac(request.capBac() != null && !request.capBac().trim().isEmpty() ? com.hrm.recruitment.entity.CapBac.valueOf(request.capBac()) : null)
                 .status("OPEN")
                 .slug(slug)
                 .build();
                 
+        return jobPostingRepository.save(job);
+    }
+
+    public JobPosting updateJob(Long id, com.hrm.recruitment.controller.RecruitmentController.JobPostingRequest request) {
+        JobPosting job = jobPostingRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy tin tuyển dụng"));
+                
+        if (!request.ngayBatDau().isBefore(request.hanNopHoSo())) {
+            throw new IllegalArgumentException("Ngày bắt đầu phải trước hạn nộp hồ sơ");
+        }
+
+        job.setTitle(request.title());
+        job.setDescription(request.description());
+        job.setRequirements(request.requirements());
+        job.setSoLuongTuyen(request.soLuongTuyen());
+        job.setDiaDiem(request.diaDiem());
+        job.setHinhThucLamViec(com.hrm.recruitment.entity.HinhThucLamViec.valueOf(request.hinhThucLamViec()));
+        job.setNgayBatDau(request.ngayBatDau());
+        job.setHanNopHoSo(request.hanNopHoSo());
+        job.setMucLuong(request.mucLuong());
+        job.setCoThoaThuan(request.coThoaThuan());
+        job.setQuyenLoi(request.quyenLoi());
+        job.setCapBac(request.capBac() != null && !request.capBac().trim().isEmpty() ? com.hrm.recruitment.entity.CapBac.valueOf(request.capBac()) : null);
+        
         return jobPostingRepository.save(job);
     }
 
@@ -82,6 +107,16 @@ public class JobPostingService {
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy tin tuyển dụng"));
         job.setStatus(status);
         return jobPostingRepository.save(job);
+    }
+
+    @org.springframework.transaction.annotation.Transactional
+    public void deleteJob(Long id) {
+        JobPosting job = jobPostingRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy tin tuyển dụng"));
+        // Delete all applications linked to this job first to prevent constraint violations
+        List<com.hrm.recruitment.entity.Application> apps = applicationRepository.findByJobPostingId(id);
+        applicationRepository.deleteAll(apps);
+        jobPostingRepository.delete(job);
     }
 
     public String toSlug(String input) {

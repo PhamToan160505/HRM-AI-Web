@@ -16,4 +16,11 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmail(String email);
 
     boolean existsByEmail(String email);
+
+    java.util.List<User> findByRole(com.hrm.common.entity.Role role);
+
+    java.util.List<User> findByDepartmentId(Long departmentId);
+
+    @org.springframework.data.jpa.repository.Query("SELECT d.tenPhong, COUNT(u) FROM User u JOIN com.hrm.common.entity.Department d ON u.departmentId = d.id GROUP BY d.tenPhong")
+    java.util.List<Object[]> getDepartmentDistributionRaw();
 }

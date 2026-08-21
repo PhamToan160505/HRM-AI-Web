@@ -81,36 +81,50 @@ export default function ApplicationPersonalInfoForm({ application, mode = 'manag
 
   const isEditable = mode === 'public' || mode === 'edit';
 
-  const renderField = (name, label, icon, type = "text") => {
+  const renderField = (name, label, icon, type = "text", options = null) => {
     const confidence = confidences[name];
     const isLowConfidence = confidence !== undefined && confidence < 80;
 
     return (
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-2">
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-slate-700 mb-1">
           {label}
-          {isLowConfidence && mode === 'manager' && (
-            <span className="flex items-center gap-1 text-amber-600 text-[10px] bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200" title={`AI Confidence: ${confidence}%`}>
-              <AlertTriangle size={10} />
-              Cần kiểm tra
-            </span>
-          )}
         </label>
         <div className="relative">
           <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
             {icon}
           </div>
-          <input 
-            type={type}
-            name={name}
-            value={formData[name]}
-            onChange={handleChange}
-            readOnly={!isEditable}
-            className={`w-full pl-10 pr-4 py-2 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
-              isLowConfidence && mode === 'manager' ? 'border-amber-300 bg-amber-50/30' : 'border-slate-200'
-            } ${!isEditable && 'opacity-80'}`}
-          />
+          {options ? (
+            <select
+              name={name}
+              value={formData[name]}
+              onChange={handleChange}
+              disabled={!isEditable}
+              className={`w-full pl-10 pr-4 py-2 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
+                isLowConfidence && mode === 'manager' ? 'border-red-300 focus:border-red-500 focus:ring-red-500/20' : 'border-slate-200'
+              } ${!isEditable && 'opacity-80'}`}
+            >
+              <option value="">Chọn {label.toLowerCase()}</option>
+              {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+            </select>
+          ) : (
+            <input 
+              type={type}
+              name={name}
+              value={formData[name]}
+              onChange={handleChange}
+              readOnly={!isEditable}
+              className={`w-full pl-10 pr-4 py-2 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
+                isLowConfidence && mode === 'manager' ? 'border-red-300 focus:border-red-500 focus:ring-red-500/20' : 'border-slate-200'
+              } ${!isEditable && 'opacity-80'}`}
+            />
+          )}
         </div>
+        {isLowConfidence && mode === 'manager' && (
+          <p className="mt-1 text-xs text-red-500">
+            Trường này thiếu dữ liệu hoặc AI đọc không chính xác, vui lòng nhập bổ sung.
+          </p>
+        )}
       </div>
     );
   };
@@ -125,7 +139,11 @@ export default function ApplicationPersonalInfoForm({ application, mode = 'manag
       <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
         {renderField('fullName', 'Họ và tên', <User size={16} />)}
         {renderField('dob', 'Ngày sinh', <Calendar size={16} />)}
-        {renderField('gender', 'Giới tính', <User size={16} />)}
+        {renderField('gender', 'Giới tính', <User size={16} />, 'text', [
+          { label: 'Nam', value: 'Nam' },
+          { label: 'Nữ', value: 'Nữ' },
+          { label: 'Khác', value: 'Khác' }
+        ])}
         {renderField('email', 'Email', <Mail size={16} />, 'email')}
         {renderField('phone', 'SĐT', <Phone size={16} />)}
         {renderField('cccd', 'CCCD', <CreditCard size={16} />)}

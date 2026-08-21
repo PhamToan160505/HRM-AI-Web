@@ -29,13 +29,60 @@ public class DataSeeder implements CommandLineRunner {
     private final UserRepository userRepository;
     private final DepartmentRepository departmentRepository;
     private final PasswordEncoder passwordEncoder;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
     private static final String DEFAULT_PASSWORD = "Admin@123";
 
     @Override
     public void run(String... args) {
+        migrateApplicationsTable();
+        
+        // Dọn dẹp dữ liệu chấm công bị trùng lặp do test
+        try {
+            jdbcTemplate.execute("SET SQL_SAFE_UPDATES = 0;");
+            jdbcTemplate.execute("DELETE FROM attendances WHERE id NOT IN (SELECT max_id FROM (SELECT MAX(id) as max_id FROM attendances GROUP BY employee_id, date) as t)");
+            jdbcTemplate.execute("SET SQL_SAFE_UPDATES = 1;");
+            log.info("[Cleanup] Đã dọn dẹp các bản ghi chấm công trùng lặp.");
+        } catch (Exception e) {
+            log.error("[Cleanup] Lỗi khi dọn dẹp chấm công: ", e);
+        }
+        
         seedDepartments();
         seedUsers();
+    }
+
+    private void migrateApplicationsTable() {
+        try {
+            // Kiểm tra xem cột decision_status còn tồn tại không
+            String checkColumnSql = "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'applications' AND COLUMN_NAME = 'decision_status'";
+            Integer count = jdbcTemplate.queryForObject(checkColumnSql, Integer.class);
+            
+            if (count != null && count > 0) {
+                log.info("[Migration] Bắt đầu migrate bảng applications từ decision_status sang approval_status");
+                
+                // Map PENDING, PENDING_AI_REVIEW -> approvalStatus='PENDING'
+                jdbcTemplate.execute("UPDATE applications SET approval_status = 'PENDING', needs_verification = false WHERE decision_status IN ('PENDING', 'PENDING_AI_REVIEW')");
+                
+                // Map NEEDS_VERIFICATION -> approvalStatus='PENDING', needsVerification=true
+                jdbcTemplate.execute("UPDATE applications SET approval_status = 'PENDING', needs_verification = true WHERE decision_status = 'NEEDS_VERIFICATION'");
+                
+                // Map APPROVED -> approvalStatus='APPROVED'
+                jdbcTemplate.execute("UPDATE applications SET approval_status = 'APPROVED' WHERE decision_status = 'APPROVED'");
+                
+                // Map REJECTED -> approvalStatus='REJECTED'
+                jdbcTemplate.execute("UPDATE applications SET approval_status = 'REJECTED' WHERE decision_status = 'REJECTED'");
+                
+                // Set default for new is_priority column
+                jdbcTemplate.execute("UPDATE applications SET is_priority = false WHERE is_priority IS NULL");
+                
+                // Xóa cột cũ
+                jdbcTemplate.execute("ALTER TABLE applications DROP COLUMN decision_status");
+                
+                log.info("[Migration] Đã migrate và xóa cột decision_status thành công");
+            }
+        } catch (Exception e) {
+            log.error("[Migration] Lỗi khi migrate bảng applications: ", e);
+        }
     }
 
     private void seedDepartments() {

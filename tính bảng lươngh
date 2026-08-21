@@ -1,0 +1,104 @@
+# BÁO CÁO HỆ THỐNG TÍNH LƯƠNG TỰ ĐỘNG (PAYROLL) - HRM AI
+
+Báo cáo này mô tả chi tiết toàn bộ nghiệp vụ, công thức và quy tắc tự động hóa được áp dụng trong Module Tính lương của hệ thống HRM AI, đảm bảo tuân thủ nghiêm ngặt Luật Lao động và Thuế Thu nhập Cá nhân (TNCN) mới nhất của Việt Nam.
+
+---
+
+## 1. QUY TẮC THỜI GIAN VÀ CHẤM CÔNG
+
+### 1.1. Lịch làm việc và Công chuẩn
+- **Ngày làm việc:** Từ Thứ 2 đến Thứ 6 hàng tuần (Nghỉ Thứ 7, Chủ Nhật).
+- **Ngày công chuẩn (động):** Bằng tổng số ngày T2-T6 trong tháng trừ đi số ngày nghỉ Lễ rơi vào T2-T6. Hệ thống tự động tính toán chính xác theo từng tháng.
+
+### 1.2. Tổng hợp ngày công thực tế (Actual Days)
+Mỗi cuối tháng, hệ thống quét qua tất cả các lượt điểm danh (Check-in/Check-out) của nhân viên và cộng dồn điểm theo các quy tắc khắt khe:
+
+1. **Đi làm đúng giờ (`PRESENT`)**: Cộng `1.0` ngày công.
+2. **Nghỉ có phép (`APPROVED`)**:
+   - Xin nghỉ nửa ngày (`HALF_DAY_LEAVE`): Cộng `0.5` ngày công.
+   - Nghỉ phép năm (`NORMAL_LEAVE`): Cộng `1.0` ngày công (tối đa theo quỹ phép, mặc định 1 ngày/tháng).
+   - Xin làm việc ở nhà đặc biệt (`SPECIAL_WFH_LEAVE`): Cộng `0.5` ngày công (tối đa 1 ngày/tháng).
+3. **Đi trễ (`LATE`)**:
+   - Lần 1 và 2: Bỏ qua (miễn trừ), vẫn cộng `1.0` công.
+   - Lần 3: Cộng `1.0` công nhưng phạt 5% lương của ngày hôm đó (trừ thẳng vào Lương gộp).
+   - Lần 4: Phạt nửa ngày công (chỉ cộng `0.5` công).
+   - Lần 5 trở lên: Coi như nghỉ không phép ngày đó (cộng `0` công).
+4. **Nghỉ không phép / Đơn từ chối**: Cộng `0` ngày công.
+
+> [!WARNING] 
+> **Cơ chế khóa an toàn:** Nếu nhân viên vẫn còn bất kỳ đơn xin nghỉ phép/đi trễ nào chưa được cấp trên duyệt/từ chối (trạng thái `PENDING`), hệ thống sẽ **CHẶN** tính lương cho nhân viên đó và cảnh báo bằng hộp thoại đỏ, bắt buộc người quản lý phải xử lý dứt điểm dữ liệu chấm công trước khi tính tiền.
+
+---
+
+## 2. CÔNG THỨC TÍNH LƯƠNG GỘP (GROSS SALARY)
+
+Sau khi có được số ngày công thực tế, hệ thống tiến hành tính Lương Gộp theo tỷ lệ:
+
+```
+Lương Gộp = (Lương cơ bản + Phụ cấp) × (Ngày công thực tế / Ngày công chuẩn) 
+            - Tiền phạt đi muộn 
+            + Tiền làm thêm giờ (Overtime)
+```
+
+**Lưu ý:** Cả Lương cơ bản và Phụ cấp đều được chia theo số ngày đi làm thực tế để đảm bảo công bằng tuyệt đối.
+
+---
+
+## 3. KHẤU TRỪ BẢO HIỂM BẮT BUỘC
+
+Việc khấu trừ bảo hiểm tuân thủ nghiêm ngặt Luật Bảo hiểm xã hội của Việt Nam:
+
+> [!IMPORTANT]
+> Theo Điều 42 Quyết định 595/QĐ-BHXH, người lao động nghỉ việc không hưởng lương từ 14 ngày làm việc trở lên trong tháng thì **không đóng BHXH tháng đó**. Hệ thống tự động kiểm tra điều kiện này: Nếu `Ngày công thực tế < 14`, mọi khoản trích trừ Bảo hiểm sẽ được tự động đưa về `0đ`.
+
+Nếu `Ngày công thực tế >= 14`, mức trích trừ (người lao động đóng) được tính **trên Lương cơ bản ghi trong hợp đồng**, không phụ thuộc vào tiền chuyên cần hay phụ cấp:
+- **BHXH (8%)**: Lương cơ bản × 8%
+- **BHYT (1.5%)**: Lương cơ bản × 1.5%
+- **BHTN (1%)**: Lương cơ bản × 1%
+
+*Tổng tiền bảo hiểm khấu trừ = 10.5% × Lương cơ bản.*
+
+---
+
+## 4. QUY TRÌNH TÍNH THUẾ TNCN LŨY TIẾN
+
+Dựa theo Dự thảo/Luật Thuế TNCN (cập nhật mới), hệ thống áp dụng biểu thuế lũy tiến 5 bậc được cấu hình trong AI.
+
+### Bước 4.1: Xác định Thu nhập chịu thuế
+```
+Thu nhập chịu thuế = Lương Gộp - Tổng tiền bảo hiểm đã khấu trừ
+```
+
+### Bước 4.2: Áp dụng Giảm trừ gia cảnh
+Mỗi nhân viên tự kê khai số người phụ thuộc trên Hồ sơ cá nhân.
+- Giảm trừ bản thân: `15.500.000 đ`
+- Giảm trừ mỗi người phụ thuộc: `6.200.000 đ`
+```
+Thu nhập tính thuế = Thu nhập chịu thuế - (15.5M + 6.2M × Số người phụ thuộc)
+(Nếu kết quả < 0 thì Thu nhập tính thuế = 0 đ)
+```
+
+### Bước 4.3: Áp dụng Biểu thuế lũy tiến 5 bậc
+Số tiền Thu nhập tính thuế (TNTT) sẽ được "chẻ" vào các bậc thuế sau:
+- Bậc 1 (Đến 10 triệu): `5%`
+- Bậc 2 (Trên 10 triệu - 20 triệu): `10%`
+- Bậc 3 (Trên 20 triệu - 45 triệu): `15%`
+- Bậc 4 (Trên 45 triệu - 90 triệu): `20%`
+- Bậc 5 (Trên 90 triệu): `30%`
+
+*Tổng Thuế TNCN = Tổng tiền thuế cộng dồn của từng bậc mà thu nhập chạm tới.*
+
+---
+
+## 5. KẾT QUẢ THỰC NHẬN (NET SALARY) VÀ PHÊ DUYỆT
+
+Cuối cùng, hệ thống chốt lương thực nhận chuyển khoản cho nhân viên:
+
+```
+Thực nhận = Lương Gộp - Tổng khấu trừ Bảo hiểm - Thuế TNCN
+```
+
+### Luồng duyệt (Approval Workflow)
+1. Bảng lương sau khi bấm "Tính lương" sẽ nằm ở trạng thái **Bản nháp (DRAFT)**.
+2. Giám đốc/Trưởng phòng rà soát bảng lương. Có thể từ chối phiếu lương của một cá nhân kèm lý do (`REJECTED`) hoặc tiến hành phê duyệt (`APPROVED`).
+3. Một khi đã duyệt (`APPROVED`), phiếu lương bị khóa cứng, không thể chỉnh sửa hay tính toán lại để tránh thay đổi số liệu tài chính sai quy định.

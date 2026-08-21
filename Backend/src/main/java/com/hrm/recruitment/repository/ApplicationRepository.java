@@ -6,7 +6,15 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
+import java.time.LocalDateTime;
+
 @Repository
 public interface ApplicationRepository extends JpaRepository<Application, Long> {
     List<Application> findByJobPostingId(Long jobPostingId);
+    List<Application> findByCreatedAtAfter(LocalDateTime date);
+    
+    long countByApprovalStatusNotAndApprovalStatusNot(String status1, String status2);
+    long countByApprovalStatus(String status);
+    
+    java.util.List<Application> findTop5ByOrderByCreatedAtDesc();
 }

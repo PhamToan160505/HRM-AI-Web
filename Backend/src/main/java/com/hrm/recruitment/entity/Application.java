@@ -46,7 +46,13 @@ public class Application {
     private Boolean fraudFlagged;
 
     @Column(nullable = false)
-    private String decisionStatus; // PENDING, APPROVED, REJECTED, NEEDS_VERIFICATION, PENDING_AI_REVIEW
+    private String approvalStatus; // PENDING, PENDING_DIRECTOR, APPROVED, REJECTED
+
+    @Column(nullable = false)
+    private Boolean needsVerification = false;
+
+    @Column(nullable = false)
+    private Boolean isPriority = false;
 
     @Column(columnDefinition = "JSON")
     private String extractedData; // Chứa kết quả OCR và confidence per field

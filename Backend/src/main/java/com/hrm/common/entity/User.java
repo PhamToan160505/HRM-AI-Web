@@ -51,8 +51,49 @@ public class User {
     @Column(name = "department_id")
     private Long departmentId;
 
+    @Column(name = "chuc_vu", length = 100)
+    private String chucVu;
+
     @Column(name = "avatar_url", length = 500)
     private String avatarUrl;
+
+    @Column(name = "phone", length = 20)
+    private String phone;
+
+    @Column(name = "cccd", length = 20)
+    private String cccd;
+
+    @Column(name = "ngay_sinh")
+    private java.time.LocalDate ngaySinh;
+
+    @Column(name = "que_quan")
+    private String queQuan;
+
+    @Column(name = "dia_chi")
+    private String diaChi;
+
+    @Column(name = "ngay_cap_cccd")
+    private java.time.LocalDate ngayCapCccd;
+
+    @Column(name = "noi_cap_cccd")
+    private String noiCapCccd;
+
+    @Column(name = "cccd_front_public_id")
+    private String cccdFrontPublicId;
+
+    @Column(name = "cccd_back_public_id")
+    private String cccdBackPublicId;
+
+    // TODO: migrate sang lấy từ Contract.mucLuong khi module Hợp đồng lao động hoàn thành.
+    @Column(name = "base_salary")
+    private Double baseSalary;
+
+    @Column(name = "allowance")
+    private Double allowance;
+
+    @Column(name = "so_nguoi_phu_thuoc", nullable = false)
+    @Builder.Default
+    private Integer soNguoiPhuThuoc = 0;
 
     @Column(name = "active", nullable = false)
     @Builder.Default
