@@ -6,12 +6,12 @@ import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, ResponsiveContaine
 
 export default function DirectorDashboardPage() {
   const navigate = useNavigate();
-  const [pendingApps, setPendingApps] = useState([]);
-  const [loadingApps, setLoadingApps] = useState(true);
   const [profile, setProfile] = useState({});
   const [stats, setStats] = useState({
     totalEmployees: 0,
     openJobs: 0,
+    pendingApplications: 0,
+    pendingPayrolls: 0,
     todayAttendance: { present: 0, late: 0, absent: 0 },
     departmentDistribution: [],
     recentActivities: []
@@ -23,21 +23,11 @@ export default function DirectorDashboardPage() {
             setProfile(res.data.data);
         }
     }).catch(console.error);
-    
     api.get('/api/dashboard/director').then(res => {
         if(res.data.success) {
             setStats(res.data.data);
         }
     }).catch(console.error);
-    
-    api.get('/api/recruitment/applications').then(res => {
-        if (res.data.success) {
-          const apps = res.data.data.filter(app => app.approvalStatus === 'PENDING_DIRECTOR');
-          apps.sort((a, b) => (b.isPriority ? 1 : 0) - (a.isPriority ? 1 : 0));
-          setPendingApps(apps);
-        }
-        setLoadingApps(false);
-    }).catch(() => setLoadingApps(false));
   }, []);
 
   const hasLoadedProfile = Object.keys(profile).length > 0;
@@ -190,42 +180,39 @@ export default function DirectorDashboardPage() {
           </div>
       </div>
 
-      {/* Row 3: Approvals (Keeping this for functionality) */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mt-6">
-        <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Hồ sơ chờ phê duyệt</p>
-        </div>
-        <div className="divide-y divide-slate-100">
-          {loadingApps ? (
-            <div className="p-8 text-center text-slate-500">Đang tải dữ liệu...</div>
-          ) : pendingApps.length === 0 ? (
-            <div className="p-8 text-center text-slate-500">Không có hồ sơ nào chờ duyệt.</div>
-          ) : (
-            pendingApps.map(app => (
-              <div key={app.id} className="p-6 hover:bg-slate-50 transition-colors flex items-center justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3">
-                    <h3 className="font-bold text-slate-800 text-base">{app.fullName}</h3>
-                    {app.isPriority && (
-                      <span className="text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded-full border border-red-200 font-bold tracking-wide flex items-center gap-1">
-                        <Star className="w-3 h-3 fill-red-700" /> ƯU TIÊN
-                      </span>
-                    )}
+      {/* Row 3: Action Cards */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+          <div 
+              onClick={() => navigate('/director/recruitment/applications?status=PENDING_DIRECTOR')}
+              className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex items-center justify-between cursor-pointer hover:border-blue-300 hover:shadow-md transition-all group"
+          >
+              <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <Star size={24} />
                   </div>
-                  <p className="text-sm text-slate-600 mt-1">
-                    Vị trí: <span className="font-medium text-slate-700">{app.jobPosting?.title}</span> • Điểm AI: <span className="font-bold text-blue-600">{app.fitScore}/100</span>
-                  </p>
-                </div>
-                <button
-                  onClick={() => navigate(`/director/recruitment/applications/${app.id}`)}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg font-medium transition-colors text-sm"
-                >
-                  Xem chi tiết <ChevronRight size={16} />
-                </button>
+                  <div>
+                      <p className="text-sm font-medium text-slate-500">Hồ sơ ứng viên chờ duyệt</p>
+                      <h3 className="text-2xl font-bold text-slate-800">{stats.pendingApplications || 0}</h3>
+                  </div>
               </div>
-            ))
-          )}
-        </div>
+              <ChevronRight className="text-slate-400 group-hover:text-blue-500 transition-colors" size={24} />
+          </div>
+
+          <div 
+              onClick={() => navigate('/director/payroll?status=DRAFT')}
+              className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex items-center justify-between cursor-pointer hover:border-blue-300 hover:shadow-md transition-all group"
+          >
+              <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <AlertCircle size={24} />
+                  </div>
+                  <div>
+                      <p className="text-sm font-medium text-slate-500">Bảng lương chờ duyệt</p>
+                      <h3 className="text-2xl font-bold text-slate-800">{stats.pendingPayrolls || 0}</h3>
+                  </div>
+              </div>
+              <ChevronRight className="text-slate-400 group-hover:text-indigo-500 transition-colors" size={24} />
+          </div>
       </div>
 
     </div>

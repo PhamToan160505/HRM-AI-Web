@@ -3,8 +3,10 @@ import * as faceapi from '@vladmandic/face-api';
 import { Camera, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import api from '../../services/api';
 import Button from '../../components/common/Button';
+import { useNavigate } from 'react-router-dom';
 
 const FaceEnrollment = ({ onSuccess, onCancel }) => {
+    const navigate = useNavigate();
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const [isModelsLoaded, setIsModelsLoaded] = useState(false);
@@ -12,6 +14,8 @@ const FaceEnrollment = ({ onSuccess, onCancel }) => {
     const [error, setError] = useState(null);
     const [loading, setLoading] = useState(false);
     const [successMessage, setSuccessMessage] = useState(null);
+    const [countdown, setCountdown] = useState(null);
+    const isProcessing = useRef(false);
 
     // 1. Load models
     useEffect(() => {
@@ -60,11 +64,15 @@ const FaceEnrollment = ({ onSuccess, onCancel }) => {
     }, [isModelsLoaded]);
 
     const captureAndEnroll = async () => {
-        if (!videoRef.current || !isModelsLoaded) return;
+        if (!videoRef.current || !isModelsLoaded || isProcessing.current) return;
         
+        isProcessing.current = true;
         setLoading(true);
         setError(null);
         setSuccessMessage(null);
+
+        // Nhường luồng 50ms để React render UI Loading (tránh bị đơ)
+        await new Promise(resolve => setTimeout(resolve, 50));
 
         try {
             // Detect single face with landmarks and descriptor
@@ -108,9 +116,21 @@ const FaceEnrollment = ({ onSuccess, onCancel }) => {
 
             if (response.data.success) {
                 setSuccessMessage("Đăng ký khuôn mặt thành công!");
-                if (onSuccess) {
-                    setTimeout(onSuccess, 1500); // Wait 1.5s then trigger callback
-                }
+                setCountdown(3);
+                
+                let timeLeft = 3;
+                const timer = setInterval(() => {
+                    timeLeft -= 1;
+                    setCountdown(timeLeft);
+                    if (timeLeft <= 0) {
+                        clearInterval(timer);
+                        if (onSuccess) {
+                            onSuccess();
+                        } else {
+                            navigate(-1);
+                        }
+                    }
+                }, 1000);
             } else {
                 setError(response.data.message || "Lỗi đăng ký khuôn mặt");
             }
@@ -120,11 +140,19 @@ const FaceEnrollment = ({ onSuccess, onCancel }) => {
             setError("Có lỗi xảy ra khi xử lý khuôn mặt.");
         } finally {
             setLoading(false);
+            isProcessing.current = false;
         }
     };
 
     return (
-        <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100 max-w-lg mx-auto flex flex-col items-center p-6 text-center">
+        <div className="relative bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100 max-w-lg mx-auto flex flex-col items-center p-6 text-center">
+            {loading && (
+                <div className="absolute inset-0 bg-white/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center rounded-2xl" style={{ transform: 'translateZ(0)' }}>
+                    <div className="w-12 h-12 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin mb-4 shadow-sm" style={{ willChange: 'transform' }}></div>
+                    <h3 className="text-lg font-bold text-gray-800">Hệ thống AI đang phân tích...</h3>
+                    <p className="text-sm text-gray-500 mt-2">Quá trình này mất vài giây, vui lòng đợi</p>
+                </div>
+            )}
             <div className="w-16 h-16 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 mb-4 shadow-inner">
                 <Camera size={28} strokeWidth={2} />
             </div>
@@ -162,8 +190,13 @@ const FaceEnrollment = ({ onSuccess, onCancel }) => {
             )}
 
             {successMessage && (
-                <div className="w-full p-3 bg-emerald-50 text-emerald-600 text-sm rounded-lg mb-4 flex items-center justify-center gap-2 border border-emerald-100">
-                    <CheckCircle size={16} /> {successMessage}
+                <div className="w-full p-3 bg-emerald-50 text-emerald-700 text-sm rounded-lg mb-4 flex flex-col items-center justify-center gap-2 border border-emerald-100">
+                    <div className="flex items-center gap-2 font-bold">
+                        <CheckCircle size={16} /> {successMessage}
+                    </div>
+                    {countdown !== null && (
+                        <div className="text-xs text-emerald-600">Tự động thoát trong {countdown}s...</div>
+                    )}
                 </div>
             )}
 
@@ -171,7 +204,13 @@ const FaceEnrollment = ({ onSuccess, onCancel }) => {
                 <Button 
                     variant="outline" 
                     className="flex-1"
-                    onClick={onCancel}
+                    onClick={() => {
+                        if (onCancel) {
+                            onCancel();
+                        } else {
+                            navigate(-1);
+                        }
+                    }}
                 >
                     Hủy
                 </Button>

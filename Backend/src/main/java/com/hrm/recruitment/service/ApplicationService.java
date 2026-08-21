@@ -164,16 +164,17 @@ public class ApplicationService {
             throw new RuntimeException("Đợt tuyển dụng này đã nhận đủ giới hạn số lượng hồ sơ (" + job.getSoLuongTuyen() + " ứng viên)");
         }
 
-        // 1. Đọc text thật từ file PDF bằng thư viện Backend (lấy bytes để không hỏng stream)
-        byte[] cvBytes = (cvFile != null && !cvFile.isEmpty()) ? cvFile.getBytes() : null;
-        String actualCvText = cvParserService.parseCvPdf(cvBytes);
-        if (actualCvText == null || actualCvText.trim().isEmpty()) {
-            actualCvText = "Lưu ý quan trọng cho AI: Hệ thống Backend đang hoạt động hoàn hảo và đã quét file CV này thành công. Tuy nhiên, file PDF mà ứng viên tải lên KHÔNG chứa bất kỳ văn bản nào (đây là file PDF dạng hình ảnh scan). " +
-                           "Do đó, AI KHÔNG ĐƯỢC PHÉP báo lỗi hệ thống hay lỗi PDF parser. Hãy ghi rõ vào lời phê là 'Ứng viên đã nộp file CV dạng hình ảnh không thể đọc được chữ'. " +
-                           "Dưới đây là thông tin ứng viên tự điền trên form: Tên: " + fullName + ", SĐT: " + phone + ", Email: " + email + ".";
+        // Chống nộp trùng (Double-submit prevention)
+        java.time.LocalDateTime fiveMinutesAgo = java.time.LocalDateTime.now().minusMinutes(5);
+        if (applicationRepository.existsByEmailAndJobPostingIdAndCreatedAtAfter(email, job.getId(), fiveMinutesAgo)) {
+            throw new RuntimeException("Bạn vừa nộp hồ sơ cho vị trí này gần đây. Vui lòng thử lại sau 5 phút nếu có lỗi.");
         }
 
-        // Lưu hồ sơ với rawCvText để AI dùng sau, URL tạo tạm
+        // 1. Đọc text thật từ file PDF: Sẽ được chạy ngầm trong AsyncUploadService để tránh treo UI.
+        byte[] cvBytes = (cvFile != null && !cvFile.isEmpty()) ? cvFile.getBytes() : null;
+
+        // Lưu hồ sơ với rawCvText tạm thời, AsyncUploadService sẽ cập nhật lại sau
+
         Application application = Application.builder()
                 .jobPosting(job)
                 .fullName(fullName)
@@ -181,7 +182,7 @@ public class ApplicationService {
                 .phone(phone)
                 .cvUrl("UPLOADING")
                 .cccdUrl("UPLOADING")
-                .rawCvText(actualCvText)          // Lưu lại text THẬT để Trưởng phòng trigger AI sau
+                .rawCvText("Đang trích xuất văn bản (chạy ngầm)...") // Lưu tạm thời, AsyncUploadService sẽ cập nhật
                 .extractedData(extractedData)     // Lưu thông tin người dùng đã xác nhận từ frontend
                 .approvalStatus("PENDING") // Chờ HR xử lý (sau khi AI đánh giá)
                 .needsVerification(false)

@@ -31,7 +31,7 @@ public class AttendanceService {
     private static final double MATCH_THRESHOLD = 0.4;
     
     // Configurable work hours (e.g., 08:30 AM)
-    private static final LocalTime LATE_THRESHOLD = LocalTime.of(8, 30);
+    private static final LocalTime LATE_THRESHOLD = LocalTime.of(8, 35);
 
     public Attendance punch(Long employeeId, String currentVectorJson) {
         Optional<FaceEmbedding> registeredOpt = faceEmbeddingRepository.findFirstByEmployeeIdOrderByIdDesc(employeeId);
@@ -61,17 +61,31 @@ public class AttendanceService {
                 // Đã check-in -> Đây là check-out (Lần 2 trở đi)
                 Attendance todayAttendance = todayAttendanceOpt.get();
                 todayAttendance.setTimeOut(now);
+                
+                List<String> logs = new java.util.ArrayList<>();
+                if (todayAttendance.getScanHistory() != null) {
+                    try {
+                        logs = objectMapper.readValue(todayAttendance.getScanHistory(), new TypeReference<List<String>>() {});
+                    } catch (Exception ignored) {}
+                }
+                logs.add(now.toString());
+                todayAttendance.setScanHistory(objectMapper.writeValueAsString(logs));
+
                 return attendanceRepository.save(todayAttendance);
             } else {
                 // Lần đầu trong ngày -> Check-in
                 String status = now.isAfter(LATE_THRESHOLD) ? "LATE" : "PRESENT";
                 
+                List<String> logs = new java.util.ArrayList<>();
+                logs.add(now.toString());
+
                 Attendance newAttendance = Attendance.builder()
                         .employeeId(employeeId)
                         .date(today)
                         .timeIn(now)
                         .status(status)
                         .isException(false)
+                        .scanHistory(objectMapper.writeValueAsString(logs))
                         .build();
                 return attendanceRepository.save(newAttendance);
             }
@@ -98,7 +112,12 @@ public class AttendanceService {
     }
 
     public List<java.util.Map<String, Object>> getDepartmentAttendance(Long departmentId, LocalDate date) {
-        List<User> employees = userRepository.findByDepartmentId(departmentId);
+        List<User> employees;
+        if (departmentId == null) {
+            employees = userRepository.findAll();
+        } else {
+            employees = userRepository.findByDepartmentId(departmentId);
+        }
         List<Long> employeeIds = employees.stream().map(User::getId).toList();
         
         List<Attendance> attendances = attendanceRepository.findByEmployeeIdInAndDate(employeeIds, date);
@@ -109,6 +128,7 @@ public class AttendanceService {
             java.util.Map<String, Object> map = new java.util.HashMap<>();
             map.put("id", emp.getId());
             map.put("hoTen", emp.getHoTen());
+            map.put("role", emp.getRole().name());
             map.put("date", date);
             
             Attendance record = attendanceMap.get(emp.getId());
@@ -120,11 +140,13 @@ public class AttendanceService {
                 map.put("exceptionStatus", record.getExceptionStatus());
                 map.put("exceptionReason", record.getExceptionReason());
                 map.put("attendanceId", record.getId());
+                map.put("scanHistory", record.getScanHistory());
             } else {
                 map.put("timeIn", null);
                 map.put("timeOut", null);
                 map.put("status", "ABSENT");
                 map.put("isException", false);
+                map.put("scanHistory", null);
             }
             return map;
         }).toList();

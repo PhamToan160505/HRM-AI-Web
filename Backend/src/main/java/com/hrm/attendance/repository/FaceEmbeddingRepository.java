@@ -9,4 +9,5 @@ import java.util.Optional;
 @Repository
 public interface FaceEmbeddingRepository extends JpaRepository<FaceEmbedding, Long> {
     Optional<FaceEmbedding> findFirstByEmployeeIdOrderByIdDesc(Long employeeId);
+    void deleteAllByEmployeeId(Long employeeId);
 }

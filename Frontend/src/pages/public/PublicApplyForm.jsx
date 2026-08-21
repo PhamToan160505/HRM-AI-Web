@@ -46,6 +46,7 @@ export default function PublicApplyForm() {
   };
 
   const handleSubmit = async (formData) => {
+    if (submitting) return;
     setSubmitting(true);
     try {
       const data = new FormData();

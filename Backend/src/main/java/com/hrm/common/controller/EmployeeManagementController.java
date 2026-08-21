@@ -22,6 +22,7 @@ public class EmployeeManagementController {
 
     private final UserRepository userRepository;
     private final CloudinaryService cloudinaryService;
+    private final com.hrm.common.payroll.repository.SalaryHistoryRepository salaryHistoryRepository;
 
     @GetMapping
     @PreAuthorize("hasAnyRole('TRUONG_PHONG', 'GIAM_DOC')")
@@ -35,7 +36,8 @@ public class EmployeeManagementController {
     @PreAuthorize("hasAnyRole('TRUONG_PHONG', 'GIAM_DOC')")
     public ResponseEntity<ApiResponse<User>> updateAssignment(
             @PathVariable Long id,
-            @RequestBody Map<String, Object> request) {
+            @RequestBody Map<String, Object> request,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
         
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -58,18 +60,46 @@ public class EmployeeManagementController {
             user.setChucVu(chucVu != null ? chucVu.toString() : null);
         }
         
+        Double oldBaseSalary = user.getBaseSalary();
+        Double oldAllowance = user.getAllowance();
+        boolean salaryChanged = false;
+
         if (request.containsKey("baseSalary")) {
             Object bs = request.get("baseSalary");
-            user.setBaseSalary(bs != null && !bs.toString().isEmpty() ? Double.valueOf(bs.toString()) : null);
+            Double newBs = bs != null && !bs.toString().isEmpty() ? Double.valueOf(bs.toString()) : null;
+            if ((oldBaseSalary == null && newBs != null) || (oldBaseSalary != null && !oldBaseSalary.equals(newBs))) {
+                user.setBaseSalary(newBs);
+                salaryChanged = true;
+            }
         }
         
         if (request.containsKey("allowance")) {
             Object al = request.get("allowance");
-            user.setAllowance(al != null && !al.toString().isEmpty() ? Double.valueOf(al.toString()) : null);
+            Double newAl = al != null && !al.toString().isEmpty() ? Double.valueOf(al.toString()) : null;
+            if ((oldAllowance == null && newAl != null) || (oldAllowance != null && !oldAllowance.equals(newAl))) {
+                user.setAllowance(newAl);
+                salaryChanged = true;
+            }
         }
         
         User savedUser = userRepository.save(user);
-        return ResponseEntity.ok(ApiResponse.ok(savedUser, "Cập nhật chức vụ & phòng ban thành công"));
+
+        if (salaryChanged) {
+            String reason = request.containsKey("reason") && request.get("reason") != null ? request.get("reason").toString() : "Cập nhật lương cơ bản/phụ cấp";
+            com.hrm.common.payroll.entity.SalaryHistory history = com.hrm.common.payroll.entity.SalaryHistory.builder()
+                    .employeeId(savedUser.getId())
+                    .changedBy(userDetails.getUserId())
+                    .oldBaseSalary(oldBaseSalary)
+                    .newBaseSalary(savedUser.getBaseSalary())
+                    .oldAllowance(oldAllowance)
+                    .newAllowance(savedUser.getAllowance())
+                    .reason(reason)
+                    .changeDate(java.time.LocalDateTime.now())
+                    .build();
+            salaryHistoryRepository.save(history);
+        }
+
+        return ResponseEntity.ok(ApiResponse.ok(savedUser, "Cập nhật thành công"));
     }
 
     @GetMapping("/{id}/cccd-image-url")
@@ -94,5 +124,41 @@ public class EmployeeManagementController {
         String backUrl = cloudinaryService.generateSignedUrl(user.getCccdBackPublicId());
         
         return ResponseEntity.ok(ApiResponse.ok(Map.of("frontUrl", frontUrl != null ? frontUrl : "", "backUrl", backUrl != null ? backUrl : ""), "Lấy link ảnh CCCD thành công"));
+    }
+    @GetMapping("/salary-history")
+    @PreAuthorize("hasAnyRole('TRUONG_PHONG', 'GIAM_DOC')")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getSalaryHistory(@AuthenticationPrincipal CustomUserDetails currentUser) {
+        List<com.hrm.common.payroll.entity.SalaryHistory> histories;
+        if ("GIAM_DOC".equals(currentUser.getRole().name())) {
+            histories = salaryHistoryRepository.findAll(org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "changeDate"));
+        } else {
+            List<User> emps = userRepository.findByDepartmentId(currentUser.getDepartmentId());
+            List<Long> empIds = emps.stream().map(User::getId).toList();
+            if (empIds.isEmpty()) {
+                histories = new java.util.ArrayList<>();
+            } else {
+                histories = salaryHistoryRepository.findByEmployeeIdInOrderByChangeDateDesc(empIds);
+            }
+        }
+
+        List<Map<String, Object>> result = new java.util.ArrayList<>();
+        for (com.hrm.common.payroll.entity.SalaryHistory h : histories) {
+            User emp = userRepository.findById(h.getEmployeeId()).orElse(null);
+            User changer = userRepository.findById(h.getChangedBy()).orElse(null);
+            Map<String, Object> map = new java.util.HashMap<>();
+            map.put("id", h.getId());
+            map.put("employeeName", emp != null ? emp.getHoTen() : "Unknown");
+            map.put("employeeId", h.getEmployeeId());
+            map.put("changedByName", changer != null ? changer.getHoTen() : "System");
+            map.put("oldBaseSalary", h.getOldBaseSalary());
+            map.put("newBaseSalary", h.getNewBaseSalary());
+            map.put("oldAllowance", h.getOldAllowance());
+            map.put("newAllowance", h.getNewAllowance());
+            map.put("reason", h.getReason());
+            map.put("changeDate", h.getChangeDate());
+            result.add(map);
+        }
+
+        return ResponseEntity.ok(ApiResponse.ok(result, "Lấy lịch sử thay đổi lương thành công"));
     }
 }

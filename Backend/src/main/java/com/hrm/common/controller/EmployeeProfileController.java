@@ -14,7 +14,10 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import org.springframework.web.bind.annotation.*;
+
 import java.util.Map;
+import java.time.format.DateTimeFormatter;
 
 @RestController
 @RequestMapping("/api/employees/me")
@@ -79,6 +82,7 @@ public class EmployeeProfileController {
     }
 
     @PostMapping("/face-enroll")
+    @org.springframework.transaction.annotation.Transactional
     public ResponseEntity<ApiResponse<FaceEmbedding>> enrollFace(
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @RequestBody Map<String, String> request) {
@@ -88,12 +92,28 @@ public class EmployeeProfileController {
             throw new IllegalArgumentException("Dữ liệu khuôn mặt không hợp lệ");
         }
 
-        FaceEmbedding face = faceEmbeddingRepository.findFirstByEmployeeIdOrderByIdDesc(userDetails.getUserId())
-                .orElseGet(() -> FaceEmbedding.builder().employeeId(userDetails.getUserId()).build());
+        faceEmbeddingRepository.deleteAllByEmployeeId(userDetails.getUserId());
+
+        FaceEmbedding newFace = FaceEmbedding.builder()
+                .employeeId(userDetails.getUserId())
+                .embeddingVector(vectorJson)
+                .build();
         
-        face.setEmbeddingVector(vectorJson);
-        FaceEmbedding savedFace = faceEmbeddingRepository.save(face);
+        FaceEmbedding savedFace = faceEmbeddingRepository.save(newFace);
         return ResponseEntity.ok(ApiResponse.ok(savedFace, "Đăng ký khuôn mặt thành công"));
+    }
+
+    @GetMapping("/face-status")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getFaceStatus(@AuthenticationPrincipal CustomUserDetails userDetails) {
+        return faceEmbeddingRepository.findFirstByEmployeeIdOrderByIdDesc(userDetails.getUserId())
+                .map(face -> {
+                    String date = face.getCreatedAt() != null ? face.getCreatedAt().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")) : "không xác định";
+                    return ResponseEntity.ok(ApiResponse.ok(Map.<String, Object>of(
+                            "hasEnrolled", true,
+                            "enrolledAt", date
+                    ), "Thành công"));
+                })
+                .orElseGet(() -> ResponseEntity.ok(ApiResponse.ok(Map.<String, Object>of("hasEnrolled", false), "Thành công")));
     }
 
     @PostMapping("/extract-cccd")

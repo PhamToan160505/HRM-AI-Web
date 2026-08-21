@@ -34,6 +34,9 @@ public class Attendance {
     @Column(name = "time_out")
     private LocalTime timeOut;
 
+    @Column(name = "scan_history", columnDefinition = "TEXT")
+    private String scanHistory;
+
     // PRESENT, LATE, ABSENT, HALF_DAY
     @Column(name = "status", nullable = false)
     private String status;

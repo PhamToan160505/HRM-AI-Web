@@ -4,12 +4,8 @@ import { Briefcase, FileText, CheckSquare, Settings, BarChart2, Users, LayoutDas
 
 export default function RecruitmentLayout() {
   const tabs = [
-    { path: '/manager/recruitment/overview', label: 'Tổng quan', icon: <LayoutDashboard size={18} /> },
-    { path: '/manager/recruitment/review', label: 'Đánh giá', icon: <CheckSquare size={18} /> },
     { path: '/manager/recruitment/campaigns', label: 'Chiến dịch tuyển dụng', icon: <Briefcase size={18} /> },
-    { path: '/manager/recruitment/applications', label: 'Quản lý', icon: <Users size={18} /> },
-    { path: '/manager/recruitment/reports', label: 'Báo cáo', icon: <BarChart2 size={18} /> },
-    { path: '/manager/recruitment/settings', label: 'Thiết lập', icon: <Settings size={18} /> },
+    { path: '/manager/recruitment/applications', label: 'Hồ sơ ứng viên', icon: <Users size={18} /> },
   ];
 
   return (

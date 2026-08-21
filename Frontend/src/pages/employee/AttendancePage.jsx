@@ -11,6 +11,7 @@ export default function EmployeeAttendancePage() {
     const [history, setHistory] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isPunchModalOpen, setIsPunchModalOpen] = useState(false);
+    const [confirmEnrollment, setConfirmEnrollment] = useState(null);
     const toast = useToast();
     const navigate = useNavigate();
 
@@ -33,6 +34,27 @@ export default function EmployeeAttendancePage() {
         fetchHistory();
     }, []);
 
+    const handleEnrollClick = async () => {
+        try {
+            const res = await api.get('/api/employees/me/face-status');
+            if (res.data?.data?.hasEnrolled) {
+                // If enrolled, show confirm modal
+                setConfirmEnrollment(new Date(res.data.data.enrolledAt).toLocaleDateString('vi-VN'));
+            } else {
+                // If not, go straight to enroll page
+                navigate('/employee/face-enroll');
+            }
+        } catch (error) {
+            console.error("Error checking face status", error);
+            navigate('/employee/face-enroll'); // fallback
+        }
+    };
+
+    const proceedToEnroll = () => {
+        setConfirmEnrollment(null);
+        navigate('/employee/face-enroll');
+    };
+
     const formatTime = (timeStr) => {
         if (!timeStr) return '--:--';
         // timeStr usually "08:30:00"
@@ -48,6 +70,17 @@ export default function EmployeeAttendancePage() {
         }
     };
 
+    const getCheckoutStatusBadge = (timeOut) => {
+        if (!timeOut) return <span className="text-gray-400 italic">--</span>;
+        const [hours, minutes] = timeOut.split(':').map(Number);
+        const totalMinutes = hours * 60 + minutes;
+        // 16:45 = 16 * 60 + 45 = 1005
+        if (totalMinutes < 1005) {
+            return <span className="px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-semibold">Về sớm</span>;
+        }
+        return <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded text-xs font-semibold">Đúng giờ</span>;
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -55,12 +88,20 @@ export default function EmployeeAttendancePage() {
                     <h1 className="text-2xl font-bold text-slate-800">Chấm công AI</h1>
                     <p className="text-sm text-slate-500 mt-1">Ghi nhận giờ vào/ra bằng nhận diện khuôn mặt</p>
                 </div>
-                <div className="flex gap-3">
-                    <Button variant="outline" onClick={() => navigate('/employee/face-enroll')} className="flex items-center gap-2">
-                        <Camera size={16} /> Cập nhật khuôn mặt
+                <div className="flex gap-4">
+                    <Button 
+                        variant="outline" 
+                        className="flex items-center gap-2 text-blue-600 border-blue-200 hover:bg-blue-50"
+                        onClick={handleEnrollClick}
+                    >
+                        <Camera size={18} /> Cập nhật khuôn mặt
                     </Button>
-                    <Button variant="primary" onClick={() => setIsPunchModalOpen(true)} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white">
-                        <Clock size={16} /> Chấm công ngay
+                    <Button 
+                        variant="primary" 
+                        className="flex items-center gap-2"
+                        onClick={() => setIsPunchModalOpen(true)}
+                    >
+                        <Clock size={18} /> Chấm công ngay
                     </Button>
                 </div>
             </div>
@@ -80,8 +121,8 @@ export default function EmployeeAttendancePage() {
                                 <th className="px-6 py-4 font-semibold">Ngày</th>
                                 <th className="px-6 py-4 font-semibold">Giờ vào (Check-in)</th>
                                 <th className="px-6 py-4 font-semibold">Giờ ra (Check-out)</th>
-                                <th className="px-6 py-4 font-semibold">Trạng thái</th>
-                                <th className="px-6 py-4 font-semibold">Ghi chú ngoại lệ</th>
+                                <th className="px-6 py-4 font-semibold">TT Check-in</th>
+                                <th className="px-6 py-4 font-semibold">TT Check-out</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
@@ -113,15 +154,7 @@ export default function EmployeeAttendancePage() {
                                             )}
                                         </td>
                                         <td className="px-6 py-4">{getStatusBadge(record.status)}</td>
-                                        <td className="px-6 py-4">
-                                            {record.isException ? (
-                                                <div className="flex items-center gap-1.5 text-amber-600">
-                                                    <AlertCircle size={14} /> {record.exceptionStatus === 'PENDING' ? 'Chờ duyệt' : 'Đã xử lý'}
-                                                </div>
-                                            ) : (
-                                                <span className="text-gray-400">—</span>
-                                            )}
-                                        </td>
+                                        <td className="px-6 py-4">{getCheckoutStatusBadge(record.timeOut)}</td>
                                     </tr>
                                 ))
                             )}
@@ -138,6 +171,29 @@ export default function EmployeeAttendancePage() {
                         fetchHistory(); // Reload history after punch
                     }}
                 />
+            )}
+
+            {/* Custom Confirm Modal */}
+            {confirmEnrollment && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 text-center animate-scale-up">
+                        <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 mx-auto mb-4">
+                            <AlertCircle size={32} />
+                        </div>
+                        <h3 className="text-xl font-bold text-gray-800 mb-2">Đã có dữ liệu khuôn mặt</h3>
+                        <p className="text-gray-600 mb-6">
+                            Bạn đã quét khuôn mặt vào ngày <strong className="text-gray-800">{confirmEnrollment}</strong>. Bạn có chắc chắn muốn cập nhật lại không?
+                        </p>
+                        <div className="flex gap-3 w-full">
+                            <Button variant="outline" className="flex-1" onClick={() => setConfirmEnrollment(null)}>
+                                Hủy
+                            </Button>
+                            <Button variant="primary" className="flex-1" onClick={proceedToEnroll}>
+                                Đồng ý
+                            </Button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

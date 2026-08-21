@@ -17,7 +17,7 @@ export default function PayrollTable({ payrolls, onApprove, onReject, role }) {
             <table className="w-full text-left text-sm whitespace-nowrap">
                 <thead className="bg-white text-gray-500 border-b border-gray-100">
                     <tr>
-                        <th className="px-6 py-4 font-semibold">Mã NV</th>
+                        <th className="px-6 py-4 font-semibold">Nhân viên</th>
                         <th className="px-6 py-4 font-semibold">Lương cơ bản</th>
                         <th className="px-6 py-4 font-semibold">Phụ cấp</th>
                         <th className="px-6 py-4 font-semibold">Công chuẩn/Thực tế</th>
@@ -43,7 +43,10 @@ export default function PayrollTable({ payrolls, onApprove, onReject, role }) {
                     ) : (
                         payrolls.map((p) => (
                             <tr key={p.id} className="hover:bg-slate-50">
-                                <td className="px-6 py-4 font-medium text-gray-800">{p.employeeId}</td>
+                                <td className="px-6 py-4">
+                                    <div className="font-medium text-gray-800">{p.employeeName || 'Chưa cập nhật'}</div>
+                                    <div className="text-xs text-gray-400 mt-0.5">NV{p.employeeId}</div>
+                                </td>
                                 <td className="px-6 py-4 tabular-nums">{formatCurrencyVND(p.baseSalary)}</td>
                                 <td className="px-6 py-4 tabular-nums">{formatCurrencyVND(p.allowance || 0)}</td>
                                 <td className="px-6 py-4 font-mono text-center">{p.standardDays} / {p.actualDays}</td>

@@ -4,6 +4,7 @@ import com.hrm.attendance.repository.AttendanceRepository;
 import com.hrm.common.repository.UserRepository;
 import com.hrm.recruitment.repository.ApplicationRepository;
 import com.hrm.recruitment.repository.JobPostingRepository;
+import com.hrm.common.payroll.repository.PayrollRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -24,18 +25,22 @@ public class DashboardService {
     private final ApplicationRepository applicationRepository;
     private final AttendanceRepository attendanceRepository;
     private final JobPostingRepository jobPostingRepository;
+    private final PayrollRepository payrollRepository;
 
     public Map<String, Object> getDirectorStats() {
         Map<String, Object> stats = new HashMap<>();
         
-        long totalEmployees = userRepository.count();
+        long totalEmployees = userRepository.countByRole(com.hrm.common.entity.Role.NHAN_VIEN);
         stats.put("totalEmployees", totalEmployees);
         
         long totalOpenJobs = jobPostingRepository.countByStatus("OPEN");
         stats.put("openJobs", totalOpenJobs);
         
-        long activeCandidates = applicationRepository.countByApprovalStatusNotAndApprovalStatusNot("HIRED", "REJECTED");
-        stats.put("activeCandidates", activeCandidates);
+        long pendingDirectorApps = applicationRepository.countByApprovalStatus("PENDING_DIRECTOR");
+        stats.put("pendingApplications", pendingDirectorApps);
+        
+        long pendingPayrolls = payrollRepository.countByStatus("DRAFT");
+        stats.put("pendingPayrolls", pendingPayrolls);
         
         long todayPresent = attendanceRepository.countByDateAndStatus(LocalDate.now(), "PRESENT");
         long todayLate = attendanceRepository.countByDateAndStatus(LocalDate.now(), "LATE");
@@ -105,11 +110,47 @@ public class DashboardService {
     public Map<String, Object> getManagerStats(Long departmentId) {
         Map<String, Object> stats = new HashMap<>();
         
-        long pendingApplications = applicationRepository.countByApprovalStatus("PENDING_MANAGER");
+        long pendingApplications = applicationRepository.countByApprovalStatus("PENDING");
         stats.put("pendingApplications", pendingApplications);
         
         long pendingAttendances = attendanceRepository.countByExceptionStatusAndDepartmentId("PENDING", departmentId);
         stats.put("pendingAttendances", pendingAttendances);
+
+        long totalEmployees = userRepository.countByDepartmentId(departmentId);
+        long todayCheckedIn = attendanceRepository.countByDepartmentIdAndDateAndPresentOrLate(departmentId, LocalDate.now());
+        long todayNotCheckedIn = totalEmployees - todayCheckedIn;
+        if (todayNotCheckedIn < 0) todayNotCheckedIn = 0;
+
+        stats.put("todayCheckedIn", todayCheckedIn);
+        stats.put("todayNotCheckedIn", todayNotCheckedIn);
+        
+        // Payroll status logic
+        LocalDate now = LocalDate.now();
+        java.util.List<com.hrm.common.entity.User> employees = userRepository.findByDepartmentId(departmentId);
+        java.util.List<Long> employeeIds = employees.stream().map(com.hrm.common.entity.User::getId).toList();
+        java.util.List<com.hrm.common.payroll.entity.Payroll> payrolls = new java.util.ArrayList<>();
+        if (!employeeIds.isEmpty()) {
+            payrolls = payrollRepository.findByMonthAndYearAndEmployeeIdIn(now.getMonthValue(), now.getYear(), employeeIds);
+        }
+            
+        String payrollStatus;
+        if (payrolls.isEmpty()) {
+            payrollStatus = "Chưa tính";
+        } else if (payrolls.size() < employees.size()) {
+            payrollStatus = String.format("Đã tính một phần (%d/%d nhân viên)", payrolls.size(), employees.size());
+        } else {
+            boolean hasDraft = payrolls.stream().anyMatch(p -> "DRAFT".equals(p.getStatus()));
+            boolean hasRejected = payrolls.stream().anyMatch(p -> "REJECTED".equals(p.getStatus()));
+            
+            if (hasDraft) {
+                payrollStatus = "Đã tính, chờ duyệt";
+            } else if (hasRejected) {
+                payrollStatus = "Có hồ sơ bị từ chối, cần tính lại";
+            } else {
+                payrollStatus = "Đã duyệt";
+            }
+        }
+        stats.put("payrollStatus", payrollStatus);
         
         stats.put("openJobs", jobPostingRepository.findByStatus("OPEN"));
         

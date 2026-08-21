@@ -11,6 +11,7 @@ const FacePunchModal = ({ onSuccess, onCancel }) => {
     const [error, setError] = useState(null);
     const [loading, setLoading] = useState(false);
     const [successMessage, setSuccessMessage] = useState(null);
+    const [countdown, setCountdown] = useState(null);
     const isPunching = useRef(false);
 
     // 1. Load models
@@ -66,6 +67,9 @@ const FacePunchModal = ({ onSuccess, onCancel }) => {
         setError(null);
         setSuccessMessage(null);
 
+        // Nhường luồng 50ms để React render UI Loading
+        await new Promise(resolve => setTimeout(resolve, 50));
+
         try {
             const options = new faceapi.SsdMobilenetv1Options({ minConfidence: 0.95 });
             const detection = await faceapi.detectSingleFace(videoRef.current, options)
@@ -103,10 +107,20 @@ const FacePunchModal = ({ onSuccess, onCancel }) => {
             });
 
             if (response.data.success) {
-                setSuccessMessage("Chấm công thành công! " + (response.data.data.timeOut ? "Đã ghi nhận Check-out." : "Đã ghi nhận Check-in."));
-                if (onSuccess) {
-                    setTimeout(onSuccess, 2000); 
-                }
+                setSuccessMessage("Chấm công thành công! " + (response.data.data?.timeOut ? "Đã ghi nhận Check-out." : "Đã ghi nhận Check-in."));
+                setCountdown(3);
+                
+                let timeLeft = 3;
+                const timer = setInterval(() => {
+                    timeLeft -= 1;
+                    setCountdown(timeLeft);
+                    if (timeLeft <= 0) {
+                        clearInterval(timer);
+                        if (onSuccess) {
+                            onSuccess();
+                        }
+                    }
+                }, 1000);
             } else {
                 setError(response.data.message || "Lỗi chấm công");
             }
@@ -122,7 +136,14 @@ const FacePunchModal = ({ onSuccess, onCancel }) => {
 
     return (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl shadow-xl overflow-hidden max-w-lg w-full flex flex-col items-center p-6 text-center animate-fade-in">
+            <div className="relative bg-white rounded-2xl shadow-xl overflow-hidden max-w-lg w-full flex flex-col items-center p-6 text-center animate-fade-in">
+                {loading && (
+                    <div className="absolute inset-0 bg-white/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center rounded-2xl" style={{ transform: 'translateZ(0)' }}>
+                        <div className="w-12 h-12 rounded-full border-4 border-emerald-200 border-t-emerald-600 animate-spin mb-4 shadow-sm" style={{ willChange: 'transform' }}></div>
+                        <h3 className="text-lg font-bold text-gray-800">Hệ thống AI đang xác thực...</h3>
+                        <p className="text-sm text-gray-500 mt-2">Quá trình này mất vài giây, vui lòng đợi</p>
+                    </div>
+                )}
                 <div className="w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 mb-4 shadow-inner">
                     <Camera size={28} strokeWidth={2} />
                 </div>
@@ -159,8 +180,13 @@ const FacePunchModal = ({ onSuccess, onCancel }) => {
                 )}
 
                 {successMessage && (
-                    <div className="w-full p-3 bg-emerald-50 text-emerald-600 text-sm rounded-lg mb-4 flex items-center justify-center gap-2 border border-emerald-100">
-                        <CheckCircle size={16} /> {successMessage}
+                    <div className="w-full p-3 bg-emerald-50 text-emerald-700 text-sm rounded-lg mb-4 flex flex-col items-center justify-center gap-2 border border-emerald-100">
+                        <div className="flex items-center gap-2 font-bold">
+                            <CheckCircle size={16} /> {successMessage}
+                        </div>
+                        {countdown !== null && (
+                            <div className="text-xs text-emerald-600">Tự động thoát trong {countdown}s...</div>
+                        )}
                     </div>
                 )}
 

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Camera, UploadCloud, CheckCircle, AlertCircle, X, ShieldCheck } from 'lucide-react';
+import { Camera, UploadCloud, CheckCircle, AlertCircle, X, ShieldCheck, Loader2 } from 'lucide-react';
 import api from '../../services/api';
 import Button from '../common/Button';
 
@@ -11,6 +11,7 @@ const CccdScannerModal = ({ isOpen, onClose, onApply }) => {
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState(null);
     const [error, setError] = useState(null);
+    const isProcessing = useRef(false);
 
     const handleFileChange = (e, side) => {
         const file = e.target.files[0];
@@ -34,8 +35,15 @@ const CccdScannerModal = ({ isOpen, onClose, onApply }) => {
             return;
         }
         
+        if (isProcessing.current) return;
+        isProcessing.current = true;
+        
         setError(null);
         setLoading(true);
+        
+        // Nhường luồng để React có thể render spinner trước khi stringify base64 lớn làm đơ UI
+        await new Promise(resolve => setTimeout(resolve, 50));
+        
         try {
             const response = await api.post('/api/employees/me/extract-cccd', {
                 frontBase64: frontImage,
@@ -56,6 +64,7 @@ const CccdScannerModal = ({ isOpen, onClose, onApply }) => {
             setError(err.response?.data?.message || "Lỗi kết nối đến máy chủ AI");
         } finally {
             setLoading(false);
+            isProcessing.current = false;
         }
     };
 
@@ -94,7 +103,16 @@ const CccdScannerModal = ({ isOpen, onClose, onApply }) => {
                     </div>
 
                     {/* Body */}
-                    <div className="p-6 overflow-y-auto custom-scrollbar">
+                    <div className="p-6 overflow-y-auto custom-scrollbar relative min-h-[300px]">
+                        {loading && (
+                            <div className="absolute inset-0 z-20 bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center">
+                                <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" />
+                                <h3 className="text-lg font-bold text-gray-900 mb-2">Hệ thống AI đang phân tích dữ liệu...</h3>
+                                <p className="text-sm text-gray-500 text-center max-w-sm">
+                                    Quá trình bóc tách chữ từ hình ảnh CCCD có thể mất tới <span className="font-semibold text-blue-600">10-15 giây</span> do ảnh dung lượng lớn.<br/>Vui lòng đợi và không đóng cửa sổ này.
+                                </p>
+                            </div>
+                        )}
                         <div className="mb-6 bg-blue-50/50 border border-blue-100 rounded-xl p-4">
                             <label className="flex items-start gap-3 cursor-pointer">
                                 <div className="mt-1">

@@ -1,0 +1,53 @@
+KẾ HOẠCH PHÂN CÔNG CÔNG VIỆC PHÁT TRIỂN HỆ THỐNG HRM AI (Chia theo Role)
+---
+Mục tiêu: Xây dựng hệ thống phân quyền 5 cấp. Công việc được chia cho 3 thành viên theo phương pháp "chia để trị" dựa trên việc sở hữu và phát triển tính năng (fullstack) cho từng Role cụ thể, cộng thêm phần deploy VPS.
+
+Danh sách 5 Role:
+1. Admin (Quản trị hệ thống)
+2. Tổng giám đốc (CEO)
+3. Giám đốc phòng ban (Department Director)
+4. Trưởng phòng (Manager)
+5. Nhân viên (Employee)
+
+---
+CHI TIẾT PHÂN CÔNG (Có đánh dấu tiến độ Source Code hiện tại)
+* Chú thích ký hiệu tiến độ:
+  [x] : Đã hoàn thành (Code đã có sẵn nền tảng hoặc tính năng hoàn thiện).
+  [~] : Đã làm một phần (Đang làm dở, cần nâng cấp hoặc mở rộng thêm).
+  [ ] : Chưa làm (Tính năng mới hoàn toàn, cần code từ đầu).
+
+1. THÀNH VIÊN 1: Phụ trách Role ADMIN & Triển khai VPS
+* Trách nhiệm: Xây dựng hệ thống cấu hình, nền tảng phân quyền và đưa dự án lên mạng.
+- Nhiệm vụ với Role Admin:
+  + [ ] Code (Cả Backend & Frontend) để tạo ra tài khoản Admin. (Hiện tại DB chỉ có 3 role: GIAM_DOC, TRUONG_PHONG, NHAN_VIEN).
+  + [ ] Phát triển các trang và API chỉ Admin mới thấy: Quản lý danh mục, cấu hình hệ thống, quản lý tài khoản người dùng.
+  + [x] Setup nền tảng Spring Security và component `RequireRole` trên Frontend. (Đã có sẵn JwtAuthFilter và RequireRole.jsx hoạt động tốt cho 3 role cũ, chỉ cần nâng cấp thêm list 5 role).
+- Nhiệm vụ DevOps:
+  + [ ] Triển khai toàn bộ dự án (Web React, API Spring Boot, Database) lên VPS.
+  + [ ] Cài đặt Nginx, SSL, và thiết lập bảo mật firewall cơ bản.
+
+2. THÀNH VIÊN 2: Phụ trách Role TỔNG GIÁM ĐỐC & GIÁM ĐỐC PHÒNG BAN
+* Trách nhiệm: Xây dựng các tính năng cấp cao mang tính chất báo cáo, tổng hợp và phê duyệt cấp cuối.
+- Nhiệm vụ với Role Tổng giám đốc:
+  + [~] Phát triển Dashboard/Báo cáo tổng quan toàn công ty. (Đã có sẵn DashboardController và DashboardService, nhưng cần tinh chỉnh lại hiển thị tuỳ theo cấp Tổng Giám Đốc).
+  + [ ] Tính năng xem danh sách toàn bộ nhân sự (Read-only hoặc Approve).
+- Nhiệm vụ với Role Giám đốc phòng ban:
+  + [~] Phát triển tính năng quản lý phòng ban: Giám đốc chỉ xem được dữ liệu của phòng mình. (Code hiện tại có lọc theo departmentId, cần mapping đúng cho role này).
+  + [x] Viết luồng phê duyệt cấp cao. (Đã có sẵn luồng duyệt `submitToDirector` và `approveByDirector` trong ApplicationService, có thể tái sử dụng cho các luồng phê duyệt khác).
+
+3. THÀNH VIÊN 3: Phụ trách Role TRƯỞNG PHÒNG & NHÂN VIÊN
+* Trách nhiệm: Xây dựng tính năng nghiệp vụ hằng ngày (Chấm công, xin phép, tuyển dụng) hoạt động ở cấp độ cơ sở.
+- Nhiệm vụ với Role Nhân viên:
+  + [x] Chấm công (`FacePunchModal`). (Đã hoàn thiện logic chấm công vào/ra tại Frontend và AttendanceService backend).
+  + [ ] Chức năng tạo các loại Đơn yêu cầu (Application): Xin nghỉ phép, xin làm thêm giờ... (Hiện mới chỉ có form Application cho Tuyển dụng, chưa có form Xin nghỉ phép của nội bộ).
+- Nhiệm vụ với Role Trưởng phòng:
+  + [~] Phát triển tính năng Quản lý nhân viên trong phòng. (Đã có EmployeeManagementController, cần gắn thêm chặn quyền).
+  + [x] Xử lý luồng phê duyệt cấp 1: Nhận và duyệt/từ chối đơn. (Đã có hàm `rejectByHr`).
+  + [x] Tạo yêu cầu tuyển dụng và sử dụng AI để lọc CV. (Hoàn thành xuất sắc - Đã có AiRecruiterDigestService, chống gian lận, chấm điểm Semantic Fit Score, trích xuất dữ liệu từ PDF thật).
+  + [x] Chức năng nhận và gửi thông báo (`NotificationModal`) cho cấp dưới. (Đã hoàn thiện Web Socket Notification và lưu DB, UI NotificationModal chạy tốt).
+
+---
+LƯU Ý CHUNG CHO CẢ 3 NGƯỜI:
+- (QUAN TRỌNG) NGUYÊN TẮC DỮ LIỆU THẬT: Tuyệt đối không hardcode mock data hay placeholder trên giao diện/AI. Tất cả nội dung phê duyệt, CV ứng viên, số liệu dashboard, thông tin user phải là dữ liệu thật lấy từ API hoặc Database.
+- Việc tạo dữ liệu gốc (`DataSeeder`) sẽ do Thành viên 1 thiết lập nền móng, sau đó Thành viên 2 và 3 tự bổ sung dữ liệu mẫu thực tế cho các role của mình.
+- Test luồng chéo: Thành viên 3 (Nhân viên tạo đơn) -> Thành viên 3 (Trưởng phòng duyệt) -> Thành viên 2 (Giám đốc phòng ban duyệt) để đảm bảo luồng dữ liệu trôi chảy.

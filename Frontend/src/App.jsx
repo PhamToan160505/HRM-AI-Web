@@ -30,6 +30,7 @@ import ManagerAttendancePage from './pages/manager/AttendancePage';
 import HolidayPage from './pages/manager/payroll/HolidayPage';
 import PayrollPage from './pages/manager/payroll/PayrollPage';
 import PayrollViewPage from './pages/manager/payroll/PayrollViewPage';
+import ProfilePage from './pages/common/ProfilePage';
 
 /**
  * App Router — cấu trúc route theo SKILL_react-frontend-patterns.md mục 1.
@@ -74,8 +75,15 @@ export default function App() {
             <Route path="recruitment" element={<DirectorRecruitmentPage />} />
             <Route path="recruitment/applications/:id" element={<ApplicationDetailPage />} />
             <Route path="attendance" element={<ManagerAttendancePage />} />
+            <Route path="my-attendance" element={<EmployeeAttendancePage />} />
             <Route path="holidays" element={<HolidayPage />} />
             <Route path="payroll" element={<PayrollPage />} />
+            <Route path="profile" element={<ProfilePage />} />
+            <Route path="face-enroll" element={
+                <div className="p-8">
+                    <FaceEnrollment />
+                </div>
+            } />
           </Route>
 
           {/* ── Trưởng phòng ──────────────────────────────── */}
@@ -91,21 +99,22 @@ export default function App() {
             <Route path="dashboard" element={<ManagerDashboardPage />} />
             <Route path="employees" element={<EmployeeListPage />} />
             <Route path="attendance" element={<ManagerAttendancePage />} />
+            <Route path="my-attendance" element={<EmployeeAttendancePage />} />
             <Route path="payroll" element={<PayrollPage />} />
+            <Route path="profile" element={<ProfilePage />} />
+            <Route path="face-enroll" element={
+                <div className="p-8">
+                    <FaceEnrollment />
+                </div>
+            } />
             {/* Module Tuyển dụng (Bước 4) */}
             <Route path="recruitment" element={<RecruitmentLayout />}>
-              <Route index element={<Navigate to="overview" replace />} />
-              <Route path="overview" element={<div>Màn hình tổng quan (Đang xây dựng)</div>} />
+              <Route index element={<Navigate to="campaigns" replace />} />
               <Route path="campaigns" element={<JobPostingList />} />
               <Route path="campaigns/new" element={<JobPostingForm />} />
               <Route path="campaigns/edit/:id" element={<JobPostingForm />} />
               <Route path="applications" element={<ApplicationListPage />} />
               <Route path="applications/:id" element={<ApplicationDetailPage />} />
-              {/* Other tabs placeholders */}
-              <Route path="review" element={<div>Đánh giá (Đang xây dựng)</div>} />
-              <Route path="approvals" element={<div>Phê duyệt (Đang xây dựng)</div>} />
-              <Route path="reports" element={<div>Báo cáo (Đang xây dựng)</div>} />
-              <Route path="settings" element={<div>Thiết lập (Đang xây dựng)</div>} />
             </Route>
           </Route>
 
@@ -127,6 +136,7 @@ export default function App() {
             } />
             <Route path="attendance" element={<EmployeeAttendancePage />} />
             <Route path="payroll" element={<PayrollViewPage />} />
+            <Route path="profile" element={<ProfilePage />} />
           </Route>
 
           {/* Catch-all → login */}
