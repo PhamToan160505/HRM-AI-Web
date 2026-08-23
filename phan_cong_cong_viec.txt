@@ -19,8 +19,10 @@ CHI TIẾT PHÂN CÔNG (Có đánh dấu tiến độ Source Code hiện tại)
 1. THÀNH VIÊN 1: Phụ trách Role ADMIN & Triển khai VPS
 * Trách nhiệm: Xây dựng hệ thống cấu hình, nền tảng phân quyền và đưa dự án lên mạng.
 - Nhiệm vụ với Role Admin:
-  + [ ] Code (Cả Backend & Frontend) để tạo ra tài khoản Admin. (Hiện tại DB chỉ có 3 role: GIAM_DOC, TRUONG_PHONG, NHAN_VIEN).
-  + [ ] Phát triển các trang và API chỉ Admin mới thấy: Quản lý danh mục, cấu hình hệ thống, quản lý tài khoản người dùng.
+  + [x] Code (Cả Backend & Frontend) để tạo ra tài khoản Admin. (Đã tạo tự động tài khoản Admin với mã NV 100001).
+  + [x] Phát triển các trang và API chỉ Admin mới thấy: Cấu hình hệ thống, Quản lý tài khoản người dùng.
+  + [x] Xây dựng luồng tự động tạo tài khoản: Lấy thông tin ứng viên trúng tuyển từ Tuyển dụng -> Admin duyệt -> Tự sinh mã NV (6 số) & mật khẩu ngẫu nhiên -> Gửi email thông báo tự động.
+  + [x] Đổi cơ chế đăng nhập toàn hệ thống từ Email sang Mã nhân viên.
   + [x] Setup nền tảng Spring Security và component `RequireRole` trên Frontend. (Đã có sẵn JwtAuthFilter và RequireRole.jsx hoạt động tốt cho 3 role cũ, chỉ cần nâng cấp thêm list 5 role).
 - Nhiệm vụ DevOps:
   + [ ] Triển khai toàn bộ dự án (Web React, API Spring Boot, Database) lên VPS.
@@ -51,3 +53,4 @@ LƯU Ý CHUNG CHO CẢ 3 NGƯỜI:
 - (QUAN TRỌNG) NGUYÊN TẮC DỮ LIỆU THẬT: Tuyệt đối không hardcode mock data hay placeholder trên giao diện/AI. Tất cả nội dung phê duyệt, CV ứng viên, số liệu dashboard, thông tin user phải là dữ liệu thật lấy từ API hoặc Database.
 - Việc tạo dữ liệu gốc (`DataSeeder`) sẽ do Thành viên 1 thiết lập nền móng, sau đó Thành viên 2 và 3 tự bổ sung dữ liệu mẫu thực tế cho các role của mình.
 - Test luồng chéo: Thành viên 3 (Nhân viên tạo đơn) -> Thành viên 3 (Trưởng phòng duyệt) -> Thành viên 2 (Giám đốc phòng ban duyệt) để đảm bảo luồng dữ liệu trôi chảy.
+- Ghi chú cập nhật luồng liên kết (Thành viên 1 thực hiện): Đã can thiệp nhẹ vào `ApplicationService.java` (module Tuyển dụng - Thành viên 2/3) để hook sự kiện tạo AccountCreationRequest khi duyệt hồ sơ và thêm hàm vào `EmailService.java`. Code được viết dạng độc lập (add-on), đảm bảo 100% không ảnh hưởng đến nghiệp vụ gốc.

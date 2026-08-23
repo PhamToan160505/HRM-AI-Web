@@ -16,14 +16,16 @@ export default function LoginPage() {
   const { isAuthenticated, role } = useAuth();
   const { handleLogin, loading, error, clearError } = useLogin();
 
-  const [email, setEmail] = useState('');
+  const [maNhanVien, setMaNhanVien] = useState('');
   const [password, setPassword] = useState('');
   const [validationErrors, setValidationErrors] = useState({});
 
   // Nếu đã đăng nhập, redirect về dashboard tương ứng
   if (isAuthenticated) {
     const redirectMap = {
+      admin: '/admin/dashboard',
       giam_doc: '/director/dashboard',
+      giam_doc_phong: '/director/dashboard',
       truong_phong: '/manager/dashboard',
       nhan_vien: '/employee/dashboard',
     };
@@ -32,10 +34,8 @@ export default function LoginPage() {
 
   const validate = () => {
     const errors = {};
-    if (!email.trim()) {
-      errors.email = 'Vui lòng nhập email';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      errors.email = 'Email không hợp lệ';
+    if (!maNhanVien.trim()) {
+      errors.maNhanVien = 'Vui lòng nhập mã nhân viên';
     }
     if (!password) {
       errors.password = 'Vui lòng nhập mật khẩu';
@@ -53,7 +53,7 @@ export default function LoginPage() {
       return;
     }
     setValidationErrors({});
-    await handleLogin(email, password);
+    await handleLogin(maNhanVien, password);
   };
 
   return (
@@ -138,15 +138,15 @@ export default function LoginPage() {
               )}
 
               <Input
-                id="login-email"
-                label="Email"
-                type="email"
-                placeholder="example@company.vn"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                error={validationErrors.email}
+                id="login-manhanvien"
+                label="Mã nhân viên"
+                type="text"
+                placeholder="Ví dụ: 100001"
+                value={maNhanVien}
+                onChange={(e) => setMaNhanVien(e.target.value)}
+                error={validationErrors.maNhanVien}
                 required
-                autoComplete="email"
+                autoComplete="username"
                 autoFocus
               />
 
@@ -182,15 +182,17 @@ export default function LoginPage() {
               </p>
               <div className="space-y-1">
                 {[
-                  { label: 'Giám đốc', email: 'giamdoc@hrm.vn' },
-                  { label: 'Trưởng phòng', email: 'truongphong@hrm.vn' },
-                  { label: 'Nhân viên', email: 'nhanvien@hrm.vn' },
-                ].map(({ label, email: demoEmail }) => (
+                  { label: 'Admin (Quản trị)', maNhanVien: '100001' },
+                  { label: 'Tổng Giám đốc', maNhanVien: '100002' },
+                  { label: 'Giám đốc phòng', maNhanVien: '100003' },
+                  { label: 'Trưởng phòng', maNhanVien: '100004' },
+                  { label: 'Nhân viên', maNhanVien: '100005' },
+                ].map(({ label, maNhanVien: demoMaNhanVien }) => (
                   <button
-                    key={demoEmail}
+                    key={demoMaNhanVien}
                     type="button"
                     onClick={() => {
-                      setEmail(demoEmail);
+                      setMaNhanVien(demoMaNhanVien);
                       setPassword('Admin@123');
                       setValidationErrors({});
                       clearError();
@@ -198,7 +200,7 @@ export default function LoginPage() {
                     className="w-full flex items-center justify-between text-[11px] text-primary hover:text-primary-dark transition-colors py-0.5 text-left"
                   >
                     <span className="font-medium">{label}</span>
-                    <span className="text-muted font-mono">{demoEmail}</span>
+                    <span className="text-muted font-mono">{demoMaNhanVien}</span>
                   </button>
                 ))}
                 <p className="text-[10px] text-muted mt-1.5">Mật khẩu: Admin@123</p>

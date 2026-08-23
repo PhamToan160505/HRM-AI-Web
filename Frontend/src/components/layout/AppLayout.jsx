@@ -14,6 +14,7 @@ import {
   UserSquare2,
   Calendar,
   Clock,
+  Settings,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import NotificationBell from '../common/NotificationBell';
@@ -25,7 +26,9 @@ import api from '../../services/api';
 import { useToast } from '../common/Toast';
 
 const roleLabels = {
-  giam_doc: 'Giám Đốc',
+  admin: 'Quản Trị Hệ Thống',
+  giam_doc: 'Tổng Giám Đốc',
+  giam_doc_phong: 'Giám Đốc Phòng',
   truong_phong: 'Trưởng Phòng',
   nhan_vien: 'Nhân Viên',
 };
@@ -78,6 +81,11 @@ function NavButton({ icon: Icon, label, onClick }) {
 }
 
 function SidebarContent({ role, onClose }) {
+  const adminNav = [
+    { to: '/admin/dashboard', icon: LayoutDashboard, label: 'Tổng quan hệ thống', end: true },
+    { to: '/admin/users', icon: Users, label: 'Quản lý tài khoản' },
+    { to: '/admin/settings', icon: Settings, label: 'Cấu hình hệ thống' },
+  ];
   const directorNav = [
     { to: '/director/dashboard', icon: LayoutDashboard, label: 'Tổng quan', end: true },
     { to: '/director/employees', icon: Users, label: 'Nhân sự' },
@@ -102,7 +110,9 @@ function SidebarContent({ role, onClose }) {
   ];
 
   const navItems =
-    role === 'giam_doc' ? directorNav
+    role === 'admin' ? adminNav
+    : role === 'giam_doc' ? directorNav
+    : role === 'giam_doc_phong' ? directorNav
     : role === 'truong_phong' ? managerNav
     : employeeNav;
 

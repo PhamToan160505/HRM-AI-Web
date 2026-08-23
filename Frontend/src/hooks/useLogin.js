@@ -15,12 +15,12 @@ export function useLogin() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const handleLogin = useCallback(async (email, password) => {
+  const handleLogin = useCallback(async (maNhanVien, password) => {
     setLoading(true);
     setError(null);
 
     try {
-      const loginResponse = await authService.login(email, password);
+      const loginResponse = await authService.login(maNhanVien, password);
       login(loginResponse);
 
       // Redirect theo role

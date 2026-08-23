@@ -14,11 +14,14 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * Theo SKILL_backend-patterns.md mục 5.
      */
     Optional<User> findByEmail(String email);
+    Optional<User> findByMaNhanVien(String maNhanVien);
+    Optional<User> findTopByOrderByMaNhanVienDesc();
 
     boolean existsByEmail(String email);
 
     java.util.List<User> findByRole(com.hrm.common.entity.Role role);
     long countByRole(com.hrm.common.entity.Role role);
+    long countByActive(Boolean active);
 
     java.util.List<User> findByDepartmentId(Long departmentId);
 

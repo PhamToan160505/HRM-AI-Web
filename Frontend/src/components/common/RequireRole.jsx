@@ -40,7 +40,9 @@ export function RequireRole({ roles, children }) {
  */
 function getDefaultPathForRole(role) {
   switch (role) {
+    case 'admin': return '/admin/dashboard';
     case 'giam_doc': return '/director/dashboard';
+    case 'giam_doc_phong': return '/director/dashboard'; // Giám đốc phòng xài chung dashboard với Tổng giám đốc (có thể tách ra sau)
     case 'truong_phong': return '/manager/dashboard';
     case 'nhan_vien': return '/employee/dashboard';
     default: return '/login';
