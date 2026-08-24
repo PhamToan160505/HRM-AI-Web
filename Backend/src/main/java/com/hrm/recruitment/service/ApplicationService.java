@@ -18,6 +18,7 @@ import java.io.IOException;
 import com.hrm.notification.service.NotificationService;
 import com.hrm.common.repository.UserRepository;
 import com.hrm.common.entity.Role;
+import com.hrm.common.entity.User;
 import com.hrm.email.service.EmailService;
 import com.hrm.admin.entity.AccountCreationRequest;
 import com.hrm.admin.repository.AccountCreationRequestRepository;
