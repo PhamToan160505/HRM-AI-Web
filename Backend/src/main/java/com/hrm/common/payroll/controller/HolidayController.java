@@ -14,7 +14,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/holidays")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('GIAM_DOC')")
+@PreAuthorize("hasAnyRole('GIAM_DOC_PHONG_BAN', 'CEO')")
 public class HolidayController {
 
     private final HolidayRepository holidayRepository;

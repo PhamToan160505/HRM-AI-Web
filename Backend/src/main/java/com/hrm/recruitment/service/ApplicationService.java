@@ -67,19 +67,24 @@ public class ApplicationService {
         
         Application savedApp = applicationRepository.save(app);
         
-        // Gửi thông báo cho tất cả Giám đốc
-        List<User> giamDocs = userRepository.findByRole(Role.GIAM_DOC);
-        for (User gd : giamDocs) {
-            String message = String.format("Trưởng phòng tuyển dụng vừa trình lên 1 hồ sơ của ứng viên %s cho vị trí %s. Vui lòng xem xét.", 
-                                           app.getFullName(), app.getJobPosting().getTitle());
-            notificationService.createNotification(
-                    gd.getId(),
-                    "tuyen_dung",
-                    "Hồ sơ chờ phê duyệt",
-                    message,
-                    "binh_thuong", // Vẫn là bình thường dù có ưu tiên hay không
-                    "/manager/dashboard" // Đi tới dashboard giám đốc
-            );
+        // Gửi thông báo cho Giám đốc phòng ban của phòng ban đang tuyển dụng
+        Long departmentId = app.getJobPosting().getDepartmentId();
+        if (departmentId != null) {
+            List<User> giamDocs = userRepository.findByDepartmentId(departmentId).stream()
+                .filter(u -> u.getRole() == Role.GIAM_DOC_PHONG_BAN)
+                .toList();
+            for (User gd : giamDocs) {
+                String message = String.format("Trưởng phòng tuyển dụng vừa trình lên 1 hồ sơ của ứng viên %s cho vị trí %s. Vui lòng xem xét.", 
+                                               app.getFullName(), app.getJobPosting().getTitle());
+                notificationService.createNotification(
+                        gd.getId(),
+                        "tuyen_dung",
+                        "Hồ sơ chờ phê duyệt",
+                        message,
+                        "binh_thuong", // Vẫn là bình thường dù có ưu tiên hay không
+                        "/manager/dashboard" // Đi tới dashboard giám đốc
+                );
+            }
         }
         
         return savedApp;
@@ -99,10 +104,16 @@ public class ApplicationService {
         return savedApp;
     }
 
-    public Application approveByDirector(Long id) {
+    public Application approveByDirector(Long id, com.hrm.security.CustomUserDetails userDetails) {
         Application app = getApplicationById(id);
         if (!"PENDING_DIRECTOR".equals(app.getApprovalStatus())) {
             throw new RuntimeException("Chỉ có thể duyệt hồ sơ khi đang ở trạng thái PENDING_DIRECTOR");
+        }
+        if (userDetails.getRole() == Role.GIAM_DOC_PHONG_BAN) {
+            Long deptId = app.getJobPosting().getDepartmentId();
+            if (deptId != null && !deptId.equals(userDetails.getDepartmentId())) {
+                throw new RuntimeException("Bạn không có quyền duyệt hồ sơ của phòng ban khác");
+            }
         }
         app.setApprovalStatus("APPROVED");
         Application savedApp = applicationRepository.save(app);
@@ -113,17 +124,25 @@ public class ApplicationService {
         return savedApp;
     }
 
-    public Application rejectByDirector(Long id, String reason, String directorName) {
+    public Application rejectByDirector(Long id, String reason, com.hrm.security.CustomUserDetails userDetails) {
         Application app = getApplicationById(id);
         if (!"PENDING_DIRECTOR".equals(app.getApprovalStatus())) {
             throw new RuntimeException("Chỉ có thể loại hồ sơ khi đang ở trạng thái PENDING_DIRECTOR");
         }
+        if (userDetails.getRole() == Role.GIAM_DOC_PHONG_BAN) {
+            Long deptId = app.getJobPosting().getDepartmentId();
+            if (deptId != null && !deptId.equals(userDetails.getDepartmentId())) {
+                throw new RuntimeException("Bạn không có quyền từ chối hồ sơ của phòng ban khác");
+            }
+        }
         app.setApprovalStatus("REJECTED");
+        
+        String directorName = userDetails.getHoTen() != null ? userDetails.getHoTen() : "Giám đốc";
         
         AiDecisionLog logEntry = AiDecisionLog.builder()
                 .applicationId(app.getId())
                 .actionType("MANUAL_REJECTION")
-                .rawRequest("Giám đốc từ chối")
+                .rawRequest(directorName + " từ chối")
                 .decisionReason(reason)
                 .isSuccess(true)
                 .build();

@@ -23,11 +23,22 @@ export default function LoginPage() {
   // Nếu đã đăng nhập, redirect về dashboard tương ứng
   if (isAuthenticated) {
     const redirectMap = {
-      giam_doc: '/director/dashboard',
+      ceo: '/ceo/dashboard',
+      giam_doc_phong_ban: '/director/dashboard',
       truong_phong: '/manager/dashboard',
       nhan_vien: '/employee/dashboard',
+      admin: '/admin/dashboard'
     };
-    return <Navigate to={redirectMap[role] || '/login'} replace />;
+    
+    if (!redirectMap[role]) {
+      // Clear old/invalid token to break redirect loop
+      localStorage.removeItem('hrm_token');
+      localStorage.removeItem('hrm_user');
+      window.location.reload();
+      return null;
+    }
+    
+    return <Navigate to={redirectMap[role]} replace />;
   }
 
   const validate = () => {
@@ -182,7 +193,8 @@ export default function LoginPage() {
               </p>
               <div className="space-y-1">
                 {[
-                  { label: 'Giám đốc', email: 'giamdoc@hrm.vn' },
+                  { label: 'Tổng giám đốc', email: 'ceo@hrm.vn' },
+                  { label: 'Giám đốc PB', email: 'giamdocphongban@hrm.vn' },
                   { label: 'Trưởng phòng', email: 'truongphong@hrm.vn' },
                   { label: 'Nhân viên', email: 'nhanvien@hrm.vn' },
                 ].map(({ label, email: demoEmail }) => (

@@ -129,6 +129,8 @@ public class AttendanceService {
             map.put("id", emp.getId());
             map.put("hoTen", emp.getHoTen());
             map.put("role", emp.getRole().name());
+            map.put("chucVu", emp.getChucVu());
+            map.put("departmentId", emp.getDepartmentId());
             map.put("date", date);
             
             Attendance record = attendanceMap.get(emp.getId());

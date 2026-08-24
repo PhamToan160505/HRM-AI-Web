@@ -85,6 +85,6 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleGeneric(Exception ex) {
         log.error("Unhandled exception", ex); // log đầy đủ stack trace ở server
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error("Đã xảy ra lỗi hệ thống. Vui lòng thử lại sau."));
+                .body(ApiResponse.error("Đã xảy ra lỗi hệ thống: " + ex.getMessage()));
     }
 }

@@ -1,0 +1,10 @@
+=== DANH SÃCH TÃNH NÄ‚NG ÄÃƒ LÃ€M (THÃ€NH VIÃŠN 2) ===
+- Ğã hoàn thi?n Frontend cho Role CEO:
+  + Màn hình CeoDashboard hi?n th? t?ng quan thông s? nhân s? (T?ng nhân viên, s? don tuy?n d?ng m?, th?ng kê tr?ng thái ?ng tuy?n).
+  + Map route /ceo cho CEO s? d?ng các page liên quan (Dashboard, Qu?n lı Nhân s?, Qu?n lı Tuy?n d?ng).
+- Ğã hoàn thi?n Frontend cho Role Giám d?c phòng ban:
+  + C?p nh?t UI duy?t tuy?n d?ng.
+  + S?a d?i Sidebar (AppLayout.jsx) tách bi?t Giám d?c phòng ban và CEO.
+  + ManagerDashboardPage hi?n th? danh sách th?ng kê phù h?p cho Giám d?c phòng ban.
+
+- Thay Ä‘á»•i logic Role TrÆ°á»Ÿng PhÃ²ng: Quáº£n lÃ½ toÃ n bá»™ nhÃ¢n viÃªn trong phÃ²ng ban (sá»­ dá»¥ng departmentId) thay vÃ¬ chá»‰ quáº£n lÃ½ theo nhÃ³m (teamId) Ä‘á»ƒ phÃ¹ há»£p vá»›i quy mÃ´ cÃ´ng ty vá»«a vÃ  nhá».

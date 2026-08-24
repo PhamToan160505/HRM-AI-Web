@@ -60,7 +60,7 @@ public class AttendanceController {
     }
 
     @PatchMapping("/{id}/approve-exception")
-    @org.springframework.security.access.prepost.PreAuthorize("hasAnyRole('TRUONG_PHONG', 'GIAM_DOC')")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAnyRole('TRUONG_PHONG', 'GIAM_DOC_PHONG_BAN', 'CEO')")
     public ResponseEntity<ApiResponse<Void>> approveException(
             @PathVariable Long id,
             @RequestBody Map<String, String> request,

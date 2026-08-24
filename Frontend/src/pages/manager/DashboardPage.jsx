@@ -3,7 +3,7 @@ import { Users, ClipboardCheck, AlertCircle } from 'lucide-react';
 import { Card, CardHeader } from '../../components/common/Card';
 import api from '../../services/api';
 import { useToast } from '../../components/common/Toast';
-
+import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
 /**
@@ -52,12 +52,15 @@ export default function ManagerDashboardPage() {
 
   const currentMonth = new Date().getMonth() + 1;
 
+  const { role } = useAuth();
+  const title = role === 'giam_doc_phong_ban' ? 'Tổng quan — Giám Đốc Phòng Ban' : 'Tổng quan — Trưởng Phòng';
+  
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-10">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Tổng quan — Trưởng Phòng</h1>
-          <p className="text-sm text-slate-500 mt-1">Quản lý tuyển dụng & phòng ban</p>
+          <h1 className="text-2xl font-bold text-slate-800">{title}</h1>
+          <p className="text-sm text-slate-500 mt-1">Quản lý tuyển dụng & nhân sự phòng ban</p>
         </div>
       </div>
 

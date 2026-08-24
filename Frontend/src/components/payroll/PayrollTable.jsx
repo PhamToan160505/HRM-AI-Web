@@ -32,13 +32,13 @@ export default function PayrollTable({ payrolls, onApprove, onReject, role }) {
                         <th className="px-6 py-4 font-semibold text-red-600">Thuế TNCN</th>
                         <th className="px-6 py-4 font-semibold text-blue-600 text-right">Thực nhận</th>
                         <th className="px-6 py-4 font-semibold">Trạng thái</th>
-                        {role === 'GIAM_DOC' && <th className="px-6 py-4 font-semibold text-right">Thao tác</th>}
+                        {(role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN' || role?.toUpperCase() === 'CEO') && <th className="px-6 py-4 font-semibold text-right">Thao tác</th>}
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                     {payrolls.length === 0 ? (
                         <tr>
-                            <td colSpan={role === 'GIAM_DOC' ? 10 : 9} className="px-6 py-8 text-center text-gray-500">Không có dữ liệu</td>
+                            <td colSpan={(role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN' || role?.toUpperCase() === 'CEO') ? 10 : 9} className="px-6 py-8 text-center text-gray-500">Không có dữ liệu</td>
                         </tr>
                     ) : (
                         payrolls.map((p) => (
@@ -65,12 +65,11 @@ export default function PayrollTable({ payrolls, onApprove, onReject, role }) {
                                         </div>
                                     )}
                                 </td>
-                                {role === 'GIAM_DOC' && (
+                                {(role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN' || role?.toUpperCase() === 'CEO') && (
                                     <td className="px-6 py-4 text-right space-x-2">
                                         {p.status === 'DRAFT' && (
                                             <>
                                                 <Button variant="outline" className="text-xs px-2 py-1 text-red-600 hover:bg-red-50" onClick={() => onReject(p)}>Từ chối</Button>
-                                                <Button variant="primary" className="text-xs px-2 py-1" onClick={() => onApprove(p.id)}>Duyệt</Button>
                                             </>
                                         )}
                                     </td>

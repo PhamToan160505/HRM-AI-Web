@@ -7,7 +7,11 @@ import com.hrm.common.payroll.entity.Holiday;
 import com.hrm.common.payroll.entity.Payroll;
 import com.hrm.common.payroll.repository.HolidayRepository;
 import com.hrm.common.payroll.repository.PayrollRepository;
+import com.hrm.common.repository.DepartmentRepository;
 import com.hrm.common.repository.UserRepository;
+import com.hrm.notification.service.NotificationService;
+import com.hrm.common.payroll.dto.DepartmentPayrollSummary;
+import com.hrm.common.entity.Department;
 import com.hrm.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -29,6 +33,8 @@ public class PayrollService {
     private final HolidayRepository holidayRepository;
     private final AttendanceRepository attendanceRepository;
     private final UserRepository userRepository;
+    private final DepartmentRepository departmentRepository;
+    private final NotificationService notificationService;
 
     @Value("${payroll.late-free-times:1}")
     private int lateFreeTimes;
@@ -248,12 +254,122 @@ public class PayrollService {
     }
 
     public List<Payroll> getDepartmentPayroll(int month, int year, CustomUserDetails currentUser) {
-        if ("GIAM_DOC".equals(currentUser.getRole().name())) {
+        if ("CEO".equals(currentUser.getRole().name())) {
             return payrollRepository.findByMonthAndYear(month, year);
         } else {
             List<User> employees = userRepository.findByDepartmentId(currentUser.getDepartmentId());
             List<Long> employeeIds = employees.stream().map(User::getId).toList();
             return payrollRepository.findByMonthAndYearAndEmployeeIdIn(month, year, employeeIds);
         }
+    }
+
+    public List<DepartmentPayrollSummary> getDepartmentPayrollSummaries(int month, int year) {
+        List<Department> departments = departmentRepository.findAll();
+        List<DepartmentPayrollSummary> summaries = new ArrayList<>();
+
+        for (Department dept : departments) {
+            List<User> employees = userRepository.findByDepartmentId(dept.getId());
+            if (employees.isEmpty()) continue;
+
+            List<Long> employeeIds = employees.stream().map(User::getId).toList();
+            List<Payroll> payrolls = payrollRepository.findByMonthAndYearAndEmployeeIdIn(month, year, employeeIds);
+
+            if (payrolls.isEmpty()) {
+                summaries.add(DepartmentPayrollSummary.builder()
+                        .departmentId(dept.getId())
+                        .departmentName(dept.getTenPhong())
+                        .totalEmployees(employees.size())
+                        .totalGrossSalary(0.0)
+                        .status("Chưa có dữ liệu")
+                        .build());
+                continue;
+            }
+
+            double totalGrossSalary = payrolls.stream().mapToDouble(p -> p.getGrossSalary() != null ? p.getGrossSalary() : 0.0).sum();
+            
+            // Derive status
+            boolean allDirectorApproved = payrolls.stream().allMatch(p -> "DIRECTOR_APPROVED".equals(p.getStatus()));
+            boolean anyRejected = payrolls.stream().anyMatch(p -> p.getStatus() != null && p.getStatus().startsWith("REJECTED"));
+            boolean allDraft = payrolls.stream().allMatch(p -> "DRAFT".equals(p.getStatus()));
+            boolean allManagerApproved = payrolls.stream().allMatch(p -> "MANAGER_APPROVED".equals(p.getStatus()));
+            
+            String status = "Đang xử lý";
+            if (allDirectorApproved) status = "Đã duyệt";
+            else if (anyRejected) status = "Bị từ chối";
+            else if (allManagerApproved) status = "Chờ Giám đốc duyệt";
+            else if (allDraft) status = "Bản nháp";
+
+            summaries.add(DepartmentPayrollSummary.builder()
+                    .departmentId(dept.getId())
+                    .departmentName(dept.getTenPhong())
+                    .totalEmployees(payrolls.size())
+                    .totalGrossSalary(totalGrossSalary)
+                    .status(status)
+                    .build());
+        }
+        return summaries;
+    }
+
+    @Transactional
+    public void approveDepartmentPayroll(Long departmentId, int month, int year, Long directorId) {
+        List<User> employees = userRepository.findByDepartmentId(departmentId);
+        if (employees.isEmpty()) return;
+        List<Long> employeeIds = employees.stream().map(User::getId).toList();
+        List<Payroll> payrolls = payrollRepository.findByMonthAndYearAndEmployeeIdIn(month, year, employeeIds);
+        
+        for (Payroll p : payrolls) {
+            if ("DRAFT".equals(p.getStatus()) || "MANAGER_APPROVED".equals(p.getStatus())) {
+                p.setStatus("DIRECTOR_APPROVED");
+            }
+        }
+        payrollRepository.saveAll(payrolls);
+
+        Department dept = departmentRepository.findById(departmentId).orElse(null);
+        String deptName = dept != null ? dept.getTenPhong() : "Unknown";
+
+        // Notify CEO
+        userRepository.findByRole(com.hrm.common.entity.Role.CEO).forEach(ceo -> {
+            notificationService.createNotification(
+                    ceo.getId(),
+                    "PAYROLL",
+                    "Bảng lương đã được duyệt",
+                    "Giám đốc phòng ban đã duyệt báo cáo bảng lương tháng " + month + "/" + year + " của phòng " + deptName,
+                    "quan_trong",
+                    "/ceo/payroll"
+            );
+        });
+    }
+
+    @Transactional
+    public void rejectDepartmentPayroll(Long departmentId, int month, int year, String reason, Long ceoId) {
+        List<User> employees = userRepository.findByDepartmentId(departmentId);
+        if (employees.isEmpty()) return;
+        List<Long> employeeIds = employees.stream().map(User::getId).toList();
+        List<Payroll> payrolls = payrollRepository.findByMonthAndYearAndEmployeeIdIn(month, year, employeeIds);
+        
+        for (Payroll p : payrolls) {
+            if ("DIRECTOR_APPROVED".equals(p.getStatus())) {
+                p.setStatus("REJECTED_BY_CEO");
+                p.setRejectionReason(reason);
+            }
+        }
+        payrollRepository.saveAll(payrolls);
+
+        Department dept = departmentRepository.findById(departmentId).orElse(null);
+        String deptName = dept != null ? dept.getTenPhong() : "Unknown";
+
+        // Notify Giám đốc phòng ban (Department Director)
+        userRepository.findByRole(com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN).stream()
+                .filter(u -> departmentId.equals(u.getDepartmentId()))
+                .forEach(director -> {
+            notificationService.createNotification(
+                    director.getId(),
+                    "PAYROLL",
+                    "Báo cáo bảng lương bị từ chối",
+                    "Tổng giám đốc đã từ chối báo cáo bảng lương tháng " + month + "/" + year + " của phòng " + deptName + ". Lý do: " + reason,
+                    "quan_trong",
+                    "/director/payroll"
+            );
+        });
     }
 }

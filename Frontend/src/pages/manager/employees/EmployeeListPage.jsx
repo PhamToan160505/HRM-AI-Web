@@ -5,11 +5,15 @@ import api from '../../../services/api';
 import Button from '../../../components/common/Button';
 import { useToast } from '../../../components/common/Toast';
 import EmployeeProfileSummary from '../../../components/employee/EmployeeProfileSummary';
+import { useAuth } from '../../../context/AuthContext';
 
 const EmployeeListPage = () => {
+    const { role } = useAuth();
     const [employees, setEmployees] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
+    const [selectedRole, setSelectedRole] = useState(""); // Add role filter
+    const [selectedFilterDept, setSelectedFilterDept] = useState(""); // Add department filter
     const [selectedEmployee, setSelectedEmployee] = useState(null); // For detail view
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [cccdImages, setCccdImages] = useState({ frontUrl: null, backUrl: null });
@@ -95,10 +99,13 @@ const EmployeeListPage = () => {
         }
     };
 
-    const filteredEmployees = employees.filter(emp => 
-        emp.hoTen?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        emp.email?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredEmployees = employees.filter(emp => {
+        const matchSearch = emp.hoTen?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                            emp.email?.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchRole = selectedRole ? emp.role === selectedRole : true;
+        const matchDept = selectedFilterDept ? String(emp.departmentId) === String(selectedFilterDept) : true;
+        return matchSearch && matchRole && matchDept;
+    });
 
     return (
         <div className="p-8 max-w-7xl mx-auto">
@@ -120,9 +127,27 @@ const EmployeeListPage = () => {
                             onChange={e => setSearchTerm(e.target.value)}
                         />
                     </div>
-                    <Button variant="outline" className="flex items-center gap-2">
-                        <Filter size={16} /> Lọc
-                    </Button>
+                    <select 
+                        value={selectedFilterDept}
+                        onChange={e => setSelectedFilterDept(e.target.value)}
+                        className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 cursor-pointer text-gray-600"
+                    >
+                        <option value="">Tất cả phòng ban</option>
+                        {departments.map(dept => (
+                            <option key={dept.id} value={dept.id}>{dept.tenPhong}</option>
+                        ))}
+                    </select>
+                    <select 
+                        value={selectedRole}
+                        onChange={e => setSelectedRole(e.target.value)}
+                        className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 cursor-pointer text-gray-600"
+                    >
+                        <option value="">Tất cả chức vụ</option>
+                        <option value="CEO">Tổng giám đốc (CEO)</option>
+                        <option value="GIAM_DOC_PHONG_BAN">Giám đốc phòng ban</option>
+                        <option value="TRUONG_PHONG">Trưởng phòng</option>
+                        <option value="NHAN_VIEN">Nhân viên</option>
+                    </select>
                 </div>
             </div>
 
@@ -203,9 +228,11 @@ const EmployeeListPage = () => {
                                                 Xem chi tiết
                                             </button>
                                         )}
-                                        <button onClick={(e) => { e.stopPropagation(); handleOpenAssign(emp); }} className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md transition-colors text-xs font-medium border border-blue-200">
-                                            Phân công
-                                        </button>
+                                        {role !== 'ceo' && (
+                                            <button onClick={(e) => { e.stopPropagation(); handleOpenAssign(emp); }} className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md transition-colors text-xs font-medium border border-blue-200">
+                                                Phân công
+                                            </button>
+                                        )}
                                     </div>
                                 </td>
                             </motion.tr>

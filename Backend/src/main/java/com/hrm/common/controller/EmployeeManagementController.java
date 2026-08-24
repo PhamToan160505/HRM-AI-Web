@@ -25,15 +25,26 @@ public class EmployeeManagementController {
     private final com.hrm.common.payroll.repository.SalaryHistoryRepository salaryHistoryRepository;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('TRUONG_PHONG', 'GIAM_DOC')")
-    public ResponseEntity<ApiResponse<List<User>>> getAllEmployees() {
-        // Chỉ lấy nhân viên (những user có role = NHAN_VIEN), tránh hiển thị sếp hoặc chính mình
-        List<User> employees = userRepository.findByRole(com.hrm.common.entity.Role.NHAN_VIEN);
+    @PreAuthorize("hasAnyRole('TRUONG_PHONG', 'GIAM_DOC_PHONG_BAN', 'CEO')")
+    public ResponseEntity<ApiResponse<List<User>>> getAllEmployees(@AuthenticationPrincipal CustomUserDetails userDetails) {
+        List<User> employees = new java.util.ArrayList<>();
+        
+        if (userDetails.getRole() == com.hrm.common.entity.Role.CEO) {
+            employees = userRepository.findByRoleIn(java.util.List.of(
+                com.hrm.common.entity.Role.NHAN_VIEN,
+                com.hrm.common.entity.Role.TRUONG_PHONG,
+                com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN
+            ));
+        } else if (userDetails.getRole() == com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN || userDetails.getRole() == com.hrm.common.entity.Role.TRUONG_PHONG) {
+            List<User> deptUsers = userRepository.findByDepartmentId(userDetails.getDepartmentId());
+            employees = deptUsers.stream().filter(u -> u.getRole() == com.hrm.common.entity.Role.NHAN_VIEN).toList();
+        }
+        
         return ResponseEntity.ok(ApiResponse.ok(employees, "Thành công"));
     }
 
     @PutMapping("/{id}/assignment")
-    @PreAuthorize("hasAnyRole('TRUONG_PHONG', 'GIAM_DOC')")
+    @PreAuthorize("hasAnyRole('TRUONG_PHONG', 'GIAM_DOC_PHONG_BAN', 'CEO')")
     public ResponseEntity<ApiResponse<User>> updateAssignment(
             @PathVariable Long id,
             @RequestBody Map<String, Object> request,
@@ -44,6 +55,12 @@ public class EmployeeManagementController {
         
         if (user.getRole() != com.hrm.common.entity.Role.NHAN_VIEN) {
             throw new RuntimeException("403: Không thể phân công cho tài khoản cấp cao hơn hoặc ngang cấp");
+        }
+        
+        // Kiểm tra phạm vi dữ liệu
+        if ((userDetails.getRole() == com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN || userDetails.getRole() == com.hrm.common.entity.Role.TRUONG_PHONG) 
+                && !user.getDepartmentId().equals(userDetails.getDepartmentId())) {
+            throw new RuntimeException("403: Không có quyền thao tác nhân viên ngoài phòng ban");
         }
         
         if (request.containsKey("departmentId")) {
@@ -108,10 +125,9 @@ public class EmployeeManagementController {
             @PathVariable Long id,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         
-        // Kiểm tra quyền: CHỈ chính chủ HOẶC (Trưởng phòng/Giám đốc) mới được xem
         boolean isOwner = id.equals(userDetails.getUserId());
         boolean isManager = userDetails.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_TRUONG_PHONG") || a.getAuthority().equals("ROLE_GIAM_DOC"));
+                .anyMatch(a -> a.getAuthority().equals("ROLE_TRUONG_PHONG") || a.getAuthority().equals("ROLE_GIAM_DOC_PHONG_BAN") || a.getAuthority().equals("ROLE_CEO"));
                 
         if (!isOwner && !isManager) {
             throw new RuntimeException("Bạn không có quyền xem ảnh CCCD này");
@@ -125,11 +141,12 @@ public class EmployeeManagementController {
         
         return ResponseEntity.ok(ApiResponse.ok(Map.of("frontUrl", frontUrl != null ? frontUrl : "", "backUrl", backUrl != null ? backUrl : ""), "Lấy link ảnh CCCD thành công"));
     }
+    
     @GetMapping("/salary-history")
-    @PreAuthorize("hasAnyRole('TRUONG_PHONG', 'GIAM_DOC')")
+    @PreAuthorize("hasAnyRole('TRUONG_PHONG', 'GIAM_DOC_PHONG_BAN', 'CEO')")
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getSalaryHistory(@AuthenticationPrincipal CustomUserDetails currentUser) {
         List<com.hrm.common.payroll.entity.SalaryHistory> histories;
-        if ("GIAM_DOC".equals(currentUser.getRole().name())) {
+        if ("CEO".equals(currentUser.getRole().name())) {
             histories = salaryHistoryRepository.findAll(org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "changeDate"));
         } else {
             List<User> emps = userRepository.findByDepartmentId(currentUser.getDepartmentId());

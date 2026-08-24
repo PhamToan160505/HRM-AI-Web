@@ -43,6 +43,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                         null,                        // email không cần trong filter
                         jwtUtil.getRole(token),
                         jwtUtil.getDepartmentId(token),
+                        jwtUtil.getTeamId(token),
                         jwtUtil.getHoTen(token)
                 );
 

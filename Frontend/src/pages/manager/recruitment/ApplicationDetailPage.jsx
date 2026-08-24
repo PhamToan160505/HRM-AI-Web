@@ -196,7 +196,7 @@ export default function ApplicationDetailPage() {
                 </button>
               </>
             )}
-            {role === 'giam_doc' && application.approvalStatus === 'PENDING_DIRECTOR' && (
+            {role === 'giam_doc_phong_ban' && application.approvalStatus === 'PENDING_DIRECTOR' && (
               <>
                 <button 
                   onClick={executeDirectorApprove}
