@@ -99,4 +99,47 @@ public class EmailService {
             log.error("LỖI khi gửi email Cảm ơn (Từ chối) cho {}: {}", to, e.getMessage(), e);
         }
     }
+    @Async
+    public void sendAccountInfo(String to, String fullName, String maNhanVien, String rawPassword) {
+        log.info("Bắt đầu gửi email thông báo tài khoản cho: {}", to);
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            helper.setTo(to);
+            helper.setSubject("HRM AI - Thông tin tài khoản đăng nhập hệ thống");
+
+            String htmlContent = """
+                <html>
+                <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
+                    <div style="background-color: #2563eb; color: #ffffff; padding: 20px; text-align: center;">
+                        <h2 style="margin: 0;">HRM AI - Chào mừng nhân sự mới</h2>
+                    </div>
+                    <div style="padding: 30px;">
+                        <p>Kính gửi anh/chị <strong>%s</strong>,</p>
+                        <p>Tài khoản của bạn đã được quản trị viên cấp phát thành công. Dưới đây là thông tin đăng nhập vào hệ thống HRM AI:</p>
+                        <div style="background-color: #f1f5f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                            <p style="margin: 0;"><strong>Tài khoản (Mã nhân viên):</strong> <span style="color: #2563eb; font-size: 18px; font-weight: bold;">%s</span></p>
+                            <p style="margin: 10px 0 0 0;"><strong>Mật khẩu:</strong> <span style="font-family: monospace; background: #e2e8f0; padding: 3px 8px; border-radius: 4px;">%s</span></p>
+                        </div>
+                        <p>Vui lòng đăng nhập và đổi mật khẩu trong lần đầu tiên truy cập để đảm bảo bảo mật.</p>
+                        <br/>
+                        <p>Trân trọng,</p>
+                        <p><strong>Ban Quản trị Hệ thống HRM AI</strong></p>
+                    </div>
+                    <div style="background-color: #f8fafc; padding: 15px; text-align: center; color: #64748b; font-size: 12px; border-top: 1px solid #e0e0e0;">
+                        Đây là email tự động từ hệ thống HRM AI. Vui lòng không trả lời email này.
+                    </div>
+                </body>
+                </html>
+                """.formatted(fullName, maNhanVien, rawPassword);
+
+            helper.setText(htmlContent, true);
+            mailSender.send(message);
+            log.info("Đã gửi email thông báo tài khoản thành công cho: {}", to);
+
+        } catch (Exception e) {
+            log.error("LỖI khi gửi email thông báo tài khoản cho {}: {}", to, e.getMessage(), e);
+        }
+    }
 }

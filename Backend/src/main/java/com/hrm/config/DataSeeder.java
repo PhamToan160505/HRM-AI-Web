@@ -113,11 +113,27 @@ public class DataSeeder implements CommandLineRunner {
                 .map(Department::getId)
                 .orElse(null);
 
-        // 1. Giám đốc
+        // 1. Admin — Toàn quyền quản trị hệ thống
+        if (!userRepository.existsByEmail("admin@hrm.vn")) {
+            User admin = User.builder()
+                    .hoTen("Hệ Thống Admin")
+                    .email("admin@hrm.vn")
+                    .maNhanVien("100001")
+                    .passwordHash(hashedPassword)
+                    .role(Role.ADMIN)
+                    .departmentId(null)
+                    .active(true)
+                    .build();
+            userRepository.save(admin);
+            log.info("[Seed] Tạo tài khoản: admin@hrm.vn (ADMIN)");
+        }
+
+        // 2. Giám đốc
         if (!userRepository.existsByEmail("giamdoc@hrm.vn")) {
             User giamDoc = User.builder()
                     .hoTen("Nguyễn Văn Giám Đốc")
                     .email("giamdoc@hrm.vn")
+                    .maNhanVien("100002")
                     .passwordHash(hashedPassword)
                     .role(Role.GIAM_DOC)
                     .departmentId(null) // GIAM_DOC không thuộc phòng cụ thể
@@ -127,11 +143,31 @@ public class DataSeeder implements CommandLineRunner {
             log.info("[Seed] Tạo tài khoản: giamdoc@hrm.vn (GIAM_DOC)");
         }
 
-        // 2. Trưởng phòng — thuộc phòng Nhân sự (ngoại lệ tuyển dụng theo README mục 3)
+        // 3. Giám đốc phòng ban (ví dụ: phòng Kỹ thuật)
+        Long kyThuatDeptId = departmentRepository.findByTenPhong("Kỹ thuật")
+                .map(Department::getId)
+                .orElse(null);
+                
+        if (!userRepository.existsByEmail("giamdocphong@hrm.vn")) {
+            User giamDocPhong = User.builder()
+                    .hoTen("Phạm Văn Giám Đốc Phòng")
+                    .email("giamdocphong@hrm.vn")
+                    .maNhanVien("100003")
+                    .passwordHash(hashedPassword)
+                    .role(Role.GIAM_DOC_PHONG)
+                    .departmentId(kyThuatDeptId)
+                    .active(true)
+                    .build();
+            userRepository.save(giamDocPhong);
+            log.info("[Seed] Tạo tài khoản: giamdocphong@hrm.vn (GIAM_DOC_PHONG, phòng Kỹ thuật id={})", kyThuatDeptId);
+        }
+
+        // 4. Trưởng phòng — thuộc phòng Nhân sự (ngoại lệ tuyển dụng theo README mục 3)
         if (!userRepository.existsByEmail("truongphong@hrm.vn")) {
             User truongPhong = User.builder()
                     .hoTen("Trần Thị Trưởng Phòng")
                     .email("truongphong@hrm.vn")
+                    .maNhanVien("100004")
                     .passwordHash(hashedPassword)
                     .role(Role.TRUONG_PHONG)
                     .departmentId(nhanSuDeptId)
@@ -141,11 +177,12 @@ public class DataSeeder implements CommandLineRunner {
             log.info("[Seed] Tạo tài khoản: truongphong@hrm.vn (TRUONG_PHONG, phòng Nhân sự id={})", nhanSuDeptId);
         }
 
-        // 3. Nhân viên — thuộc phòng Nhân sự
+        // 5. Nhân viên — thuộc phòng Nhân sự
         if (!userRepository.existsByEmail("nhanvien@hrm.vn")) {
             User nhanVien = User.builder()
                     .hoTen("Lê Văn Nhân Viên")
                     .email("nhanvien@hrm.vn")
+                    .maNhanVien("100005")
                     .passwordHash(hashedPassword)
                     .role(Role.NHAN_VIEN)
                     .departmentId(nhanSuDeptId)
@@ -153,6 +190,17 @@ public class DataSeeder implements CommandLineRunner {
                     .build();
             userRepository.save(nhanVien);
             log.info("[Seed] Tạo tài khoản: nhanvien@hrm.vn (NHAN_VIEN, phòng Nhân sự id={})", nhanSuDeptId);
+        }
+
+        // Cập nhật maNhanVien cho các tài khoản hiện tại (nếu trước đây bị thiếu)
+        try {
+            jdbcTemplate.execute("UPDATE users SET ma_nhan_vien = '100001' WHERE email = 'admin@hrm.vn' AND ma_nhan_vien IS NULL");
+            jdbcTemplate.execute("UPDATE users SET ma_nhan_vien = '100002' WHERE email = 'giamdoc@hrm.vn' AND ma_nhan_vien IS NULL");
+            jdbcTemplate.execute("UPDATE users SET ma_nhan_vien = '100003' WHERE email = 'giamdocphong@hrm.vn' AND ma_nhan_vien IS NULL");
+            jdbcTemplate.execute("UPDATE users SET ma_nhan_vien = '100004' WHERE email = 'truongphong@hrm.vn' AND ma_nhan_vien IS NULL");
+            jdbcTemplate.execute("UPDATE users SET ma_nhan_vien = '100005' WHERE email = 'nhanvien@hrm.vn' AND ma_nhan_vien IS NULL");
+        } catch (Exception e) {
+            log.error("[Migration] Lỗi khi cập nhật maNhanVien cho tài khoản cũ: ", e);
         }
 
         log.info("[Seed] Hoàn tất. Password mặc định: Admin@123 — đổi ngay trên môi trường production.");

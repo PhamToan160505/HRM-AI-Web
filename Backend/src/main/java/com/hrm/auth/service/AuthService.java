@@ -27,10 +27,10 @@ public class AuthService {
     private final JwtUtil jwtUtil;
 
     public LoginResponse login(LoginRequest request) {
-        // Tìm user theo email — Spring Data tự parameterize, không nối chuỗi SQL
-        User user = userRepository.findByEmail(request.getEmail())
+        // Tìm user theo mã nhân viên
+        User user = userRepository.findByMaNhanVien(request.getMaNhanVien())
                 .orElseThrow(() -> new AppException(HttpStatus.UNAUTHORIZED,
-                        "Email hoặc mật khẩu không đúng"));
+                        "Mã nhân viên hoặc mật khẩu không đúng"));
 
         // Kiểm tra tài khoản còn hoạt động
         if (!user.getActive()) {
@@ -40,9 +40,9 @@ public class AuthService {
 
         // BCrypt verify — không tự viết hàm hash
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-            log.debug("Password mismatch for email: {}", request.getEmail());
+            log.debug("Password mismatch for maNhanVien: {}", request.getMaNhanVien());
             throw new AppException(HttpStatus.UNAUTHORIZED,
-                    "Email hoặc mật khẩu không đúng");
+                    "Mã nhân viên hoặc mật khẩu không đúng");
         }
 
         String token = jwtUtil.generateToken(user);

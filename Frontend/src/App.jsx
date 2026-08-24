@@ -15,6 +15,9 @@ import RequireRole from './components/common/RequireRole';
 import LoginPage from './pages/public/LoginPage';
 import PublicApplyForm from './pages/public/PublicApplyForm';
 import DirectorDashboardPage from './pages/director/DashboardPage';
+import AdminDashboardPage from './pages/admin/AdminDashboardPage';
+import UserManagementPage from './pages/admin/UserManagementPage';
+import SystemSettingsPage from './pages/admin/SystemSettingsPage';
 import ManagerDashboardPage from './pages/manager/DashboardPage';
 import DirectorRecruitmentPage from './pages/director/DirectorRecruitmentPage';
 import RecruitmentLayout from './pages/manager/recruitment/RecruitmentLayout';
@@ -60,11 +63,27 @@ export default function App() {
           {/* Placeholder cho trang public apply (Bước 4) */}
           <Route path="/public/apply/:jobSlug" element={<PublicApplyForm />} />
 
+          {/* ── Admin ───────────────────────────────────────── */}
+          <Route
+            path="/admin"
+            element={
+              <RequireRole roles={['admin']}>
+                <AppLayout />
+              </RequireRole>
+            }
+          >
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="dashboard" element={<AdminDashboardPage />} />
+            <Route path="users" element={<UserManagementPage />} />
+            <Route path="settings" element={<SystemSettingsPage />} />
+            <Route path="profile" element={<ProfilePage />} />
+          </Route>
+
           {/* ── Giám đốc ──────────────────────────────────── */}
           <Route
             path="/director"
             element={
-              <RequireRole roles={['giam_doc']}>
+              <RequireRole roles={['giam_doc', 'giam_doc_phong']}>
                 <AppLayout />
               </RequireRole>
             }

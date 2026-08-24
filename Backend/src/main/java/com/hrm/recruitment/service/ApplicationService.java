@@ -17,9 +17,10 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import com.hrm.notification.service.NotificationService;
 import com.hrm.common.repository.UserRepository;
-import com.hrm.common.entity.User;
 import com.hrm.common.entity.Role;
 import com.hrm.email.service.EmailService;
+import com.hrm.admin.entity.AccountCreationRequest;
+import com.hrm.admin.repository.AccountCreationRequestRepository;
 import java.util.List;
 
 @Service
@@ -39,6 +40,7 @@ public class ApplicationService {
     private final UserRepository userRepository;
     private final EmailService emailService;
     private final AsyncUploadService asyncUploadService;
+    private final AccountCreationRequestRepository accountCreationRequestRepository;
 
     public Application getApplicationById(Long id) {
         return applicationRepository.findById(id)
@@ -109,6 +111,16 @@ public class ApplicationService {
         
         // Gửi email trúng tuyển
         emailService.sendApprovalEmail(savedApp.getEmail(), savedApp.getFullName(), savedApp.getJobPosting().getTitle());
+        
+        // Tạo yêu cầu sinh tài khoản cho Admin
+        AccountCreationRequest accountReq = AccountCreationRequest.builder()
+                .applicationId(savedApp.getId())
+                .hoTen(savedApp.getFullName())
+                .email(savedApp.getEmail())
+                .chucVu(savedApp.getJobPosting().getTitle())
+                .status(AccountCreationRequest.RequestStatus.PENDING)
+                .build();
+        accountCreationRequestRepository.save(accountReq);
         
         return savedApp;
     }
