@@ -1,0 +1,42 @@
+========================================================================
+LOGIC NGHIỆP VỤ CỦA ROLE TỔNG GIÁM ĐỐC (CEO) VÀ GIÁM ĐỐC PHÒNG BAN
+========================================================================
+
+1. TỔNG GIÁM ĐỐC (CEO)
+Đứng đầu công ty, quản lý vĩ mô, không làm các thao tác nhập liệu lặt vặt. Mọi dữ liệu CEO thấy đều là dữ liệu "toàn cảnh" của tất cả các phòng ban cộng lại.
+
+* Phạm vi dữ liệu: Toàn bộ hệ thống công ty (department_id = null).
+* Logic Bảng điều khiển (Dashboard): 
+  - Xem các báo cáo mang tính chiến lược: Tổng quỹ lương tháng này của cả công ty là bao nhiêu? Biến động nhân sự (tuyển mới/nghỉ việc) ra sao? Tỉ lệ đi làm/đi muộn của toàn bộ các khối.
+* Quản lý Nhân sự:
+  - Được xem danh sách tất cả nhân sự trong công ty. 
+  - Thường chỉ có quyền Read-only (Xem) hoặc can thiệp điều chuyển công tác cấp cao, chứ không đi sửa thông tin lặt vặt (việc đó của HR hoặc Trưởng phòng).
+* Tuyển dụng:
+  - Xem được tất cả các chiến dịch tuyển dụng đang chạy của mọi phòng ban.
+  - Thường là người duyệt cuối cùng (Final Approval) đối với các vị trí nhân sự cấp cao.
+* Chấm công & Tiền lương:
+  - Không tự duyệt đơn xin nghỉ phép của Nhân viên (nhân viên thì Trưởng phòng duyệt). CEO chỉ duyệt đơn nghỉ phép của các Giám đốc phòng ban (vì họ là cấp dưới trực tiếp).
+  - Quyền lực cao nhất ở Bảng lương: CEO là người bấm nút "Chốt bảng lương" cuối cùng cho toàn công ty sau khi các Giám đốc phòng ban đã xác nhận số liệu của phòng họ. Khi CEO chốt, kế toán mới được xuất tiền.
+
+
+2. GIÁM ĐỐC PHÒNG BAN (Department Director)
+Đứng đầu một "Khối" hoặc "Phòng ban" (Ví dụ: Giám đốc Khối Kỹ Thuật, Giám đốc Khối Kinh Doanh). Chỉ quan tâm đến "quân" của mình và ngân sách của phòng mình.
+
+* Phạm vi dữ liệu: Bị giới hạn nghiêm ngặt trong một phòng ban cụ thể (department_id cố định). Tuyệt đối không nhìn thấy dữ liệu của phòng ban khác.
+* Logic Bảng điều khiển (Dashboard): 
+  - Chỉ hiển thị số liệu của phòng mình: Tổng nhân sự phòng mình, quỹ lương phòng mình tháng này, ai đang nghỉ phép, tiến độ tuyển dụng của phòng mình.
+* Quản lý Nhân sự:
+  - Xem và quản lý nhân viên chỉ thuộc phòng ban mình.
+  - Đưa ra quyết định thăng cấp, tăng lương cho nhân viên trong phòng để trình CEO duyệt.
+* Tuyển dụng:
+  - Là người đưa ra "Yêu cầu tuyển dụng": Khởi tạo chiến dịch tuyển dụng cho phòng mình (Ví dụ: "Phòng kỹ thuật cần tuyển gấp 5 Frontend Dev").
+  - Phê duyệt hồ sơ ứng viên (Applicant) ứng tuyển vào phòng ban mình sau khi Trưởng phòng đã phỏng vấn sơ bộ.
+* Chấm công & Tiền lương:
+  - Duyệt đơn từ: Duyệt đơn nghỉ phép cho Trưởng phòng. Đối với Nhân viên, Trưởng phòng sẽ duyệt, nhưng nếu nhân viên xin nghỉ quá dài ngày (ví dụ > 5 ngày) thì logic có thể yêu cầu đẩy lên cho Giám đốc phòng ban duyệt.
+  - Xác nhận bảng lương: Xem bảng lương nháp của phòng mình do hệ thống (hoặc nhân sự) tính toán. Nếu thấy hợp lý với hiệu suất làm việc của phòng, Giám đốc sẽ bấm "Xác nhận bảng lương phòng ban" để đẩy lên cho CEO tổng hợp.
+
+------------------------------------------------------------------------
+Tóm tắt kỹ thuật: 
+- Backend query dữ liệu luôn dựa vào role. 
+- CEO query toàn bộ bảng.
+- GIAM_DOC_PHONG_BAN nối thêm điều kiện WHERE department_id = ?.

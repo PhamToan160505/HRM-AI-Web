@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ClipboardCheck, Search, Download, AlertCircle, CheckCircle, Filter } from 'lucide-react';
+import { ClipboardCheck, Search, Download, AlertCircle, CheckCircle, Filter, Users, ArrowLeft } from 'lucide-react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Card } from '../../components/common/Card';
 import Button from '../../components/common/Button';
@@ -11,12 +11,16 @@ import { useAuth } from '../../context/AuthContext';
 export default function ManagerAttendancePage() {
     const [searchParams, setSearchParams] = useSearchParams();
     const [records, setRecords] = useState([]);
+    const [departments, setDepartments] = useState([]);
+    const [selectedDepartment, setSelectedDepartment] = useState(null);
     const [loading, setLoading] = useState(true);
     const [approvingRecord, setApprovingRecord] = useState(null);
     const [viewingRecord, setViewingRecord] = useState(null);
     const [loaiNghiPhep, setLoaiNghiPhep] = useState('NORMAL_LEAVE');
     
     const [filterStatus, setFilterStatus] = useState(searchParams.get('status') || 'ALL');
+    const [searchTerm, setSearchTerm] = useState("");
+    const [selectedRole, setSelectedRole] = useState("");
     
     const toast = useToast();
     const navigate = useNavigate();
@@ -37,9 +41,23 @@ export default function ManagerAttendancePage() {
         }
     };
 
+    const fetchDepartments = async () => {
+        try {
+            const res = await api.get('/api/departments');
+            if (res.data?.success) {
+                setDepartments(res.data.data || []);
+            }
+        } catch (error) {
+            console.error("Error fetching departments:", error);
+        }
+    };
+
     useEffect(() => {
         fetchAttendance();
-    }, []);
+        if (user?.role?.toUpperCase() === 'CEO') {
+            fetchDepartments();
+        }
+    }, [user]);
     
     // Update URL when filter changes
     const handleFilterChange = (e) => {
@@ -96,16 +114,52 @@ export default function ManagerAttendancePage() {
     };
     
     const filteredRecords = records.filter(record => {
-        if (filterStatus === 'PENDING') return record.isException && record.exceptionStatus === 'PENDING';
-        return true; // if ALL or other unsupported filters
+        if (record.role === 'CEO') return false;
+        if (selectedDepartment && record.departmentId !== selectedDepartment.id) return false;
+        
+        const matchSearch = record.hoTen?.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchRole = selectedRole ? record.role === selectedRole : true;
+        let matchStatus = true;
+        if (filterStatus === 'PENDING') matchStatus = record.isException && record.exceptionStatus === 'PENDING';
+        
+        return matchSearch && matchRole && matchStatus;
     });
+
+    const departmentStats = departments.map(dept => {
+        const deptRecords = records.filter(r => r.departmentId === dept.id && r.role !== 'CEO');
+        const total = deptRecords.length;
+        const onTime = deptRecords.filter(r => r.status === 'PRESENT').length;
+        return {
+            ...dept,
+            total,
+            onTime
+        };
+    });
+
+    const isCEO = user?.role?.toUpperCase() === 'CEO';
+    const showDepartmentList = isCEO && !selectedDepartment;
 
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-800">Quản lý Chấm công</h1>
-                    <p className="text-sm text-slate-500 mt-1">Duyệt và theo dõi giờ làm việc của nhân sự trong phòng ban</p>
+                <div className="flex items-center gap-4">
+                    {isCEO && selectedDepartment && (
+                        <button 
+                            onClick={() => setSelectedDepartment(null)}
+                            className="p-2 bg-white border border-gray-200 rounded-lg text-gray-500 hover:text-blue-600 hover:border-blue-300 transition-colors shadow-sm"
+                            title="Quay lại danh sách phòng ban"
+                        >
+                            <ArrowLeft size={20} />
+                        </button>
+                    )}
+                    <div>
+                        <h1 className="text-2xl font-bold text-slate-800">
+                            {selectedDepartment ? `Chấm công: ${selectedDepartment.tenPhong}` : 'Quản lý Chấm công'}
+                        </h1>
+                        <p className="text-sm text-slate-500 mt-1">
+                            {selectedDepartment ? 'Xem chi tiết trạng thái chấm công của nhân viên' : 'Duyệt và theo dõi giờ làm việc của nhân sự'}
+                        </p>
+                    </div>
                 </div>
                 <div className="flex gap-3">
                     <Button variant="outline" className="flex items-center gap-2">
@@ -114,84 +168,144 @@ export default function ManagerAttendancePage() {
                 </div>
             </div>
 
-            <Card>
-                <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 rounded-t-xl gap-4">
-                    <h2 className="text-lg font-bold text-gray-800 shrink-0">Danh sách chấm công hôm nay</h2>
-                    <div className="flex items-center gap-3 w-full justify-end">
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                            <input 
-                                type="text" 
-                                placeholder="Tìm nhân viên..." 
-                                className="pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64"
-                            />
+            {showDepartmentList ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in">
+                    {departmentStats.map(dept => (
+                        <Card key={dept.id} className="hover:border-blue-300 transition-all cursor-pointer overflow-hidden group hover:shadow-md" onClick={() => setSelectedDepartment(dept)}>
+                            <div className="p-6">
+                                <div className="flex justify-between items-start mb-4">
+                                    <div className="p-3 bg-blue-50 text-blue-600 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                        <Users size={24} />
+                                    </div>
+                                    <span className="px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-xs font-semibold">
+                                        Phòng ban
+                                    </span>
+                                </div>
+                                <h3 className="text-lg font-bold text-gray-800 mb-1">{dept.tenPhong}</h3>
+                                <p className="text-sm text-gray-500 mb-6">{dept.moTa || 'Không có mô tả'}</p>
+                                
+                                <div className="space-y-3">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-sm text-gray-500">Tổng nhân sự:</span>
+                                        <span className="font-semibold text-gray-800">{dept.total} người</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-sm text-gray-500">Đi làm đúng giờ:</span>
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden">
+                                                <div 
+                                                    className="h-full bg-emerald-500 rounded-full transition-all duration-500" 
+                                                    style={{ width: dept.total > 0 ? `${(dept.onTime / dept.total) * 100}%` : '0%' }}
+                                                ></div>
+                                            </div>
+                                            <span className="font-semibold text-emerald-600 text-sm w-8 text-right">
+                                                {dept.onTime}/{dept.total}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="px-6 py-3 bg-gray-50 border-t border-gray-100 flex justify-between items-center group-hover:bg-blue-50 transition-colors">
+                                <span className="text-sm font-medium text-blue-600">Xem chi tiết</span>
+                                <ArrowLeft size={16} className="text-blue-600 rotate-180 group-hover:translate-x-1 transition-transform" />
+                            </div>
+                        </Card>
+                    ))}
+                    {departments.length === 0 && !loading && (
+                        <div className="col-span-full py-12 text-center text-gray-500 bg-white rounded-xl border border-dashed border-gray-300">
+                            Không tìm thấy dữ liệu phòng ban.
+                        </div>
+                    )}
+                </div>
+            ) : (
+                <Card className="animate-fade-in">
+                    <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 rounded-t-xl gap-4">
+                        <h2 className="text-lg font-bold text-gray-800 shrink-0">Danh sách chấm công hôm nay</h2>
+                        <div className="flex items-center gap-3 w-full justify-end">
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                                <input 
+                                    type="text" 
+                                    placeholder="Tìm nhân viên..." 
+                                    className="pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64"
+                                    value={searchTerm}
+                                    onChange={e => setSearchTerm(e.target.value)}
+                                />
+                            </div>
+                            <select 
+                                value={selectedRole}
+                                onChange={e => setSelectedRole(e.target.value)}
+                                className="px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer text-gray-600 bg-white"
+                            >
+                                <option value="">Tất cả chức vụ</option>
+                                <option value="GIAM_DOC_PHONG_BAN">Giám đốc phòng ban</option>
+                                <option value="TRUONG_PHONG">Trưởng phòng</option>
+                                <option value="NHAN_VIEN">Nhân viên</option>
+                            </select>
                         </div>
                     </div>
-                </div>
-                
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left text-sm">
-                        <thead className="bg-white text-gray-500 border-b border-gray-100">
-                            <tr>
-                                <th className="px-6 py-4 font-semibold">Nhân viên</th>
-                                <th className="px-6 py-4 font-semibold">Giờ vào (Check-in)</th>
-                                <th className="px-6 py-4 font-semibold">Giờ ra (Check-out)</th>
-                                <th className="px-6 py-4 font-semibold">TT Check-in</th>
-                                <th className="px-6 py-4 font-semibold">TT Check-out</th>
-                                <th className="px-6 py-4 font-semibold text-right">Thao tác</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                            {loading ? (
+                    
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm">
+                            <thead className="bg-white text-gray-500 border-b border-gray-100">
                                 <tr>
-                                    <td colSpan="6" className="px-6 py-8 text-center text-gray-500">Đang tải dữ liệu...</td>
+                                    <th className="px-6 py-4 font-semibold">Nhân viên</th>
+                                    <th className="px-6 py-4 font-semibold">Giờ vào (Check-in)</th>
+                                    <th className="px-6 py-4 font-semibold">Giờ ra (Check-out)</th>
+                                    <th className="px-6 py-4 font-semibold">TT Check-in</th>
+                                    <th className="px-6 py-4 font-semibold">TT Check-out</th>
+                                    <th className="px-6 py-4 font-semibold text-right">Thao tác</th>
                                 </tr>
-                            ) : filteredRecords.length === 0 ? (
-                                <tr>
-                                    <td colSpan="6" className="px-6 py-8 text-center text-gray-500">Không có dữ liệu.</td>
-                                </tr>
-                            ) : (
-                                filteredRecords.map((record) => (
-                                    <tr key={record.id} className="hover:bg-slate-50 transition-colors">
-                                        <td className="px-6 py-4">
-                                            <div className="font-medium text-gray-800">{record.hoTen}</div>
-                                            {record.role && (
-                                                <div className="text-xs text-gray-500 mt-0.5">
-                                                    {record.role === 'GIAM_DOC' ? 'Giám đốc' : record.role === 'TRUONG_PHONG' ? 'Trưởng phòng' : 'Nhân viên'}
-                                                </div>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            {record.timeIn ? (
-                                                <span className="font-mono text-emerald-600 font-semibold">{formatTime(record.timeIn)}</span>
-                                            ) : '--:--'}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            {record.timeOut ? (
-                                                <span className="font-mono text-blue-600 font-semibold">{formatTime(record.timeOut)}</span>
-                                            ) : (
-                                                <span className="text-gray-400 italic">Chưa check-out</span>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4">{getStatusBadge(record.status)}</td>
-                                        <td className="px-6 py-4">{getCheckoutStatusBadge(record.timeOut)}</td>
-                                        <td className="px-6 py-4 text-right">
-                                            <Button 
-                                                variant="outline" 
-                                                className="px-3 py-1.5 text-xs text-blue-600 hover:bg-blue-50"
-                                                onClick={() => setViewingRecord(record)}
-                                            >
-                                                Xem chi tiết
-                                            </Button>
-                                        </td>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {loading ? (
+                                    <tr>
+                                        <td colSpan="6" className="px-6 py-8 text-center text-gray-500">Đang tải dữ liệu...</td>
                                     </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            </Card>
-
+                                ) : filteredRecords.length === 0 ? (
+                                    <tr>
+                                        <td colSpan="6" className="px-6 py-8 text-center text-gray-500">Không có dữ liệu.</td>
+                                    </tr>
+                                ) : (
+                                    filteredRecords.map((record) => (
+                                        <tr key={record.id} className="hover:bg-slate-50 transition-colors">
+                                            <td className="px-6 py-4">
+                                                <div className="font-medium text-gray-800">{record.hoTen}</div>
+                                                <div className="text-xs text-gray-500 mt-0.5">
+                                                    {record.chucVu || 'Chưa cập nhật chức danh'}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {record.timeIn ? (
+                                                    <span className="font-mono text-emerald-600 font-semibold">{formatTime(record.timeIn)}</span>
+                                                ) : '--:--'}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {record.timeOut ? (
+                                                    <span className="font-mono text-blue-600 font-semibold">{formatTime(record.timeOut)}</span>
+                                                ) : (
+                                                    <span className="text-gray-400 italic">Chưa check-out</span>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-4">{getStatusBadge(record.status)}</td>
+                                            <td className="px-6 py-4">{getCheckoutStatusBadge(record.timeOut)}</td>
+                                            <td className="px-6 py-4 text-right">
+                                                <Button 
+                                                    variant="outline" 
+                                                    className="px-3 py-1.5 text-xs text-blue-600 hover:bg-blue-50"
+                                                    onClick={() => setViewingRecord(record)}
+                                                >
+                                                    Xem chi tiết
+                                                </Button>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </Card>
+            )}
 
             {/* View Details Modal */}
             {viewingRecord && (
@@ -209,7 +323,7 @@ export default function ManagerAttendancePage() {
                                 <div>
                                     <p className="font-bold text-gray-800">{viewingRecord.hoTen}</p>
                                     <p className="text-sm text-gray-500">
-                                        {viewingRecord.role === 'GIAM_DOC' ? 'Giám đốc' : viewingRecord.role === 'TRUONG_PHONG' ? 'Trưởng phòng' : 'Nhân viên'}
+                                        {viewingRecord.chucVu || 'Chưa cập nhật chức danh'}
                                     </p>
                                 </div>
                             </div>

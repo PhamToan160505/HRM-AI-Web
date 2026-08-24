@@ -62,6 +62,9 @@ public class JobPosting {
     @Enumerated(EnumType.STRING)
     private CapBac capBac;
 
+    @Column(name = "department_id")
+    private Long departmentId;
+
     @CreationTimestamp
     private LocalDateTime createdAt;
 

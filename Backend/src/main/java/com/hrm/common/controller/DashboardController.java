@@ -20,17 +20,17 @@ public class DashboardController {
 
     private final DashboardService dashboardService;
 
-    @GetMapping("/director")
-    @PreAuthorize("hasRole('GIAM_DOC')")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> getDirectorDashboard() {
+    @GetMapping("/ceo")
+    @PreAuthorize("hasRole('CEO')")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getCeoDashboard() {
         return ResponseEntity.ok(ApiResponse.ok(dashboardService.getDirectorStats(), "Thành công"));
     }
 
     @GetMapping("/manager")
-    @PreAuthorize("hasRole('TRUONG_PHONG')")
+    @PreAuthorize("hasAnyRole('TRUONG_PHONG', 'GIAM_DOC_PHONG_BAN')")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getManagerDashboard(
             @AuthenticationPrincipal CustomUserDetails userDetails) {
-        return ResponseEntity.ok(ApiResponse.ok(dashboardService.getManagerStats(userDetails.getDepartmentId()), "Thành công"));
+        return ResponseEntity.ok(ApiResponse.ok(dashboardService.getManagerStats(userDetails), "Thành công"));
     }
 
     @GetMapping("/employee")

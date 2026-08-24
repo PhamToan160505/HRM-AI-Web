@@ -14,6 +14,7 @@ import RequireRole from './components/common/RequireRole';
 // Pages
 import LoginPage from './pages/public/LoginPage';
 import PublicApplyForm from './pages/public/PublicApplyForm';
+import CeoDashboardPage from './pages/ceo/CeoDashboardPage';
 import DirectorDashboardPage from './pages/director/DashboardPage';
 import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 import UserManagementPage from './pages/admin/UserManagementPage';
@@ -79,11 +80,37 @@ export default function App() {
             <Route path="profile" element={<ProfilePage />} />
           </Route>
 
-          {/* ── Giám đốc ──────────────────────────────────── */}
+          {/* ── CEO ──────────────────────────────────── */}
+          <Route
+            path="/ceo"
+            element={
+              <RequireRole roles={['ceo']}>
+                <AppLayout />
+              </RequireRole>
+            }
+          >
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="dashboard" element={<CeoDashboardPage />} />
+            <Route path="employees" element={<EmployeeListPage />} />
+            <Route path="recruitment" element={<DirectorRecruitmentPage />} />
+            <Route path="recruitment/applications/:id" element={<ApplicationDetailPage />} />
+            <Route path="attendance" element={<ManagerAttendancePage />} />
+            <Route path="my-attendance" element={<EmployeeAttendancePage />} />
+            <Route path="holidays" element={<HolidayPage />} />
+            <Route path="payroll" element={<PayrollPage />} />
+            <Route path="profile" element={<ProfilePage />} />
+            <Route path="face-enroll" element={
+                <div className="p-8">
+                    <FaceEnrollment />
+                </div>
+            } />
+          </Route>
+
+          {/* ── Giám đốc phòng ban ──────────────────────────────────── */}
           <Route
             path="/director"
             element={
-              <RequireRole roles={['giam_doc', 'giam_doc_phong']}>
+              <RequireRole roles={['giam_doc_phong_ban']}>
                 <AppLayout />
               </RequireRole>
             }

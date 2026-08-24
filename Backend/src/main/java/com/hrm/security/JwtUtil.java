@@ -40,7 +40,12 @@ public class JwtUtil {
     public String generateToken(User user) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("role", user.getRole().name());
-        claims.put("departmentId", user.getDepartmentId());
+        if (user.getDepartmentId() != null) {
+            claims.put("departmentId", user.getDepartmentId());
+        }
+        if (user.getTeamId() != null) {
+            claims.put("teamId", user.getTeamId());
+        }
         claims.put("hoTen", user.getHoTen());
 
         return Jwts.builder()
@@ -78,6 +83,12 @@ public class JwtUtil {
         Object deptId = parseClaims(token).get("departmentId");
         if (deptId == null) return null;
         return ((Number) deptId).longValue();
+    }
+
+    public Long getTeamId(String token) {
+        Object teamId = parseClaims(token).get("teamId");
+        if (teamId == null) return null;
+        return ((Number) teamId).longValue();
     }
 
     public String getHoTen(String token) {

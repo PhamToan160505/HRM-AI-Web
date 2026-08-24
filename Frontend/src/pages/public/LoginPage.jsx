@@ -24,12 +24,21 @@ export default function LoginPage() {
   if (isAuthenticated) {
     const redirectMap = {
       admin: '/admin/dashboard',
-      giam_doc: '/director/dashboard',
-      giam_doc_phong: '/director/dashboard',
+      ceo: '/ceo/dashboard',
+      giam_doc_phong_ban: '/director/dashboard',
       truong_phong: '/manager/dashboard',
       nhan_vien: '/employee/dashboard',
     };
-    return <Navigate to={redirectMap[role] || '/login'} replace />;
+    
+    if (!redirectMap[role]) {
+      // Clear old/invalid token to break redirect loop
+      localStorage.removeItem('hrm_token');
+      localStorage.removeItem('hrm_user');
+      window.location.reload();
+      return null;
+    }
+    
+    return <Navigate to={redirectMap[role]} replace />;
   }
 
   const validate = () => {
@@ -184,7 +193,7 @@ export default function LoginPage() {
                 {[
                   { label: 'Admin (Quản trị)', maNhanVien: '100001' },
                   { label: 'Tổng Giám đốc', maNhanVien: '100002' },
-                  { label: 'Giám đốc phòng', maNhanVien: '100003' },
+                  { label: 'Giám đốc phòng ban', maNhanVien: '100003' },
                   { label: 'Trưởng phòng', maNhanVien: '100004' },
                   { label: 'Nhân viên', maNhanVien: '100005' },
                 ].map(({ label, maNhanVien: demoMaNhanVien }) => (

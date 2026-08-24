@@ -64,6 +64,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                                 null,
                                 jwtUtil.getRole(token),
                                 jwtUtil.getDepartmentId(token),
+                                jwtUtil.getTeamId(token),
                                 jwtUtil.getHoTen(token)
                             );
                             UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(

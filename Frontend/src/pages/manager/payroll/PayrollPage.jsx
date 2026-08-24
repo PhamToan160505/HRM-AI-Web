@@ -6,15 +6,22 @@ import api from '../../../services/api';
 import { useToast } from '../../../components/common/Toast';
 import { useAuth } from '../../../context/AuthContext';
 import PayrollTable from '../../../components/payroll/PayrollTable';
+import DepartmentPayrollSummaryTable from '../../../components/payroll/DepartmentPayrollSummaryTable';
 
 export default function PayrollPage() {
     const [payrolls, setPayrolls] = useState([]);
+    const [departmentSummaries, setDepartmentSummaries] = useState([]);
+    const [viewingDepartment, setViewingDepartment] = useState(null); // { id, name }
     const [loading, setLoading] = useState(true);
     const [generating, setGenerating] = useState(false);
     const [month, setMonth] = useState(new Date().getMonth() + 1);
     const [year, setYear] = useState(new Date().getFullYear());
-    const [rejectRecord, setRejectRecord] = useState(null);
+    const [rejectRecord, setRejectRecord] = useState(null); // For individual rejection
     const [rejectReason, setRejectReason] = useState('');
+    
+    const [isRejectDepartmentModalOpen, setIsRejectDepartmentModalOpen] = useState(false);
+    const [rejectDepartmentReason, setRejectDepartmentReason] = useState('');
+    
     const [blockedEmployees, setBlockedEmployees] = useState([]);
     const [activeTab, setActiveTab] = useState('payroll');
     
@@ -39,29 +46,61 @@ export default function PayrollPage() {
     const fetchPayrolls = async () => {
         try {
             setLoading(true);
-            const [payrollRes, empRes] = await Promise.all([
-                api.get(`/api/payroll/department?month=${month}&year=${year}`),
-                api.get('/api/employees')
-            ]);
+            const isCeo = user?.role?.toUpperCase() === 'CEO';
             
-            if (payrollRes.data?.success && empRes.data?.success) {
-                const employees = empRes.data.data;
-                const empMap = employees.reduce((acc, curr) => {
-                    acc[curr.id] = curr.hoTen;
-                    return acc;
-                }, {});
+            if (isCeo && !viewingDepartment) {
+                const res = await api.get(`/api/payroll/summary-by-department?month=${month}&year=${year}`);
+                if (res.data?.success) {
+                    setDepartmentSummaries(res.data.data || []);
+                }
+            } else {
+                const [payrollRes, empRes] = await Promise.all([
+                    api.get(`/api/payroll/department?month=${month}&year=${year}`),
+                    api.get('/api/employees')
+                ]);
+                
+                if (payrollRes.data?.success && empRes.data?.success) {
+                    const employees = empRes.data.data;
+                    const empMap = employees.reduce((acc, curr) => {
+                        acc[curr.id] = curr;
+                        return acc;
+                    }, {});
 
-                const enrichedPayrolls = (payrollRes.data.data || []).map(p => ({
-                    ...p,
-                    employeeName: empMap[p.employeeId] || `NV ${p.employeeId}`
-                }));
+                    let enrichedPayrolls = (payrollRes.data.data || []).map(p => ({
+                        ...p,
+                        employeeName: empMap[p.employeeId]?.hoTen || `NV ${p.employeeId}`,
+                        departmentId: empMap[p.employeeId]?.departmentId
+                    }));
 
-                setPayrolls(enrichedPayrolls);
+                    if (isCeo && viewingDepartment) {
+                        enrichedPayrolls = enrichedPayrolls.filter(p => p.departmentId === viewingDepartment.id);
+                    }
+
+                    setPayrolls(enrichedPayrolls);
+                }
             }
         } catch (error) {
-            toast.show("Lỗi", "Không thể tải danh sách lương.", "error");
+            toast.show("Lỗi", "Không thể tải dữ liệu lương.", "error");
         } finally {
             setLoading(false);
+        }
+    };
+
+    // Re-fetch when viewingDepartment changes
+    useEffect(() => {
+        fetchPayrolls();
+    }, [viewingDepartment]);
+
+    const handleApproveDepartment = async () => {
+        if (!window.confirm("Bạn có chắc muốn duyệt báo cáo bảng lương của phòng ban? Toàn bộ phiếu lương sẽ được gửi lên Tổng giám đốc.")) return;
+        try {
+            const res = await api.post(`/api/payroll/department/approve?month=${month}&year=${year}`);
+            if (res.data?.success) {
+                toast.show("Thành công", "Đã duyệt báo cáo bảng lương phòng ban", "success");
+                fetchPayrolls();
+            }
+        } catch (error) {
+            toast.show("Lỗi", error.response?.data?.message || "Không thể duyệt", "error");
         }
     };
 
@@ -109,6 +148,30 @@ export default function PayrollPage() {
                 toast.show("Thành công", "Đã từ chối phiếu lương", "success");
                 setRejectRecord(null);
                 setRejectReason('');
+                fetchPayrolls();
+            }
+        } catch (error) {
+            toast.show("Lỗi", error.response?.data?.message || "Lỗi xử lý", "error");
+        }
+    };
+
+    const handleRejectDepartmentSubmit = async () => {
+        if (!rejectDepartmentReason.trim()) {
+            toast.show("Cảnh báo", "Vui lòng nhập lý do từ chối báo cáo", "warning");
+            return;
+        }
+        try {
+            const res = await api.post(`/api/payroll/department/reject`, { 
+                departmentId: viewingDepartment.id, 
+                month, 
+                year, 
+                reason: rejectDepartmentReason 
+            });
+            if (res.data?.success) {
+                toast.show("Thành công", "Đã từ chối báo cáo phòng ban", "success");
+                setIsRejectDepartmentModalOpen(false);
+                setRejectDepartmentReason('');
+                setViewingDepartment(null);
                 fetchPayrolls();
             }
         } catch (error) {
@@ -188,7 +251,7 @@ export default function PayrollPage() {
         <div className="space-y-6 pb-10">
             <div className="border-b border-gray-200 pt-2 pb-0">
                 <h1 className="text-2xl font-bold text-slate-800 mb-6">
-                    {user?.role === 'GIAM_DOC' ? 'Quản lý lương' : 'Quản lý lương phòng ban'}
+                    {user?.role?.toUpperCase() === 'CEO' ? 'Quản lý lương toàn công ty' : 'Quản lý lương phòng ban'}
                 </h1>
                 <div className="flex space-x-6">
                     <button 
@@ -241,6 +304,11 @@ export default function PayrollPage() {
                                     <Calculator size={16} /> Tính lương tháng {month}
                                 </Button>
                             )}
+                            {user?.role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN' && (
+                                <Button variant="primary" className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-600/20" onClick={handleApproveDepartment}>
+                                    <CheckCircle size={16} /> Duyệt báo cáo phòng ban
+                                </Button>
+                            )}
                             <Button variant="outline" className="flex items-center gap-2 text-green-700 border-green-200 hover:bg-green-50">
                                 <Download size={16} /> Xuất Excel
                             </Button>
@@ -266,23 +334,114 @@ export default function PayrollPage() {
 
                     <Card>
                         <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 rounded-t-xl flex justify-between items-center">
-                            <h2 className="text-lg font-bold text-gray-800">Bảng lương chi tiết tháng {month}/{year}</h2>
+                            <h2 className="text-lg font-bold text-gray-800">
+                                {user?.role?.toUpperCase() === 'CEO'
+                                    ? `Báo cáo bảng lương các phòng ban tháng ${month}/${year}` 
+                                    : `Bảng lương chi tiết tháng ${month}/${year}`
+                                }
+                            </h2>
                         </div>
                         
                         {loading ? (
                             <div className="p-12 text-center">
                                 <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-                                <div className="text-gray-500 font-medium">Đang tải bảng lương...</div>
+                                <div className="text-gray-500 font-medium">Đang tải dữ liệu...</div>
                             </div>
                         ) : (
-                            <PayrollTable 
-                                payrolls={payrolls} 
-                                role={user?.role} 
-                                onApprove={handleApprove}
-                                onReject={(record) => setRejectRecord(record)}
-                            />
+                            user?.role?.toUpperCase() === 'CEO' ? (
+                                <DepartmentPayrollSummaryTable 
+                                    summaries={departmentSummaries}
+                                    onViewDetail={(id, name) => setViewingDepartment({ id, name })}
+                                />
+                            ) : (
+                                <PayrollTable 
+                                    payrolls={payrolls} 
+                                    role={user?.role} 
+                                    onApprove={handleApprove}
+                                    onReject={(record) => setRejectRecord(record)}
+                                />
+                            )
                         )}
                     </Card>
+
+                    {/* CEO Viewing Department Detail Modal */}
+                    {user?.role?.toUpperCase() === 'CEO' && viewingDepartment && (
+                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[40] p-4">
+                            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-fade-in-up">
+                                <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/80">
+                                    <h3 className="font-bold text-gray-800 text-lg">Báo cáo thống kê lương tháng {month}/{year} - Phòng {viewingDepartment.name}</h3>
+                                    <button onClick={() => setViewingDepartment(null)} className="text-gray-400 hover:text-gray-600 transition-colors w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-200">
+                                        <X size={18} />
+                                    </button>
+                                </div>
+                                <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50">
+                                    {(() => {
+                                        const deptPayrolls = payrolls;
+                                        const totalGross = deptPayrolls.reduce((sum, p) => sum + (p.grossSalary || 0), 0);
+                                        const totalNet = deptPayrolls.reduce((sum, p) => sum + (p.netSalary || 0), 0);
+                                        const totalTax = deptPayrolls.reduce((sum, p) => sum + (p.thuTncn || 0), 0);
+                                        const totalInsurance = deptPayrolls.reduce((sum, p) => sum + (p.bhxhAmount || 0) + (p.bhytAmount || 0) + (p.bhtnAmount || 0), 0);
+                                        const totalAllowance = deptPayrolls.reduce((sum, p) => sum + (p.allowance || 0), 0);
+                                        const totalPenalty = deptPayrolls.reduce((sum, p) => sum + (p.latePenalty || 0), 0);
+
+                                        return (
+                                            <div className="space-y-6">
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                    <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex flex-col gap-1">
+                                                        <span className="text-sm font-medium text-gray-500">Tổng quỹ lương (Gross)</span>
+                                                        <span className="text-2xl font-bold text-gray-800">{totalGross.toLocaleString('vi-VN')} đ</span>
+                                                    </div>
+                                                    <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-5 rounded-xl shadow-md text-white flex flex-col gap-1">
+                                                        <span className="text-sm font-medium text-blue-100">Tổng chi trả thực tế (Net)</span>
+                                                        <span className="text-2xl font-bold">{totalNet.toLocaleString('vi-VN')} đ</span>
+                                                    </div>
+                                                    <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex flex-col gap-1">
+                                                        <span className="text-sm font-medium text-gray-500">Tổng nhân sự</span>
+                                                        <span className="text-2xl font-bold text-gray-800">{deptPayrolls.length} <span className="text-sm font-normal text-gray-500">nhân viên</span></span>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+                                                    <h4 className="text-base font-semibold text-gray-800 mb-4">Chi tiết các khoản trích xuất</h4>
+                                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                                        <div className="p-4 bg-red-50/50 rounded-lg border border-red-100">
+                                                            <div className="text-xs text-red-600 font-medium mb-1">Tổng Thuế TNCN</div>
+                                                            <div className="text-lg font-bold text-red-700">{totalTax.toLocaleString('vi-VN')} đ</div>
+                                                        </div>
+                                                        <div className="p-4 bg-orange-50/50 rounded-lg border border-orange-100">
+                                                            <div className="text-xs text-orange-600 font-medium mb-1">Tổng Bảo hiểm (XH, YT, TN)</div>
+                                                            <div className="text-lg font-bold text-orange-700">{totalInsurance.toLocaleString('vi-VN')} đ</div>
+                                                        </div>
+                                                        <div className="p-4 bg-emerald-50/50 rounded-lg border border-emerald-100">
+                                                            <div className="text-xs text-emerald-600 font-medium mb-1">Tổng Phụ cấp</div>
+                                                            <div className="text-lg font-bold text-emerald-700">{totalAllowance.toLocaleString('vi-VN')} đ</div>
+                                                        </div>
+                                                        <div className="p-4 bg-slate-100/50 rounded-lg border border-slate-200">
+                                                            <div className="text-xs text-slate-600 font-medium mb-1">Phạt đi muộn/về sớm</div>
+                                                            <div className="text-lg font-bold text-slate-700">{totalPenalty.toLocaleString('vi-VN')} đ</div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-4 flex items-start gap-3">
+                                                    <CheckCircle className="text-blue-500 shrink-0 mt-0.5" size={20} />
+                                                    <div className="text-sm text-blue-800 leading-relaxed">
+                                                        Báo cáo này đã được tính toán và tổng hợp bởi hệ thống dựa trên chấm công thực tế của tất cả nhân viên trong <strong>Phòng {viewingDepartment.name}</strong>. Giám đốc phòng ban đã xác nhận và trình lên để xem xét duyệt quỹ lương.
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+                                <div className="px-6 py-4 border-t border-gray-100 bg-white flex justify-end gap-3">
+                                    <Button variant="outline" onClick={() => setViewingDepartment(null)} className="px-6">Đóng</Button>
+                                    <Button variant="primary" onClick={() => setIsRejectDepartmentModalOpen(true)} className="bg-red-600 hover:bg-red-700 focus:ring-4 focus:ring-red-600/20 border-transparent px-6 flex items-center gap-2">
+                                        <AlertTriangle size={16} /> Từ chối báo cáo
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </>
             ) : (
                 <Card>
@@ -380,6 +539,37 @@ export default function PayrollPage() {
                             <div className="flex justify-end gap-3 pt-6">
                                 <Button variant="outline" onClick={() => setRejectRecord(null)} className="px-6">Hủy</Button>
                                 <Button variant="primary" onClick={handleRejectSubmit} className="bg-red-600 hover:bg-red-700 focus:ring-4 focus:ring-red-600/20 border-transparent px-6">
+                                    Xác nhận từ chối
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {isRejectDepartmentModalOpen && viewingDepartment && (
+                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[50] p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-fade-in-up">
+                        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/80">
+                            <h3 className="font-bold text-gray-800 text-lg">Từ chối báo cáo phòng ban</h3>
+                            <button onClick={() => setIsRejectDepartmentModalOpen(false)} className="text-gray-400 hover:text-gray-600 transition-colors w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-200">
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-700 mb-2">Lý do từ chối báo cáo của phòng {viewingDepartment.name}</label>
+                                <textarea
+                                    className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500 transition-all min-h-[120px] resize-none"
+                                    placeholder="Nhập lý do từ chối để Giám đốc/Trưởng phòng ban điều chỉnh lại..."
+                                    value={rejectDepartmentReason}
+                                    onChange={(e) => setRejectDepartmentReason(e.target.value)}
+                                ></textarea>
+                            </div>
+
+                            <div className="flex justify-end gap-3 pt-6">
+                                <Button variant="outline" onClick={() => setIsRejectDepartmentModalOpen(false)} className="px-6">Hủy</Button>
+                                <Button variant="primary" onClick={handleRejectDepartmentSubmit} className="bg-red-600 hover:bg-red-700 focus:ring-4 focus:ring-red-600/20 border-transparent px-6">
                                     Xác nhận từ chối
                                 </Button>
                             </div>

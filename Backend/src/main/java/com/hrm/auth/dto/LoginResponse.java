@@ -20,5 +20,6 @@ public class LoginResponse {
     private Long userId;
     private String hoTen;
     private Role role;
-    private Long departmentId; // null cho GIAM_DOC
+    private Long departmentId; // null cho CEO
+    private Long teamId;
 }

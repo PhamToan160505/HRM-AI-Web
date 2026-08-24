@@ -1,0 +1,302 @@
+
+======================================================
+1. File: Frontend/src/pages/public/LoginPage.jsx
+L� do thay d?i: C?p nh?t mapping redirect v� ph� v? v�ng l?p Infinite Redirect do token cu.
+Code cu:
+    const redirectMap = {
+      giam_doc: '/director/dashboard',
+      truong_phong: '/manager/dashboard',
+      nhan_vien: '/employee/dashboard',
+    };
+    return <Navigate to={redirectMap[role] || '/login'} replace />;
+
+Code m?i:
+    const redirectMap = {
+      ceo: '/ceo/dashboard',
+      giam_doc_phong_ban: '/director/dashboard',
+      truong_phong: '/manager/dashboard',
+      nhan_vien: '/employee/dashboard',
+      admin: '/admin/dashboard'
+    };
+    
+    if (!redirectMap[role]) {
+      // Clear old/invalid token to break redirect loop
+      localStorage.removeItem('hrm_token');
+      localStorage.removeItem('hrm_user');
+      window.location.reload();
+      return null;
+    }
+    
+    return <Navigate to={redirectMap[role]} replace />;
+
+======================================================
+2. File: Backend/src/main/java/com/hrm/config/DataSeeder.java
+L� do thay d?i: S?a l?i 500 Internal Server Error b?ng c�ch ALTER d? d�i c?t VARCHAR cho role v� t? d?ng c?p nh?t enum 'GIAM_DOC' cu trong Database sang 'GIAM_DOC_PHONG_BAN'.
+Code cu:
+            jdbcTemplate.execute(SET SQL_SAFE_UPDATES = 0;);
+            jdbcTemplate.execute(DELETE FROM attendances WHERE id NOT IN (SELECT max_id FROM (SELECT MAX(id) as max_id FROM attendances GROUP BY employee_id, date) as t));
+            jdbcTemplate.execute(SET SQL_SAFE_UPDATES = 1;);
+
+Code m?i:
+            jdbcTemplate.execute(SET SQL_SAFE_UPDATES = 0;);
+            jdbcTemplate.execute(DELETE FROM attendances WHERE id NOT IN (SELECT max_id FROM (SELECT MAX(id) as max_id FROM attendances GROUP BY employee_id, date) as t));
+            
+            // C?p nh?t d? d�i c?t role tru?c khi update
+            jdbcTemplate.execute(ALTER TABLE users MODIFY COLUMN role VARCHAR(50) NOT NULL);
+            // C?p nh?t l?i role cu do d?i enum
+            jdbcTemplate.execute(UPDATE users SET role = 'GIAM_DOC_PHONG_BAN' WHERE role = 'GIAM_DOC');
+            
+            jdbcTemplate.execute(SET SQL_SAFE_UPDATES = 1;);
+
+======================================================
+3. File: Backend/src/main/java/com/hrm/security/JwtUtil.java
+L� do thay d?i: X? l� an to�n tr�nh NullPointerException khi truy?n Claim v�o JWT.
+Code cu:
+        claims.put('departmentId', user.getDepartmentId());
+        claims.put('teamId', user.getTeamId());
+
+Code m?i:
+        if (user.getDepartmentId() != null) {
+            claims.put('departmentId', user.getDepartmentId());
+        }
+        if (user.getTeamId() != null) {
+            claims.put('teamId', user.getTeamId());
+        }
+
+
+======================================================
+4. File: Backend/src/main/java/com/hrm/config/DataSeeder.java
+L� do thay d?i: C?p nh?t Gi�m d?c ph�ng ban (ph?i thu?c m?t ph�ng ban c? th?) v� b? sung T?ng gi�m d?c CEO.
+Code cu:
+        // 1. Gi�m d?c
+        if (!userRepository.existsByEmail(giamdoc@hrm.vn)) {
+            User giamDoc = User.builder()
+                    .hoTen(Nguy?n Van Gi�m �?c)
+                    .email(giamdoc@hrm.vn)
+                    .passwordHash(hashedPassword)
+                    .role(Role.GIAM_DOC_PHONG_BAN)
+                    .departmentId(null) // GIAM_DOC kh�ng thu?c ph�ng c? th?
+                    .active(true)
+                    .build();
+            userRepository.save(giamDoc);
+            log.info([Seed] T?o t�i kho?n: giamdoc@hrm.vn (GIAM_DOC));
+        }
+
+Code m?i:
+        // C?p nh?t department_id cho giamdoc@hrm.vn n?u dang b? null
+        jdbcTemplate.execute(UPDATE users SET department_id = (SELECT id FROM departments WHERE ten_phong = 'Nh�n s?' LIMIT 1) WHERE email = 'giamdoc@hrm.vn' AND department_id IS NULL);
+
+        // 1. T?ng gi�m d?c (CEO) - Qu?n l� to�n b?, kh�ng thu?c ph�ng n�o
+        if (!userRepository.existsByEmail(ceo@hrm.vn)) {
+            User ceo = User.builder()
+                    .hoTen(Tr?nh Van T?ng Gi�m �?c)
+                    .email(ceo@hrm.vn)
+                    .passwordHash(hashedPassword)
+                    .role(Role.CEO)
+                    .departmentId(null) // CEO kh�ng thu?c ph�ng c? th?
+                    .active(true)
+                    .build();
+            userRepository.save(ceo);
+        }
+
+        // 2. Gi�m d?c ph�ng ban - Qu?n l� ph�ng Nh�n s?
+        if (!userRepository.existsByEmail(giamdoc@hrm.vn)) {
+            User giamDoc = User.builder()
+                    .hoTen(Nguy?n Van Gi�m �?c)
+                    .email(giamdoc@hrm.vn)
+                    .passwordHash(hashedPassword)
+                    .role(Role.GIAM_DOC_PHONG_BAN)
+                    .departmentId(nhanSuDeptId) // Thu?c ph�ng Nh�n s?
+                    .active(true)
+                    .build();
+            userRepository.save(giamDoc);
+        }
+
+======================================================
+5. File: Frontend/src/pages/public/LoginPage.jsx
+L� do thay d?i: B? sung t�i kho?n demo c?a CEO
+Code m?i:
+                {[
+                  { label: 'T?ng gi�m d?c', email: 'ceo@hrm.vn' },
+                  { label: 'Gi�m d?c', email: 'giamdoc@hrm.vn' },
+                  { label: 'Tru?ng ph�ng', email: 'truongphong@hrm.vn' },
+                  { label: 'Nh�n vi�n', email: 'nhanvien@hrm.vn' },
+                ].map(({ label, email: demoEmail }) => (
+
+
+======================================================
+6. File: Backend/src/main/java/com/hrm/config/DataSeeder.java
+L� do thay d?i: �?i t�n t�i kho?n Gi�m d?c th�nh Gi�m d?c ph�ng ban.
+Code cu:
+            // C?p nh?t department_id cho giamdoc@hrm.vn n?u dang b? null
+            jdbcTemplate.execute(UPDATE users SET department_id = (SELECT id FROM departments WHERE ten_phong = 'Nh�n s?' LIMIT 1) WHERE email = 'giamdoc@hrm.vn' AND department_id IS NULL);
+            ...
+        // 2. Gi�m d?c ph�ng ban - Qu?n l� ph�ng Nh�n s?
+        if (!userRepository.existsByEmail(giamdoc@hrm.vn)) {
+            User giamDoc = User.builder()
+                    .hoTen(Nguy?n Van Gi�m �?c)
+                    .email(giamdoc@hrm.vn)
+...
+
+Code m?i:
+            // C?p nh?t l?i email cho d? nh?n bi?t (t? giamdoc@hrm.vn th�nh giamdocphongban@hrm.vn)
+            jdbcTemplate.execute(UPDATE users SET email = 'giamdocphongban@hrm.vn' WHERE email = 'giamdoc@hrm.vn');
+            
+            // C?p nh?t department_id cho giamdocphongban@hrm.vn n?u dang b? null
+            jdbcTemplate.execute(UPDATE users SET department_id = (SELECT id FROM departments WHERE ten_phong = 'Nh�n s?' LIMIT 1) WHERE email = 'giamdocphongban@hrm.vn' AND department_id IS NULL);
+            ...
+        // 2. Gi�m d?c ph�ng ban - Qu?n l� ph�ng Nh�n s?
+        if (!userRepository.existsByEmail(giamdocphongban@hrm.vn)) {
+            User giamDoc = User.builder()
+                    .hoTen(Nguy?n Van Gi�m �?c Ph�ng Ban)
+                    .email(giamdocphongban@hrm.vn)
+...
+
+======================================================
+7. File: Frontend/src/pages/public/LoginPage.jsx
+L� do thay d?i: C?p nh?t email m?i tr�n t�i kho?n Demo.
+Code cu:
+                  { label: 'Gi�m d?c', email: 'giamdoc@hrm.vn' },
+Code m?i:
+                  { label: 'Gi�m d?c PB', email: 'giamdocphongban@hrm.vn' },
+
+
+======================================================
+8. File: Backend/src/main/java/com/hrm/common/payroll/controller/PayrollController.java
+L� do thay d?i: S?a l?i 403 do k?t Role cu, b? sung quy?n cho CEO.
+Code cu:
+    @PreAuthorize(hasAnyRole('TRUONG_PHONG', 'GIAM_DOC'))
+    @PreAuthorize(hasRole('GIAM_DOC'))
+
+Code m?i:
+    @PreAuthorize(hasAnyRole('TRUONG_PHONG', 'GIAM_DOC_PHONG_BAN', 'CEO'))
+    @PreAuthorize(hasAnyRole('GIAM_DOC_PHONG_BAN', 'CEO'))
+
+======================================================
+9. File: Backend/src/main/java/com/hrm/common/payroll/controller/HolidayController.java
+L� do thay d?i: B? sung quy?n duy?t ngh? l? cho Gi�m d?c ph�ng ban v� CEO.
+Code cu:
+@PreAuthorize(hasRole('GIAM_DOC'))
+
+Code m?i:
+@PreAuthorize(hasAnyRole('GIAM_DOC_PHONG_BAN', 'CEO'))
+
+======================================================
+10. File: Backend/src/main/java/com/hrm/attendance/controller/AttendanceController.java
+L� do thay d?i: S?a l?i 403 khi thao t�c v?i ch?m c�ng.
+Code cu:
+    @org.springframework.security.access.prepost.PreAuthorize(hasAnyRole('TRUONG_PHONG', 'GIAM_DOC'))
+Code m?i:
+    @org.springframework.security.access.prepost.PreAuthorize(hasAnyRole('TRUONG_PHONG', 'GIAM_DOC_PHONG_BAN', 'CEO'))
+
+
+======================================================
+11. File: Frontend/src/pages/manager/payroll/PayrollPage.jsx
+Lý do thay đổi: Cập nhật giao diện Dashboard Lương của CEO. Thay thế danh sách nhân sự hiển thị trực tiếp bằng bảng thống kê của từng phòng ban. Khi bấm "Xem chi tiết", một Popup (Modal) hiển thị thống kê chuyên sâu (quỹ lương, chi trả thực tế, bảo hiểm, thuế, etc.) sẽ xuất hiện. Thêm chức năng "Từ chối báo cáo" toàn bộ của phòng ban (CEO -> Giám đốc).
+Code mới:
+- Thêm các State iewingDepartment, isRejectDepartmentModalOpen, ejectDepartmentReason.
+- Cập nhật JSX: Render <DepartmentPayrollSummaryTable /> cho tài khoản CEO, đổi Modal Xem chi tiết bằng giao diện các Card thống kê thay vì <PayrollTable />.
+- Gọi API POST /api/payroll/department/reject.
+
+======================================================
+12. File: Backend/src/main/java/com/hrm/common/payroll/controller/PayrollController.java
+Lý do thay đổi: Bổ sung API phục vụ Duyệt và Từ chối báo cáo bảng lương theo quy trình (Giám đốc phòng ban -> Tổng giám đốc).
+Code mới:
+    @PostMapping("/department/approve")
+    @PreAuthorize("hasRole('GIAM_DOC_PHONG_BAN')")
+    public ResponseEntity<ApiResponse<Void>> approveDepartmentPayroll(...) { ... }
+
+    @PostMapping("/department/reject")
+    @PreAuthorize("hasRole('CEO')")
+    public ResponseEntity<ApiResponse<Void>> rejectDepartmentPayroll(...) { ... }
+
+======================================================
+13. File: Backend/src/main/java/com/hrm/common/payroll/service/PayrollService.java
+Lý do thay đổi: Xử lý logic thay đổi hàng loạt trạng thái bảng lương (Duyệt toàn bộ và Từ chối toàn bộ của 1 phòng ban) & gửi thông báo tự động.
+Code mới:
+- Hàm pproveDepartmentPayroll(...): Đổi trạng thái từ MANAGER_APPROVED sang DIRECTOR_APPROVED và notify CEO.
+- Hàm ejectDepartmentPayroll(...): Đổi trạng thái từ DIRECTOR_APPROVED sang REJECTED_BY_CEO và notify Giám đốc phòng ban.
+- Hàm getDepartmentPayrollSummaries(...): Tổng hợp dữ liệu thành danh sách các phòng ban.
+
+======================================================
+14. File: Frontend/src/pages/manager/employees/EmployeeListPage.jsx
+Lý do thay đổi: Bổ sung tính năng Lọc theo chức vụ (Role) cho tài khoản Giám đốc và CEO.
+Code mới:
+- Thêm dropdown filter: <select value={selectedRole} onChange={...}>...<option value="CEO">Tổng giám đốc (CEO)</option>...</select>
+- Cập nhật logic filter: const matchRole = selectedRole ? emp.role === selectedRole : true;
+
+======================================================
+15. File: Frontend/src/pages/manager/AttendancePage.jsx
+Lý do thay đổi: Bổ sung tính năng Lọc theo chức vụ (Role) cho màn hình Quản lý chấm công (tương tự như màn Nhân sự). Đồng thời sửa lại Input tìm kiếm bị lỗi không có State điều khiển (Uncontrolled).
+Code mới:
+- Thêm state searchTerm và selectedRole.
+- Áp dụng logic filter vào mảng ilteredRecords để tìm kiếm và lọc đồng thời.
+
+=== DANH SÃCH CÃC FILE VÃ€ CODE ÄÃƒ CHá»ˆNH Sá»¬A (THÃ€NH VIÃŠN 2) ===
+
+Quy tắc: Khi bắt buộc phải sửa code của thành viên 1 hoặc 3, phải ghi rõ file nào, code cũ là gì, code mới là gì.
+
+1. File: `Backend/src/main/java/com/hrm/common/entity/User.java` (Thành viên 1/3)
+   - Code cÅ©: 
+     ```java
+     @Column(name = "department_id")
+     private Long departmentId;
+     ```
+   - Code mới (Bổ sung `teamId`):
+     ```java
+     @Column(name = "department_id")
+     private Long departmentId;
+
+     @Column(name = "team_id")
+     private Long teamId;
+     ```
+
+2. File: `Backend/src/main/java/com/hrm/security/CustomUserDetails.java` (Thành viên 1)
+   - Code cũ: Constructor và fields chỉ có `departmentId`.
+   - Code má»›i: ThÃªm `teamId` vÃ o Constructor vÃ  khai bÃ¡o biáº¿n Ä‘á»ƒ phÃ¢n quyá»n cho TrÆ°á»Ÿng phÃ²ng.
+
+3. File: `Backend/src/main/java/com/hrm/security/JwtUtil.java` và `JwtAuthFilter.java` (Thành viên 1)
+   - Code má»›i: Bá»• sung logic láº¥y `teamId` tá»« token vÃ  truyá»n vÃ o `CustomUserDetails`.
+
+4. File: `Backend/src/main/java/com/hrm/common/repository/UserRepository.java` và `AttendanceRepository.java` (Thành viên 1)
+   - Code mới: Bổ sung thêm các method query `findByTeamId`, `countByTeamId`, `countByExceptionStatusAndTeamId`.
+
+5. File: `Backend/src/main/java/com/hrm/recruitment/entity/JobPosting.java` (Thành viên 3)
+   - Code cũ: Không có `departmentId`.
+   - Code mới: 
+     ```java
+     @Column(name = "department_id")
+     private Long departmentId;
+     ```
+6. File: Frontend/src/App.jsx
+   - Code m?i: B? sung router /ceo và ceo/dashboard. Tách r?i /director dành riêng cho Giám d?c phòng ban.
+7. File: Frontend/src/components/layout/AppLayout.jsx
+   - Code m?i: B? sung navigation sidebar cho 5 role (CEO, Giam doc phong ban, Truong phong, Nhan vien, Admin).
+8. File: Frontend/src/context/AuthContext.jsx
+   - Code cu: Ch? l?y departmentId luu vào context.
+   - Code m?i: B? sung luu 	eamId vào AuthContext d? có th? truy xu?t.
+9. File: Frontend/src/pages/manager/employees/EmployeeListPage.jsx
+   - Code cu: Hardcode nút Phân công.
+   - Code m?i: Dùng useAuth d? l?y role, n?u là ceo thì ?n nút Phân công (ch? du?c xem (Read-Only)).
+
+---------------------------------------------------------
+[Cập nhật Logic Role Trưởng Phòng - 2026-08-23 08:50]
+* Files thay đổi:
+- Backend/src/main/java/com/hrm/common/service/DashboardService.java
+- Backend/src/main/java/com/hrm/common/controller/EmployeeManagementController.java
+- Frontend/src/pages/manager/DashboardPage.jsx
+
+* Chi tiết thay đổi:
+Gá»™p logic cá»§a GIAM_DOC_PHONG_BAN vÃ  TRUONG_PHONG: cáº£ 2 role Ä‘á»u láº¥y dá»¯ liá»‡u nhÃ¢n viÃªn, cháº¥m cÃ´ng theo departmentId thay vÃ¬ 	eamId.
+---------------------------------------------------------
+[Cập nhật UI Quản lý Chấm công cho CEO - 2026-08-24 09:30]
+* Files thay đổi:
+- Backend/src/main/java/com/hrm/attendance/service/AttendanceService.java
+- Frontend/src/pages/manager/AttendancePage.jsx
+
+* Chi tiết thay đổi:
+- AttendanceService: Bổ sung departmentId và chucVu vào map trả về trong hàm getDepartmentAttendance.
+- AttendancePage: 
+  + Thêm view thống kê danh sách phòng ban cho role CEO (tên phòng, tổng nhân sự, tỉ lệ đúng giờ).
+  + Thêm trạng thái selectedDepartment để hỗ trợ chức năng bấm vào xem chi tiết từng phòng ban.
+  + Thêm logic ẩn role CEO khỏi danh sách hiển thị chấm công.

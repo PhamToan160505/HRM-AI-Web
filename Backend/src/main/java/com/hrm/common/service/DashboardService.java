@@ -30,8 +30,16 @@ public class DashboardService {
     public Map<String, Object> getDirectorStats() {
         Map<String, Object> stats = new HashMap<>();
         
-        long totalEmployees = userRepository.countByRole(com.hrm.common.entity.Role.NHAN_VIEN);
+        java.util.List<com.hrm.common.entity.Role> employeeRoles = java.util.List.of(
+            com.hrm.common.entity.Role.NHAN_VIEN, 
+            com.hrm.common.entity.Role.TRUONG_PHONG, 
+            com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN
+        );
+        long totalEmployees = userRepository.countByRoleIn(employeeRoles);
         stats.put("totalEmployees", totalEmployees);
+
+        Double totalBudget = userRepository.sumTotalSalaryBudgetByRoleIn(employeeRoles);
+        stats.put("totalSalaryBudget", totalBudget != null ? totalBudget : 0.0);
         
         long totalOpenJobs = jobPostingRepository.countByStatus("OPEN");
         stats.put("openJobs", totalOpenJobs);
@@ -107,17 +115,27 @@ public class DashboardService {
         return duration.toDays() + " ngày trước";
     }
 
-    public Map<String, Object> getManagerStats(Long departmentId) {
+    public Map<String, Object> getManagerStats(com.hrm.security.CustomUserDetails userDetails) {
         Map<String, Object> stats = new HashMap<>();
         
         long pendingApplications = applicationRepository.countByApprovalStatus("PENDING");
         stats.put("pendingApplications", pendingApplications);
         
-        long pendingAttendances = attendanceRepository.countByExceptionStatusAndDepartmentId("PENDING", departmentId);
+        long pendingAttendances = 0;
+        long totalEmployees = 0;
+        long todayCheckedIn = 0;
+        java.util.List<com.hrm.common.entity.User> employees = new java.util.ArrayList<>();
+        
+        if (userDetails.getRole() == com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN || userDetails.getRole() == com.hrm.common.entity.Role.TRUONG_PHONG) {
+            Long departmentId = userDetails.getDepartmentId();
+            pendingAttendances = attendanceRepository.countByExceptionStatusAndDepartmentId("PENDING", departmentId);
+            totalEmployees = userRepository.countByDepartmentId(departmentId);
+            todayCheckedIn = attendanceRepository.countByDepartmentIdAndDateAndPresentOrLate(departmentId, LocalDate.now());
+            employees = userRepository.findByDepartmentId(departmentId);
+        }
+        
         stats.put("pendingAttendances", pendingAttendances);
-
-        long totalEmployees = userRepository.countByDepartmentId(departmentId);
-        long todayCheckedIn = attendanceRepository.countByDepartmentIdAndDateAndPresentOrLate(departmentId, LocalDate.now());
+        
         long todayNotCheckedIn = totalEmployees - todayCheckedIn;
         if (todayNotCheckedIn < 0) todayNotCheckedIn = 0;
 
@@ -126,7 +144,6 @@ public class DashboardService {
         
         // Payroll status logic
         LocalDate now = LocalDate.now();
-        java.util.List<com.hrm.common.entity.User> employees = userRepository.findByDepartmentId(departmentId);
         java.util.List<Long> employeeIds = employees.stream().map(com.hrm.common.entity.User::getId).toList();
         java.util.List<com.hrm.common.payroll.entity.Payroll> payrolls = new java.util.ArrayList<>();
         if (!employeeIds.isEmpty()) {

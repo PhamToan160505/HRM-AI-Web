@@ -30,11 +30,12 @@ CHI TIẾT PHÂN CÔNG (Có đánh dấu tiến độ Source Code hiện tại)
 
 2. THÀNH VIÊN 2: Phụ trách Role TỔNG GIÁM ĐỐC & GIÁM ĐỐC PHÒNG BAN
 * Trách nhiệm: Xây dựng các tính năng cấp cao mang tính chất báo cáo, tổng hợp và phê duyệt cấp cuối.
-- Nhiệm vụ với Role Tổng giám đốc:
-  + [~] Phát triển Dashboard/Báo cáo tổng quan toàn công ty. (Đã có sẵn DashboardController và DashboardService, nhưng cần tinh chỉnh lại hiển thị tuỳ theo cấp Tổng Giám Đốc).
-  + [ ] Tính năng xem danh sách toàn bộ nhân sự (Read-only hoặc Approve).
+
+- Nhiệm vụ với Role Tổng giám đốc (CEO):
+  + [x] Phát triển Dashboard/Báo cáo tổng quan toàn công ty. (Đã hiển thị đủ thống kê và quỹ lương).
+  + [x] Tính năng xem danh sách toàn bộ nhân sự (Read-only hoặc Approve).
 - Nhiệm vụ với Role Giám đốc phòng ban:
-  + [~] Phát triển tính năng quản lý phòng ban: Giám đốc chỉ xem được dữ liệu của phòng mình. (Code hiện tại có lọc theo departmentId, cần mapping đúng cho role này).
+  + [x] Phát triển tính năng quản lý phòng ban: Giám đốc chỉ xem được dữ liệu của phòng mình. (Code hiện tại có lọc theo departmentId, cần mapping đúng cho role này).
   + [x] Viết luồng phê duyệt cấp cao. (Đã có sẵn luồng duyệt `submitToDirector` và `approveByDirector` trong ApplicationService, có thể tái sử dụng cho các luồng phê duyệt khác).
 
 3. THÀNH VIÊN 3: Phụ trách Role TRƯỞNG PHÒNG & NHÂN VIÊN

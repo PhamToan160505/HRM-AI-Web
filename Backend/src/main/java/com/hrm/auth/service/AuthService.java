@@ -55,6 +55,7 @@ public class AuthService {
                 .hoTen(user.getHoTen())
                 .role(user.getRole())
                 .departmentId(user.getDepartmentId())
+                .teamId(user.getTeamId())
                 .build();
     }
 }

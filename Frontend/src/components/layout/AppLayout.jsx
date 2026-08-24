@@ -26,11 +26,12 @@ import api from '../../services/api';
 import { useToast } from '../common/Toast';
 
 const roleLabels = {
+  ceo: 'Tổng Giám Đốc',
+  giam_doc_phong_ban: 'Giám Đốc Phòng Ban',
   admin: 'Quản Trị Hệ Thống',
-  giam_doc: 'Tổng Giám Đốc',
-  giam_doc_phong: 'Giám Đốc Phòng',
   truong_phong: 'Trưởng Phòng',
   nhan_vien: 'Nhân Viên',
+  admin: 'Quản Trị Hệ Thống'
 };
 
 function NavItem({ to, icon: Icon, label, end = false }) {
@@ -86,14 +87,19 @@ function SidebarContent({ role, onClose }) {
     { to: '/admin/users', icon: Users, label: 'Quản lý tài khoản' },
     { to: '/admin/settings', icon: Settings, label: 'Cấu hình hệ thống' },
   ];
+  const ceoNav = [
+    { to: '/ceo/dashboard', icon: LayoutDashboard, label: 'Tổng quan', end: true },
+    { to: '/ceo/employees', icon: Users, label: 'Nhân sự' },
+    { to: '/ceo/recruitment', icon: Briefcase, label: 'Tuyển dụng' },
+    { to: '/ceo/attendance', icon: ClipboardCheck, label: 'Quản lý chấm công' },
+    { to: '/ceo/payroll', icon: Banknote, label: 'Quản lý bảng lương' },
+  ];
   const directorNav = [
     { to: '/director/dashboard', icon: LayoutDashboard, label: 'Tổng quan', end: true },
     { to: '/director/employees', icon: Users, label: 'Nhân sự' },
     { to: '/director/recruitment', icon: Briefcase, label: 'Tuyển dụng' },
     { to: '/director/attendance', icon: ClipboardCheck, label: 'Quản lý chấm công' },
-    { to: '/director/my-attendance', icon: Clock, label: 'Chấm công cá nhân' },
-    { to: '/director/payroll', icon: Banknote, label: 'Lương' },
-    { to: '/director/holidays', icon: Calendar, label: 'Cấu hình ngày lễ' },
+    { to: '/director/payroll', icon: Banknote, label: 'Quản lý bảng lương' },
   ];
   const managerNav = [
     { to: '/manager/dashboard', icon: LayoutDashboard, label: 'Tổng quan', end: true },
@@ -111,8 +117,8 @@ function SidebarContent({ role, onClose }) {
 
   const navItems =
     role === 'admin' ? adminNav
-    : role === 'giam_doc' ? directorNav
-    : role === 'giam_doc_phong' ? directorNav
+    : role === 'ceo' ? ceoNav
+    : role === 'giam_doc_phong_ban' ? directorNav
     : role === 'truong_phong' ? managerNav
     : employeeNav;
 

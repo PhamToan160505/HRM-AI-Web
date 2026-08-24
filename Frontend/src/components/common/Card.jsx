@@ -9,7 +9,7 @@ import React from 'react';
  *   className: extend nếu cần padding/size tùy chỉnh
  *   noPadding: boolean — bỏ padding mặc định (dùng khi card chứa table/list full-width)
  */
-export function Card({ children, className = '', noPadding = false }) {
+export function Card({ children, className = '', noPadding = false, ...props }) {
   return (
     <div
       className={[
@@ -18,6 +18,7 @@ export function Card({ children, className = '', noPadding = false }) {
         noPadding ? '' : 'p-5',
         className,
       ].filter(Boolean).join(' ')}
+      {...props}
     >
       {children}
     </div>

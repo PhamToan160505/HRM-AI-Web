@@ -54,6 +54,9 @@ public class User {
     @Column(name = "department_id")
     private Long departmentId;
 
+    @Column(name = "team_id")
+    private Long teamId;
+
     @Column(name = "chuc_vu", length = 100)
     private String chucVu;
 

@@ -41,10 +41,22 @@ public class DataSeeder implements CommandLineRunner {
         try {
             jdbcTemplate.execute("SET SQL_SAFE_UPDATES = 0;");
             jdbcTemplate.execute("DELETE FROM attendances WHERE id NOT IN (SELECT max_id FROM (SELECT MAX(id) as max_id FROM attendances GROUP BY employee_id, date) as t)");
+            
+            // Cập nhật độ dài cột role trước khi update
+            jdbcTemplate.execute("ALTER TABLE users MODIFY COLUMN role VARCHAR(50) NOT NULL");
+            // Cập nhật lại role cũ do đổi enum
+            jdbcTemplate.execute("UPDATE users SET role = 'GIAM_DOC_PHONG_BAN' WHERE role = 'GIAM_DOC'");
+            
+            // Cập nhật lại email cho dễ nhận biết (từ giamdoc@hrm.vn thành giamdocphongban@hrm.vn)
+            jdbcTemplate.execute("UPDATE users SET email = 'giamdocphongban@hrm.vn' WHERE email = 'giamdoc@hrm.vn'");
+            
+            // Cập nhật department_id cho giamdocphongban@hrm.vn nếu đang bị null
+            jdbcTemplate.execute("UPDATE users SET department_id = (SELECT id FROM departments WHERE ten_phong = 'Nhân sự' LIMIT 1) WHERE email = 'giamdocphongban@hrm.vn' AND department_id IS NULL");
+            
             jdbcTemplate.execute("SET SQL_SAFE_UPDATES = 1;");
-            log.info("[Cleanup] Đã dọn dẹp các bản ghi chấm công trùng lặp.");
+            log.info("[Cleanup] Đã dọn dẹp các bản ghi chấm công trùng lặp và cập nhật Role/Department cũ.");
         } catch (Exception e) {
-            log.error("[Cleanup] Lỗi khi dọn dẹp chấm công: ", e);
+            log.error("[Cleanup] Lỗi khi dọn dẹp chấm công / cập nhật role: ", e);
         }
         
         seedDepartments();
@@ -128,19 +140,33 @@ public class DataSeeder implements CommandLineRunner {
             log.info("[Seed] Tạo tài khoản: admin@hrm.vn (ADMIN)");
         }
 
-        // 2. Giám đốc
-        if (!userRepository.existsByEmail("giamdoc@hrm.vn")) {
-            User giamDoc = User.builder()
-                    .hoTen("Nguyễn Văn Giám Đốc")
-                    .email("giamdoc@hrm.vn")
+        // 2. Tổng giám đốc (CEO) - Quản lý toàn bộ, không thuộc phòng nào
+        if (!userRepository.existsByEmail("ceo@hrm.vn")) {
+            User ceo = User.builder()
+                    .hoTen("Trịnh Văn Tổng Giám Đốc")
+                    .email("ceo@hrm.vn")
                     .maNhanVien("100002")
                     .passwordHash(hashedPassword)
-                    .role(Role.GIAM_DOC)
-                    .departmentId(null) // GIAM_DOC không thuộc phòng cụ thể
+                    .role(Role.CEO)
+                    .departmentId(null) // CEO không thuộc phòng cụ thể
+                    .active(true)
+                    .build();
+            userRepository.save(ceo);
+            log.info("[Seed] Tạo tài khoản: ceo@hrm.vn (CEO)");
+        }
+
+        // 2. Giám đốc phòng ban - Quản lý phòng Nhân sự
+        if (!userRepository.existsByEmail("giamdocphongban@hrm.vn")) {
+            User giamDoc = User.builder()
+                    .hoTen("Nguyễn Văn Giám Đốc Phòng Ban")
+                    .email("giamdocphongban@hrm.vn")
+                    .passwordHash(hashedPassword)
+                    .role(Role.GIAM_DOC_PHONG_BAN)
+                    .departmentId(nhanSuDeptId) // Thuộc phòng Nhân sự
                     .active(true)
                     .build();
             userRepository.save(giamDoc);
-            log.info("[Seed] Tạo tài khoản: giamdoc@hrm.vn (GIAM_DOC)");
+            log.info("[Seed] Tạo tài khoản: giamdocphongban@hrm.vn (GIAM_DOC_PHONG_BAN, phòng Nhân sự id={})", nhanSuDeptId);
         }
 
         // 3. Giám đốc phòng ban (ví dụ: phòng Kỹ thuật)
@@ -154,12 +180,12 @@ public class DataSeeder implements CommandLineRunner {
                     .email("giamdocphong@hrm.vn")
                     .maNhanVien("100003")
                     .passwordHash(hashedPassword)
-                    .role(Role.GIAM_DOC_PHONG)
+                    .role(Role.GIAM_DOC_PHONG_BAN)
                     .departmentId(kyThuatDeptId)
                     .active(true)
                     .build();
             userRepository.save(giamDocPhong);
-            log.info("[Seed] Tạo tài khoản: giamdocphong@hrm.vn (GIAM_DOC_PHONG, phòng Kỹ thuật id={})", kyThuatDeptId);
+            log.info("[Seed] Tạo tài khoản: giamdocphong@hrm.vn (GIAM_DOC_PHONG_BAN, phòng Kỹ thuật id={})", kyThuatDeptId);
         }
 
         // 4. Trưởng phòng — thuộc phòng Nhân sự (ngoại lệ tuyển dụng theo README mục 3)

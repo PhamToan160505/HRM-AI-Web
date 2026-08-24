@@ -1,0 +1,4 @@
+- Fix l?i tr?ng trang web (White Screen) khi truy c?p b?ng tài kho?n Giám d?c. L?i x?y ra do JWT luu tr? Role cu 'GIAM_DOC', trong khi Enum m?i dã d?i thành 'GIAM_DOC_PHONG_BAN', d?n t?i vi?c Frontend m?c vào vòng l?p chuy?n hu?ng vô t?n (Infinite Redirect Loop).
+- Chu?n hóa Role GIAM_DOC_PHONG_BAN: B? sung departmentId (thu?c phòng Nhân s?) cho tài kho?n giamdoc@hrm.vn và t?o thêm tài kho?n ceo@hrm.vn (T?ng giám d?c - qu?n lý toàn công ty).
+- Ð?i email c?a Role Giám d?c phòng ban t? giamdoc@hrm.vn thành giamdocphongban@hrm.vn d? d? nh?n bi?t.
+- S?a toàn b? code b?o m?t (@PreAuthorize) trong các Controller (Payroll, Holiday, Attendance) dang b? k?t ? role cu 'GIAM_DOC', nâng c?p lên thành h? tr? 'GIAM_DOC_PHONG_BAN' và 'CEO'.

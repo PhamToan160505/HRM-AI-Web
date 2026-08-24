@@ -22,6 +22,7 @@ public class CustomUserDetails implements UserDetails {
     private final String email;
     private final Role role;
     private final Long departmentId; // null cho GIAM_DOC
+    private final Long teamId;
     private final String hoTen;
 
     public CustomUserDetails(User user) {
@@ -29,23 +30,25 @@ public class CustomUserDetails implements UserDetails {
         this.email = user.getEmail();
         this.role = user.getRole();
         this.departmentId = user.getDepartmentId();
+        this.teamId = user.getTeamId();
         this.hoTen = user.getHoTen();
     }
 
     /**
      * Constructor dùng khi parse trực tiếp từ JWT claims (tránh query DB trong mọi request).
      */
-    public CustomUserDetails(Long userId, String email, Role role, Long departmentId, String hoTen) {
+    public CustomUserDetails(Long userId, String email, Role role, Long departmentId, Long teamId, String hoTen) {
         this.userId = userId;
         this.email = email;
         this.role = role;
         this.departmentId = departmentId;
+        this.teamId = teamId;
         this.hoTen = hoTen;
     }
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        // Spring Security convention: ROLE_ prefix cho @PreAuthorize("hasRole('GIAM_DOC')")
+        // Spring Security convention: ROLE_ prefix cho @PreAuthorize("hasRole('GIAM_DOC_PHONG_BAN')")
         return List.of(new SimpleGrantedAuthority("ROLE_" + role.name()));
     }
 
