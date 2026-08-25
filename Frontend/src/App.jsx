@@ -35,6 +35,8 @@ import HolidayPage from './pages/manager/payroll/HolidayPage';
 import PayrollPage from './pages/manager/payroll/PayrollPage';
 import PayrollViewPage from './pages/manager/payroll/PayrollViewPage';
 import ProfilePage from './pages/common/ProfilePage';
+import MyRequestsPage from './pages/employee/MyRequestsPage';
+import ManagerRequestsPage from './pages/manager/ManagerRequestsPage';
 
 /**
  * App Router — cấu trúc route theo SKILL_react-frontend-patterns.md mục 1.
@@ -96,6 +98,8 @@ export default function App() {
             <Route path="recruitment/applications/:id" element={<ApplicationDetailPage />} />
             <Route path="attendance" element={<ManagerAttendancePage />} />
             <Route path="my-attendance" element={<EmployeeAttendancePage />} />
+            <Route path="requests" element={<ManagerRequestsPage />} />
+            <Route path="my-requests" element={<MyRequestsPage />} />
             <Route path="holidays" element={<HolidayPage />} />
             <Route path="payroll" element={<PayrollPage />} />
             <Route path="profile" element={<ProfilePage />} />
@@ -122,6 +126,8 @@ export default function App() {
             <Route path="recruitment/applications/:id" element={<ApplicationDetailPage />} />
             <Route path="attendance" element={<ManagerAttendancePage />} />
             <Route path="my-attendance" element={<EmployeeAttendancePage />} />
+            <Route path="requests" element={<ManagerRequestsPage />} />
+            <Route path="my-requests" element={<MyRequestsPage />} />
             <Route path="holidays" element={<HolidayPage />} />
             <Route path="payroll" element={<PayrollPage />} />
             <Route path="profile" element={<ProfilePage />} />
@@ -146,6 +152,8 @@ export default function App() {
             <Route path="employees" element={<EmployeeListPage />} />
             <Route path="attendance" element={<ManagerAttendancePage />} />
             <Route path="my-attendance" element={<EmployeeAttendancePage />} />
+            <Route path="requests" element={<ManagerRequestsPage />} />
+            <Route path="my-requests" element={<MyRequestsPage />} />
             <Route path="payroll" element={<PayrollPage />} />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="face-enroll" element={
@@ -181,6 +189,7 @@ export default function App() {
                 </div>
             } />
             <Route path="attendance" element={<EmployeeAttendancePage />} />
+            <Route path="requests" element={<MyRequestsPage />} />
             <Route path="payroll" element={<PayrollViewPage />} />
             <Route path="profile" element={<ProfilePage />} />
           </Route>

@@ -29,6 +29,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @org.springframework.data.jpa.repository.Query("SELECT SUM(u.baseSalary + COALESCE(u.allowance, 0)) FROM User u WHERE u.role IN :roles")
     Double sumTotalSalaryBudgetByRoleIn(@org.springframework.data.repository.query.Param("roles") java.util.List<com.hrm.common.entity.Role> roles);
     java.util.List<User> findByDepartmentId(Long departmentId);
+    java.util.List<User> findByDepartmentIdAndRole(Long departmentId, com.hrm.common.entity.Role role);
     java.util.List<User> findByTeamId(Long teamId);
 
     @org.springframework.data.jpa.repository.Query("SELECT d.tenPhong, COUNT(u) FROM User u JOIN com.hrm.common.entity.Department d ON u.departmentId = d.id GROUP BY d.tenPhong")

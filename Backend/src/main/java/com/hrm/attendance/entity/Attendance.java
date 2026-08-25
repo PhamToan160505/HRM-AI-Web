@@ -52,9 +52,14 @@ public class Attendance {
     @Column(name = "exception_status")
     private String exceptionStatus;
 
-    // NORMAL_LEAVE, HALF_DAY_LEAVE, SPECIAL_WFH_LEAVE, UNPAID
     @Column(name = "loai_nghi_phep", length = 50)
     private String loaiNghiPhep;
+
+    @Column(name = "location_in", columnDefinition = "TEXT")
+    private String locationIn;
+
+    @Column(name = "location_out", columnDefinition = "TEXT")
+    private String locationOut;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

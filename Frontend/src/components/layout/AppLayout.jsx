@@ -15,6 +15,7 @@ import {
   Calendar,
   Clock,
   Settings,
+  FileText,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import NotificationBell from '../common/NotificationBell';
@@ -92,6 +93,8 @@ function SidebarContent({ role, onClose }) {
     { to: '/ceo/employees', icon: Users, label: 'Nhân sự' },
     { to: '/ceo/recruitment', icon: Briefcase, label: 'Tuyển dụng' },
     { to: '/ceo/attendance', icon: ClipboardCheck, label: 'Quản lý chấm công' },
+    { to: '/ceo/requests', icon: FileText, label: 'Quản lý Đơn từ' },
+    { to: '/ceo/my-requests', icon: FileText, label: 'Đơn từ của tôi' },
     { to: '/ceo/payroll', icon: Banknote, label: 'Quản lý bảng lương' },
   ];
   const directorNav = [
@@ -99,6 +102,8 @@ function SidebarContent({ role, onClose }) {
     { to: '/director/employees', icon: Users, label: 'Nhân sự' },
     { to: '/director/recruitment', icon: Briefcase, label: 'Tuyển dụng' },
     { to: '/director/attendance', icon: ClipboardCheck, label: 'Quản lý chấm công' },
+    { to: '/director/requests', icon: FileText, label: 'Quản lý Đơn từ' },
+    { to: '/director/my-requests', icon: FileText, label: 'Đơn từ của tôi' },
     { to: '/director/payroll', icon: Banknote, label: 'Quản lý bảng lương' },
   ];
   const managerNav = [
@@ -107,11 +112,14 @@ function SidebarContent({ role, onClose }) {
     { to: '/manager/recruitment', icon: Briefcase, label: 'Tuyển dụng' },
     { to: '/manager/attendance', icon: ClipboardCheck, label: 'Quản lý chấm công' },
     { to: '/manager/my-attendance', icon: Clock, label: 'Chấm công cá nhân' },
+    { to: '/manager/requests', icon: FileText, label: 'Quản lý Đơn từ' },
+    { to: '/manager/my-requests', icon: FileText, label: 'Đơn từ của tôi' },
     { to: '/manager/payroll', icon: Banknote, label: 'Lương' },
   ];
   const employeeNav = [
     { to: '/employee/dashboard', icon: LayoutDashboard, label: 'Tổng quan', end: true },
     { to: '/employee/attendance', icon: ClipboardCheck, label: 'Chấm công' },
+    { to: '/employee/requests', icon: FileText, label: 'Đơn từ' },
     { to: '/employee/payroll', icon: Banknote, label: 'Phiếu lương' },
   ];
 

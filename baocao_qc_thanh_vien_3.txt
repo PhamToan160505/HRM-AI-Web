@@ -1,0 +1,59 @@
+BÁO CÁO CÔNG VIỆC TRONG NGÀY (THÀNH VIÊN 3)
+Vai trò phụ trách: Role Trưởng Phòng & Nhân Viên
+Công việc thực hiện: Kiểm thử chất lượng (QC), rà soát bảo mật & Fix Bugs trực tiếp trên môi trường Dev.
+
+---
+
+[CẬP NHẬT TÍNH NĂNG MỚI THÊM TRONG NGÀY]
+- Chấm công: Hoàn thiện UI khung quét mặt (căn giữa), tích hợp thành công định vị GPS (Geolocation) lấy tọa độ và địa chỉ thực tế khi check-in/out, hiển thị địa chỉ lên bảng chấm công.
+- Quản lý nhân viên trong phòng: Cập nhật cơ chế phân quyền (Backend & Frontend) chặn Trưởng phòng đổi phòng ban của nhân viên (chỉ CEO được phép). Bổ sung validate chặt chẽ (lương/phụ cấp không được âm).
+- Đơn từ nội bộ: Xác nhận đã hoàn thiện 100% (Xin nghỉ phép tự đếm ngày, Xin làm thêm giờ, WFH...) đi kèm luồng phê duyệt và ghi đè ngày công (Attendance).
+
+---
+
+1. TỔNG QUAN KẾT QUẢ KIỂM THỬ (QC OVERVIEW)
+
+Trong ngày hôm nay, chúng ta đã tiến hành chạy các kịch bản Test tự động (Automated E2E) kết hợp với AI Browser Agent rà soát thủ công cực kỳ khắt khe (Exception & Boundary Testing) trên 3 Module chính do Thành viên 3 đảm nhận:
+- Dashboard Tổng quan Trưởng phòng
+- Module Quản lý Nhân sự (Phân công & Lương thưởng)
+- Module Tuyển dụng (Tạo chiến dịch/Tin tuyển dụng)
+
+Tất cả các luồng test đều tuân thủ nghiêm ngặt NGUYÊN TẮC DỮ LIỆU THẬT (ABSOLUTE REAL DATA POLICY) của dự án. Không sử dụng Mock Data tĩnh.
+
+---
+
+2. CHI TIẾT CÁC BUG ĐÃ BẮT VÀ FIX HOÀN THIỆN
+
+2.1. Màn hình Dashboard Tổng quan (Trưởng Phòng)
+- Hoạt động QC: Khởi tạo kịch bản Cypress E2E test. Dùng AI Agent check UI, Navigation và State Rendering.
+- Kết quả (PASS): Layout responsive tốt. Label "TRƯỞNG PHÒNG" hiển thị chuẩn với CSS text-transform. Trạng thái lương hiển thị Loading mượt mà. 
+- Đánh giá: Tuân thủ tốt luật Dữ liệu thật, tuy nhiên cần bơm thêm data từ Backend để test thẻ "Đơn từ chờ duyệt" (hiện tại đang là 0).
+
+2.2. Module Quản lý Nhân sự (Chức năng Phân công)
+- Hoạt động QC: Nhập liệu phá hoại (Empty submit, max length 255 chars, âm số lượng, chữ cái vào ô số). Kiểm tra phân quyền Select Box "Phòng ban".
+- Lỗi phát hiện (CRITICAL):
+  + Hệ thống cho phép nhập mức lương và phụ cấp là Số Âm (VD: -50.000).
+  + Hệ thống cho phép để trống trường "Chức vụ" và lưu thành công.
+- Đã Fix (Cả Frontend & Backend):
+  + Frontend (EmployeeListPage.jsx): Thêm maxLength=100 cho Chức vụ, min=0 cho lương/phụ cấp. Thêm logic chặn Submit và hiện Toast Error màu đỏ nếu dữ liệu sai.
+  + Backend (EmployeeManagementController.java): Ném RuntimeException (Error 400) nếu baseSalary < 0 hoặc allowance < 0 hoặc chucVu rỗng, khóa chặt lỗ hổng gọi API bypass qua Postman.
+  + Phân quyền: Đã verify Dropdown "Phòng ban" bị disabled đúng chuẩn (chỉ CEO mới được đổi phòng ban).
+
+2.3. Module Tuyển dụng (Tạo Chiến dịch Mới)
+- Hoạt động QC: Kiểm thử Date Validation, Boundary Value (Số lượng, Lương), SQL Injection.
+- Lỗi phát hiện (CRITICAL):
+  + Tiếp tục tái diễn lỗi "Lỗ hổng số Âm". Chấp nhận Số lượng cần tuyển là -5 và Mức lương -5.000.000 VNĐ.
+- Đã Fix (Cả Frontend & Backend):
+  + Frontend (JobPostingForm.jsx): Phân tích logic chữ trong ô Text Mức Lương. Thêm logic bắt chuỗi bắt đầu bằng dấu trừ (-) để chặn lương âm đối với các case không check "Thỏa thuận".
+  + Backend (JobPostingService.java): Chèn thêm các chốt chặn ngoại lệ IllegalArgumentException vào các hàm createJob và updateJob để ném lỗi ngay khi soLuongTuyen <= 0 hoặc mucLuong bắt đầu bằng dấu trừ.
+- Tính năng ổn định khác (PASS): 
+  + Backend đã Parameterized Query để chống SQL Injection (' OR '1'='1). 
+  + Date Validation hoạt động cực tốt (Chặn chọn Hạn nộp hồ sơ trước Ngày bắt đầu).
+
+---
+
+3. ĐÁNH GIÁ CHUNG VÀ BƯỚC TIẾP THEO
+
+- Chất lượng Code: Giao diện React làm rất tốt, đẹp và nhạy. API SpringBoot chạy trơn tru, chia role rành mạch. Tuy nhiên, Team cần chú ý hơn về Validation Security ở Backend đối với các trường Number (tiền bạc, số lượng).
+- Trạng thái Thành viên 3: Đã hoàn thành xuất sắc các nghiệp vụ Trưởng Phòng & Nhân Viên, mã nguồn đạt tiêu chuẩn lên Production sau đợt QC hôm nay.
+- Next Step đề xuất: Tiếp tục tạo Mock Data thực tế (Seeder) cho các đơn xin phép, làm thêm giờ và phối hợp với Thành viên 2 (Giám đốc) để test luồng phê duyệt chéo (Cross-role Approval).

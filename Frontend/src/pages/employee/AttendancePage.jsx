@@ -143,12 +143,18 @@ export default function EmployeeAttendancePage() {
                                         <td className="px-6 py-4 font-medium text-gray-800">{record.date}</td>
                                         <td className="px-6 py-4">
                                             {record.timeIn ? (
-                                                <span className="font-mono text-emerald-600 font-semibold">{formatTime(record.timeIn)}</span>
+                                                <div className="flex flex-col">
+                                                    <span className="font-mono text-emerald-600 font-semibold">{formatTime(record.timeIn)}</span>
+                                                    {record.locationIn && <span className="text-xs text-gray-500 truncate max-w-[200px]" title={record.locationIn}>{record.locationIn}</span>}
+                                                </div>
                                             ) : '--:--'}
                                         </td>
                                         <td className="px-6 py-4">
                                             {record.timeOut ? (
-                                                <span className="font-mono text-blue-600 font-semibold">{formatTime(record.timeOut)}</span>
+                                                <div className="flex flex-col">
+                                                    <span className="font-mono text-blue-600 font-semibold">{formatTime(record.timeOut)}</span>
+                                                    {record.locationOut && <span className="text-xs text-gray-500 truncate max-w-[200px]" title={record.locationOut}>{record.locationOut}</span>}
+                                                </div>
                                             ) : (
                                                 <span className="text-gray-400 italic">Chưa check-out</span>
                                             )}

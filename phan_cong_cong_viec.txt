@@ -40,11 +40,17 @@ CHI TIẾT PHÂN CÔNG (Có đánh dấu tiến độ Source Code hiện tại)
 
 3. THÀNH VIÊN 3: Phụ trách Role TRƯỞNG PHÒNG & NHÂN VIÊN
 * Trách nhiệm: Xây dựng tính năng nghiệp vụ hằng ngày (Chấm công, xin phép, tuyển dụng) hoạt động ở cấp độ cơ sở.
+
+*** BÁO CÁO CÔNG VIỆC TRONG NGÀY (THÀNH VIÊN 3):
+- Chấm công: Hoàn thiện UI khung quét mặt (căn giữa), tích hợp thành công định vị GPS (Geolocation) lấy tọa độ và địa chỉ thực tế khi check-in/out, hiển thị địa chỉ lên bảng chấm công.
+- Quản lý nhân viên trong phòng: Cập nhật cơ chế phân quyền (Backend & Frontend) chặn Trưởng phòng đổi phòng ban của nhân viên (chỉ CEO được phép). Bổ sung validate chặt chẽ (lương/phụ cấp không được âm).
+- Đơn từ nội bộ: Xác nhận đã hoàn thiện 100% (Xin nghỉ phép tự đếm ngày, Xin làm thêm giờ, WFH...) đi kèm luồng phê duyệt và ghi đè ngày công (Attendance).
+***
 - Nhiệm vụ với Role Nhân viên:
   + [x] Chấm công (`FacePunchModal`). (Đã hoàn thiện logic chấm công vào/ra tại Frontend và AttendanceService backend).
-  + [ ] Chức năng tạo các loại Đơn yêu cầu (Application): Xin nghỉ phép, xin làm thêm giờ... (Hiện mới chỉ có form Application cho Tuyển dụng, chưa có form Xin nghỉ phép của nội bộ).
+  + [x] Chức năng tạo các loại Đơn yêu cầu (Application): Xin nghỉ phép, xin làm thêm giờ... (Hiện mới chỉ có form Application cho Tuyển dụng, chưa có form Xin nghỉ phép của nội bộ).
 - Nhiệm vụ với Role Trưởng phòng:
-  + [~] Phát triển tính năng Quản lý nhân viên trong phòng. (Đã có EmployeeManagementController, cần gắn thêm chặn quyền).
+  + [x] Phát triển tính năng Quản lý nhân viên trong phòng. (Đã có EmployeeManagementController, cần gắn thêm chặn quyền).
   + [x] Xử lý luồng phê duyệt cấp 1: Nhận và duyệt/từ chối đơn. (Đã có hàm `rejectByHr`).
   + [x] Tạo yêu cầu tuyển dụng và sử dụng AI để lọc CV. (Hoàn thành xuất sắc - Đã có AiRecruiterDigestService, chống gian lận, chấm điểm Semantic Fit Score, trích xuất dữ liệu từ PDF thật).
   + [x] Chức năng nhận và gửi thông báo (`NotificationModal`) cho cấp dưới. (Đã hoàn thiện Web Socket Notification và lưu DB, UI NotificationModal chạy tốt).

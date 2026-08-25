@@ -1,5 +1,7 @@
 package com.hrm.attendance.service;
 
+import org.springframework.transaction.annotation.Transactional;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -33,7 +35,8 @@ public class AttendanceService {
     // Configurable work hours (e.g., 08:30 AM)
     private static final LocalTime LATE_THRESHOLD = LocalTime.of(8, 35);
 
-    public Attendance punch(Long employeeId, String currentVectorJson) {
+    @Transactional
+    public Attendance punch(Long employeeId, String faceVectorJson, String location) {
         Optional<FaceEmbedding> registeredOpt = faceEmbeddingRepository.findFirstByEmployeeIdOrderByIdDesc(employeeId);
         if (registeredOpt.isEmpty()) {
             throw new IllegalArgumentException("Chưa đăng ký khuôn mặt trên hệ thống.");
@@ -42,11 +45,11 @@ public class AttendanceService {
         FaceEmbedding registeredFace = registeredOpt.get();
         
         try {
-            List<Double> currentVector = objectMapper.readValue(currentVectorJson, new TypeReference<List<Double>>() {});
+            List<Double> currentVector = objectMapper.readValue(faceVectorJson, new TypeReference<List<Double>>() {});
             List<Double> registeredVector = objectMapper.readValue(registeredFace.getEmbeddingVector(), new TypeReference<List<Double>>() {});
             
+            // 2. Compare vectors
             double distance = calculateEuclideanDistance(currentVector, registeredVector);
-            
             if (distance > MATCH_THRESHOLD) {
                 throw new IllegalArgumentException("Khuôn mặt không khớp (Distance: " + distance + ")");
             }
@@ -58,9 +61,27 @@ public class AttendanceService {
             Optional<Attendance> todayAttendanceOpt = attendanceRepository.findFirstByEmployeeIdAndDateOrderByIdDesc(employeeId, today);
             
             if (todayAttendanceOpt.isPresent()) {
-                // Đã check-in -> Đây là check-out (Lần 2 trở đi)
                 Attendance todayAttendance = todayAttendanceOpt.get();
+
+                // --- TH ĐẶC BIỆT: Nhân viên đã có đơn nghỉ được duyệt nhưng VẪN ĐẾN LÀM ---
+                if ("ABSENT".equals(todayAttendance.getStatus()) && "APPROVED".equals(todayAttendance.getExceptionStatus())) {
+                    String newStatus = now.isAfter(LATE_THRESHOLD) ? "LATE" : "PRESENT";
+                    todayAttendance.setStatus(newStatus);
+                    todayAttendance.setTimeIn(now);
+                    todayAttendance.setLocationIn(location);
+                    todayAttendance.setIsException(false);
+                    todayAttendance.setExceptionStatus(null);
+                    todayAttendance.setExceptionReason("[Hủy - NV đến làm dù có đơn nghỉ: " + todayAttendance.getExceptionReason() + "]");
+                    todayAttendance.setLoaiNghiPhep(null); // Xóa loại nghỉ phép
+                    List<String> logs = new java.util.ArrayList<>();
+                    logs.add(now.toString());
+                    todayAttendance.setScanHistory(objectMapper.writeValueAsString(logs));
+                    return attendanceRepository.save(todayAttendance);
+                }
+
+                // Bình thường: đã check-in → đây là check-out
                 todayAttendance.setTimeOut(now);
+                todayAttendance.setLocationOut(location);
                 
                 List<String> logs = new java.util.ArrayList<>();
                 if (todayAttendance.getScanHistory() != null) {
@@ -73,7 +94,7 @@ public class AttendanceService {
 
                 return attendanceRepository.save(todayAttendance);
             } else {
-                // Lần đầu trong ngày -> Check-in
+                // Lần đầu trong ngày → Check-in
                 String status = now.isAfter(LATE_THRESHOLD) ? "LATE" : "PRESENT";
                 
                 List<String> logs = new java.util.ArrayList<>();
@@ -83,6 +104,7 @@ public class AttendanceService {
                         .employeeId(employeeId)
                         .date(today)
                         .timeIn(now)
+                        .locationIn(location)
                         .status(status)
                         .isException(false)
                         .scanHistory(objectMapper.writeValueAsString(logs))
@@ -143,6 +165,8 @@ public class AttendanceService {
                 map.put("exceptionReason", record.getExceptionReason());
                 map.put("attendanceId", record.getId());
                 map.put("scanHistory", record.getScanHistory());
+                map.put("locationIn", record.getLocationIn());
+                map.put("locationOut", record.getLocationOut());
             } else {
                 map.put("timeIn", null);
                 map.put("timeOut", null);

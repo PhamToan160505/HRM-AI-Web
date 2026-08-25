@@ -82,6 +82,10 @@ export default function JobPostingForm() {
     if (!formData.hanNopHoSo) newErrors.hanNopHoSo = 'Vui lòng chọn hạn nộp hồ sơ';
     if (!formData.description.trim()) newErrors.description = 'Vui lòng nhập mô tả công việc (JD)';
     
+    if (!formData.coThoaThuan && formData.mucLuong && formData.mucLuong.trim().startsWith('-')) {
+      newErrors.mucLuong = 'Mức lương không hợp lệ (không được là số âm)';
+    }
+    
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       setLoading(false);
@@ -257,9 +261,12 @@ export default function JobPostingForm() {
                   type="text" 
                   disabled={formData.coThoaThuan}
                   placeholder="VD: 10.000.000 - 15.000.000 VNĐ"
-                  className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-slate-100 disabled:opacity-50"
+                  className={`flex-1 px-4 py-2.5 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-slate-100 disabled:opacity-50 ${errors.mucLuong ? 'border-red-500' : 'border-slate-200'}`}
                   value={formData.coThoaThuan ? '' : formData.mucLuong}
-                  onChange={(e) => setFormData({...formData, mucLuong: e.target.value})}
+                  onChange={(e) => {
+                    setFormData({...formData, mucLuong: e.target.value});
+                    if (errors.mucLuong) setErrors({...errors, mucLuong: null});
+                  }}
                 />
                 <label className="flex items-center gap-2 cursor-pointer whitespace-nowrap">
                   <input 
@@ -271,6 +278,7 @@ export default function JobPostingForm() {
                   <span className="text-sm text-slate-700">Thỏa thuận</span>
                 </label>
               </div>
+              {errors.mucLuong && <p className="mt-1 text-xs text-red-500">{errors.mucLuong}</p>}
             </div>
           </div>
 

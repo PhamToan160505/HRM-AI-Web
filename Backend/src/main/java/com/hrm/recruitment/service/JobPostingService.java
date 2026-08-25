@@ -56,6 +56,14 @@ public class JobPostingService {
             throw new IllegalArgumentException("Ngày bắt đầu phải trước hạn nộp hồ sơ");
         }
 
+        if (request.soLuongTuyen() != null && request.soLuongTuyen() <= 0) {
+            throw new IllegalArgumentException("Số lượng tuyển phải lớn hơn 0");
+        }
+        
+        if (Boolean.FALSE.equals(request.coThoaThuan()) && request.mucLuong() != null && request.mucLuong().trim().startsWith("-")) {
+            throw new IllegalArgumentException("Mức lương không được là số âm");
+        }
+
         String slug = toSlug(request.title()) + "-" + System.currentTimeMillis();
         
         JobPosting job = JobPosting.builder()
@@ -84,6 +92,14 @@ public class JobPostingService {
                 
         if (!request.ngayBatDau().isBefore(request.hanNopHoSo())) {
             throw new IllegalArgumentException("Ngày bắt đầu phải trước hạn nộp hồ sơ");
+        }
+
+        if (request.soLuongTuyen() != null && request.soLuongTuyen() <= 0) {
+            throw new IllegalArgumentException("Số lượng tuyển phải lớn hơn 0");
+        }
+        
+        if (Boolean.FALSE.equals(request.coThoaThuan()) && request.mucLuong() != null && request.mucLuong().trim().startsWith("-")) {
+            throw new IllegalArgumentException("Mức lương không được là số âm");
         }
 
         job.setTitle(request.title());

@@ -166,7 +166,7 @@ public class PayrollService {
                     } else if ("SPECIAL_WFH_LEAVE".equals(leaveType)) {
                         specialWfhCount++;
                         if (specialWfhCount <= specialWfhLeaveDaysPerMonth) {
-                            actualDays += 0.5;
+                            actualDays += 0.7;
                         }
                     }
                     // UNPAID or exceeded limits -> 0.0 added

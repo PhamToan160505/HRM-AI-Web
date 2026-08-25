@@ -87,6 +87,19 @@ const EmployeeListPage = () => {
     };
 
     const handleSaveAssign = async () => {
+        if (!assignForm.chucVu || assignForm.chucVu.trim() === '') {
+            toast.show("Lỗi", "Vui lòng nhập chức vụ", "error");
+            return;
+        }
+        if (assignForm.baseSalary === '' || Number(assignForm.baseSalary) < 0) {
+            toast.show("Lỗi", "Lương cơ bản không hợp lệ (phải >= 0)", "error");
+            return;
+        }
+        if (assignForm.allowance !== '' && Number(assignForm.allowance) < 0) {
+            toast.show("Lỗi", "Phụ cấp không được là số âm", "error");
+            return;
+        }
+
         try {
             const res = await api.put(`/api/employees/${selectedEmployee.id}/assignment`, assignForm);
             if (res.data.success) {
@@ -127,16 +140,18 @@ const EmployeeListPage = () => {
                             onChange={e => setSearchTerm(e.target.value)}
                         />
                     </div>
-                    <select 
-                        value={selectedFilterDept}
-                        onChange={e => setSelectedFilterDept(e.target.value)}
-                        className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 cursor-pointer text-gray-600"
-                    >
-                        <option value="">Tất cả phòng ban</option>
-                        {departments.map(dept => (
-                            <option key={dept.id} value={dept.id}>{dept.tenPhong}</option>
-                        ))}
-                    </select>
+                    {role?.toUpperCase() === 'CEO' && (
+                        <select 
+                            value={selectedFilterDept}
+                            onChange={e => setSelectedFilterDept(e.target.value)}
+                            className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 cursor-pointer text-gray-600"
+                        >
+                            <option value="">Tất cả phòng ban</option>
+                            {departments.map(dept => (
+                                <option key={dept.id} value={dept.id}>{dept.tenPhong}</option>
+                            ))}
+                        </select>
+                    )}
                     <select 
                         value={selectedRole}
                         onChange={e => setSelectedRole(e.target.value)}
@@ -250,9 +265,10 @@ const EmployeeListPage = () => {
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Phòng ban</label>
                                 <select 
-                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500" 
+                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500" 
                                     value={assignForm.departmentId} 
                                     onChange={e => setAssignForm({...assignForm, departmentId: e.target.value})} 
+                                    disabled={role?.toUpperCase() !== 'CEO'}
                                 >
                                     <option value="">-- Chọn phòng ban --</option>
                                     {departments.map(dept => (
@@ -264,6 +280,7 @@ const EmployeeListPage = () => {
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Chức vụ</label>
                                 <input 
                                     type="text" 
+                                    maxLength={100}
                                     placeholder="VD: Nhân viên Tuyển dụng"
                                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500" 
                                     value={assignForm.chucVu} 
@@ -275,6 +292,7 @@ const EmployeeListPage = () => {
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Lương cơ bản (VNĐ)</label>
                                     <input 
                                         type="number" 
+                                        min="0"
                                         placeholder="VD: 20000000"
                                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500" 
                                         value={assignForm.baseSalary} 
@@ -285,6 +303,7 @@ const EmployeeListPage = () => {
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Phụ cấp (VNĐ)</label>
                                     <input 
                                         type="number" 
+                                        min="0"
                                         placeholder="VD: 1000000"
                                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500" 
                                         value={assignForm.allowance} 

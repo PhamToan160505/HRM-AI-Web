@@ -25,11 +25,12 @@ public class AttendanceController {
             @RequestBody Map<String, String> request) {
         
         String vectorJson = request.get("embeddingVector");
+        String location = request.get("location");
         if (vectorJson == null || vectorJson.isEmpty()) {
             throw new IllegalArgumentException("Dữ liệu khuôn mặt không hợp lệ");
         }
 
-        Attendance attendance = attendanceService.punch(userDetails.getUserId(), vectorJson);
+        Attendance attendance = attendanceService.punch(userDetails.getUserId(), vectorJson, location);
         return ResponseEntity.ok(ApiResponse.ok(attendance, "Chấm công thành công!"));
     }
 

@@ -64,6 +64,9 @@ public class EmployeeManagementController {
         }
         
         if (request.containsKey("departmentId")) {
+            if (userDetails.getRole() != com.hrm.common.entity.Role.CEO) {
+                throw new RuntimeException("403: Chỉ Tổng giám đốc mới có quyền chuyển phòng ban cho nhân viên");
+            }
             Object depId = request.get("departmentId");
             if (depId != null) {
                 user.setDepartmentId(Long.valueOf(depId.toString()));
@@ -74,7 +77,14 @@ public class EmployeeManagementController {
         
         if (request.containsKey("chucVu")) {
             Object chucVu = request.get("chucVu");
-            user.setChucVu(chucVu != null ? chucVu.toString() : null);
+            String cvString = chucVu != null ? chucVu.toString().trim() : null;
+            if (cvString != null && cvString.isEmpty()) {
+                throw new RuntimeException("400: Chức vụ không được để trống");
+            }
+            if (cvString != null && cvString.length() > 100) {
+                throw new RuntimeException("400: Chức vụ không được vượt quá 100 ký tự");
+            }
+            user.setChucVu(cvString);
         }
         
         Double oldBaseSalary = user.getBaseSalary();
@@ -84,6 +94,9 @@ public class EmployeeManagementController {
         if (request.containsKey("baseSalary")) {
             Object bs = request.get("baseSalary");
             Double newBs = bs != null && !bs.toString().isEmpty() ? Double.valueOf(bs.toString()) : null;
+            if (newBs != null && newBs < 0) {
+                throw new RuntimeException("400: Lương cơ bản không được là số âm");
+            }
             if ((oldBaseSalary == null && newBs != null) || (oldBaseSalary != null && !oldBaseSalary.equals(newBs))) {
                 user.setBaseSalary(newBs);
                 salaryChanged = true;
@@ -93,6 +106,9 @@ public class EmployeeManagementController {
         if (request.containsKey("allowance")) {
             Object al = request.get("allowance");
             Double newAl = al != null && !al.toString().isEmpty() ? Double.valueOf(al.toString()) : null;
+            if (newAl != null && newAl < 0) {
+                throw new RuntimeException("400: Phụ cấp không được là số âm");
+            }
             if ((oldAllowance == null && newAl != null) || (oldAllowance != null && !oldAllowance.equals(newAl))) {
                 user.setAllowance(newAl);
                 salaryChanged = true;

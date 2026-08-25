@@ -277,12 +277,18 @@ export default function ManagerAttendancePage() {
                                             </td>
                                             <td className="px-6 py-4">
                                                 {record.timeIn ? (
-                                                    <span className="font-mono text-emerald-600 font-semibold">{formatTime(record.timeIn)}</span>
+                                                    <div className="flex flex-col">
+                                                        <span className="font-mono text-emerald-600 font-semibold">{formatTime(record.timeIn)}</span>
+                                                        {record.locationIn && <span className="text-xs text-gray-500 truncate max-w-[200px]" title={record.locationIn}>{record.locationIn}</span>}
+                                                    </div>
                                                 ) : '--:--'}
                                             </td>
                                             <td className="px-6 py-4">
                                                 {record.timeOut ? (
-                                                    <span className="font-mono text-blue-600 font-semibold">{formatTime(record.timeOut)}</span>
+                                                    <div className="flex flex-col">
+                                                        <span className="font-mono text-blue-600 font-semibold">{formatTime(record.timeOut)}</span>
+                                                        {record.locationOut && <span className="text-xs text-gray-500 truncate max-w-[200px]" title={record.locationOut}>{record.locationOut}</span>}
+                                                    </div>
                                                 ) : (
                                                     <span className="text-gray-400 italic">Chưa check-out</span>
                                                 )}
@@ -331,11 +337,23 @@ export default function ManagerAttendancePage() {
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="p-3 bg-gray-50 rounded-lg">
                                     <p className="text-xs text-gray-500 mb-1">Giờ vào (Check-in)</p>
-                                    <p className="font-mono font-semibold text-emerald-600">{viewingRecord.timeIn ? formatTime(viewingRecord.timeIn) : '--:--'}</p>
+                                    <p className="font-mono font-semibold text-emerald-600 mb-1">{viewingRecord.timeIn ? formatTime(viewingRecord.timeIn) : '--:--'}</p>
+                                    {viewingRecord.locationIn && (
+                                        <p className="text-xs text-gray-500 flex items-start gap-1 mt-2 border-t border-gray-200 pt-2">
+                                            <span className="shrink-0">📍</span>
+                                            <span className="break-words">{viewingRecord.locationIn}</span>
+                                        </p>
+                                    )}
                                 </div>
                                 <div className="p-3 bg-gray-50 rounded-lg">
                                     <p className="text-xs text-gray-500 mb-1">Giờ ra (Check-out)</p>
-                                    <p className="font-mono font-semibold text-blue-600">{viewingRecord.timeOut ? formatTime(viewingRecord.timeOut) : '--:--'}</p>
+                                    <p className="font-mono font-semibold text-blue-600 mb-1">{viewingRecord.timeOut ? formatTime(viewingRecord.timeOut) : '--:--'}</p>
+                                    {viewingRecord.locationOut && (
+                                        <p className="text-xs text-gray-500 flex items-start gap-1 mt-2 border-t border-gray-200 pt-2">
+                                            <span className="shrink-0">📍</span>
+                                            <span className="break-words">{viewingRecord.locationOut}</span>
+                                        </p>
+                                    )}
                                 </div>
                             </div>
 
