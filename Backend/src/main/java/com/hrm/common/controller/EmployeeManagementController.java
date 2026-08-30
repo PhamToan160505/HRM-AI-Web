@@ -35,7 +35,10 @@ public class EmployeeManagementController {
                 com.hrm.common.entity.Role.TRUONG_PHONG,
                 com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN
             ));
-        } else if (userDetails.getRole() == com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN || userDetails.getRole() == com.hrm.common.entity.Role.TRUONG_PHONG) {
+        } else if (userDetails.getRole() == com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN) {
+            List<User> deptUsers = userRepository.findByDepartmentId(userDetails.getDepartmentId());
+            employees = deptUsers.stream().filter(u -> u.getRole() == com.hrm.common.entity.Role.NHAN_VIEN || u.getRole() == com.hrm.common.entity.Role.TRUONG_PHONG).toList();
+        } else if (userDetails.getRole() == com.hrm.common.entity.Role.TRUONG_PHONG) {
             List<User> deptUsers = userRepository.findByDepartmentId(userDetails.getDepartmentId());
             employees = deptUsers.stream().filter(u -> u.getRole() == com.hrm.common.entity.Role.NHAN_VIEN).toList();
         }

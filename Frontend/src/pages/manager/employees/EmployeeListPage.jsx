@@ -158,8 +158,12 @@ const EmployeeListPage = () => {
                         className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 cursor-pointer text-gray-600"
                     >
                         <option value="">Tất cả chức vụ</option>
-                        <option value="CEO">Tổng giám đốc (CEO)</option>
-                        <option value="GIAM_DOC_PHONG_BAN">Giám đốc phòng ban</option>
+                        {role?.toUpperCase() === 'CEO' && (
+                            <>
+                                <option value="CEO">Tổng giám đốc (CEO)</option>
+                                <option value="GIAM_DOC_PHONG_BAN">Giám đốc phòng ban</option>
+                            </>
+                        )}
                         <option value="TRUONG_PHONG">Trưởng phòng</option>
                         <option value="NHAN_VIEN">Nhân viên</option>
                     </select>

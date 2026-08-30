@@ -15,6 +15,7 @@ public class EmployeeRequestDto {
     private Long userId;
     private String hoTen;
     private String maNhanVien;
+    private String role;
     private String avatarUrl;
     private RequestType requestType;
     private String reason;

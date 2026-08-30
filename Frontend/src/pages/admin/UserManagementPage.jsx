@@ -30,10 +30,11 @@ export default function UserManagementPage() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
+      const ts = new Date().getTime();
       const [usersRes, deptsRes, requestsRes] = await Promise.all([
-        api.get('/api/admin/users'),
-        api.get('/api/departments'),
-        api.get('/api/admin/account-requests').catch(() => ({ data: { data: [] } }))
+        api.get(`/api/admin/users?t=${ts}`),
+        api.get(`/api/departments?t=${ts}`),
+        api.get(`/api/admin/account-requests?t=${ts}`).catch(() => ({ data: { data: [] } }))
       ]);
       if (usersRes.data.success) setUsers(usersRes.data.data);
       if (deptsRes.data.success) setDepartments(deptsRes.data.data);
@@ -52,13 +53,17 @@ export default function UserManagementPage() {
         ...formData,
         departmentId: formData.departmentId ? parseInt(formData.departmentId) : null
       });
-      if (res.data.success) {
+      // Accept success if res.data.success is true OR if it's missing but we have an ID (fallback)
+      if (res.data.success || res.data.data?.id) {
         toast.success('Tạo tài khoản thành công');
         setIsCreateModalOpen(false);
         setFormData({ hoTen: '', email: '', password: '', role: 'NHAN_VIEN', departmentId: '', chucVu: '' });
         fetchData();
+      } else {
+        toast.error(res.data.message || 'Lỗi khi tạo tài khoản');
       }
     } catch (error) {
+      console.error(error);
       toast.error(error.response?.data?.message || 'Lỗi khi tạo tài khoản');
     }
   };

@@ -6,6 +6,8 @@ export default function PayrollTable({ payrolls, onApprove, onReject, role }) {
     const getStatusBadge = (status) => {
         switch (status) {
             case 'APPROVED': return <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded text-xs font-semibold">Đã duyệt</span>;
+            case 'MANAGER_APPROVED': return <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded text-xs font-semibold">Trưởng phòng đã duyệt</span>;
+            case 'DIRECTOR_APPROVED': return <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-semibold">Giám đốc đã duyệt</span>;
             case 'REJECTED': return <span className="px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-semibold">Từ chối</span>;
             case 'DRAFT': return <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs font-semibold">Bản nháp</span>;
             default: return <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs font-semibold">{status}</span>;
@@ -32,13 +34,13 @@ export default function PayrollTable({ payrolls, onApprove, onReject, role }) {
                         <th className="px-6 py-4 font-semibold text-red-600">Thuế TNCN</th>
                         <th className="px-6 py-4 font-semibold text-blue-600 text-right">Thực nhận</th>
                         <th className="px-6 py-4 font-semibold">Trạng thái</th>
-                        {(role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN' || role?.toUpperCase() === 'CEO') && <th className="px-6 py-4 font-semibold text-right">Thao tác</th>}
+                        {(role?.toUpperCase() === 'TRUONG_PHONG' || role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN' || role?.toUpperCase() === 'CEO') && <th className="px-6 py-4 font-semibold text-right">Thao tác</th>}
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                     {payrolls.length === 0 ? (
                         <tr>
-                            <td colSpan={(role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN' || role?.toUpperCase() === 'CEO') ? 10 : 9} className="px-6 py-8 text-center text-gray-500">Không có dữ liệu</td>
+                            <td colSpan={(role?.toUpperCase() === 'TRUONG_PHONG' || role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN' || role?.toUpperCase() === 'CEO') ? 10 : 9} className="px-6 py-8 text-center text-gray-500">Không có dữ liệu</td>
                         </tr>
                     ) : (
                         payrolls.map((p) => (
@@ -65,11 +67,12 @@ export default function PayrollTable({ payrolls, onApprove, onReject, role }) {
                                         </div>
                                     )}
                                 </td>
-                                {(role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN' || role?.toUpperCase() === 'CEO') && (
+                                {(role?.toUpperCase() === 'TRUONG_PHONG' || role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN' || role?.toUpperCase() === 'CEO') && (
                                     <td className="px-6 py-4 text-right space-x-2">
                                         {p.status === 'DRAFT' && (
                                             <>
-                                                <Button variant="outline" className="text-xs px-2 py-1 text-red-600 hover:bg-red-50" onClick={() => onReject(p)}>Từ chối</Button>
+                                                <Button variant="outline" className="text-xs px-2 py-1 text-emerald-600 hover:bg-emerald-50 border-emerald-200" onClick={() => onApprove(p.id)}>Duyệt</Button>
+                                                <Button variant="outline" className="text-xs px-2 py-1 text-red-600 hover:bg-red-50 border-red-200" onClick={() => onReject(p)}>Từ chối</Button>
                                             </>
                                         )}
                                     </td>

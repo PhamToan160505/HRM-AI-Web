@@ -1,7 +1,7 @@
 import React from 'react';
 import Button from '../common/Button';
 
-function DepartmentPayrollSummaryTable({ summaries, onViewDetail }) {
+function DepartmentPayrollSummaryTable({ summaries, onViewDetail, onApprove, role }) {
     return (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div className="overflow-x-auto">
@@ -41,6 +41,15 @@ function DepartmentPayrollSummaryTable({ summaries, onViewDetail }) {
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 text-right space-x-2">
+                                        {(role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN' || role?.toUpperCase() === 'CEO') && s.status === 'Chờ Giám đốc duyệt' && onApprove && (
+                                            <Button 
+                                                variant="outline" 
+                                                className="text-xs px-2 py-1 text-emerald-600 hover:bg-emerald-50 border-emerald-200" 
+                                                onClick={() => onApprove(s.departmentId)}
+                                            >
+                                                Duyệt
+                                            </Button>
+                                        )}
                                         <Button 
                                             variant="outline" 
                                             className="text-xs px-2 py-1 text-blue-600 hover:bg-blue-50 border-blue-200" 

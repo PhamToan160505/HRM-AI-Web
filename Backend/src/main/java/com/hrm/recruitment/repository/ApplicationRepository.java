@@ -19,4 +19,6 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
     java.util.List<Application> findTop5ByOrderByCreatedAtDesc();
     
     boolean existsByEmailAndJobPostingIdAndCreatedAtAfter(String email, Long jobPostingId, LocalDateTime time);
+    long countByApprovalStatusAndJobPosting_DepartmentId(String status, Long departmentId);
+    java.util.List<Application> findTop5ByJobPosting_DepartmentIdOrderByCreatedAtDesc(Long departmentId);
 }

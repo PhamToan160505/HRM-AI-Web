@@ -233,7 +233,7 @@ public class PayrollService {
         if (!"DRAFT".equals(payroll.getStatus())) {
             throw new RuntimeException("Chỉ được duyệt khi trạng thái là DRAFT");
         }
-        payroll.setStatus("APPROVED");
+        payroll.setStatus("MANAGER_APPROVED");
         payrollRepository.save(payroll);
     }
 

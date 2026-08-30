@@ -49,7 +49,9 @@ export default function DirectorDashboardPage() {
     <div className="space-y-6 max-w-7xl mx-auto pb-10">
       <div className="flex justify-between items-center mb-6">
         <div>
-            <h1 className="text-2xl font-bold text-slate-800">Bảng điều khiển tổng quan</h1>
+            <h1 className="text-2xl font-bold text-slate-800">
+                Bảng điều khiển tổng quan {stats?.departmentName ? `- ${stats.departmentName}` : ''}
+            </h1>
         </div>
       </div>
 
@@ -66,7 +68,7 @@ export default function DirectorDashboardPage() {
       )}
 
       {/* Row 1: Top Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Card 1 */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex justify-between items-center">
             <div>
@@ -79,6 +81,17 @@ export default function DirectorDashboardPage() {
                         <Line type="monotone" dataKey="value" stroke="#3b82f6" strokeWidth={3} dot={false} />
                     </LineChart>
                 </ResponsiveContainer>
+            </div>
+        </div>
+
+        {/* Card 4 - Quỹ lương */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex justify-between items-center">
+            <div>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Quỹ lương phòng ban</p>
+                <h2 className="text-2xl font-extrabold text-slate-800">{new Intl.NumberFormat('vi-VN').format(stats.totalSalaryBudget || 0)} ₫</h2>
+            </div>
+            <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                <span className="font-bold text-xl">₫</span>
             </div>
         </div>
 
@@ -135,7 +148,7 @@ export default function DirectorDashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Department Distribution */}
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-6">Phân bổ phòng ban</p>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-6">Phân bổ chức vụ</p>
               <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
@@ -183,7 +196,7 @@ export default function DirectorDashboardPage() {
       {/* Row 3: Action Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
           <div 
-              onClick={() => navigate('/director/recruitment/applications?status=PENDING_DIRECTOR')}
+              onClick={() => navigate('/director/recruitment')}
               className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex items-center justify-between cursor-pointer hover:border-blue-300 hover:shadow-md transition-all group"
           >
               <div className="flex items-center gap-4">

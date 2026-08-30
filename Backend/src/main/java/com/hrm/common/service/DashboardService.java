@@ -4,6 +4,7 @@ import com.hrm.attendance.repository.AttendanceRepository;
 import com.hrm.common.repository.UserRepository;
 import com.hrm.recruitment.repository.ApplicationRepository;
 import com.hrm.recruitment.repository.JobPostingRepository;
+import com.hrm.common.repository.DepartmentRepository;
 import com.hrm.common.payroll.repository.PayrollRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -26,6 +27,7 @@ public class DashboardService {
     private final AttendanceRepository attendanceRepository;
     private final JobPostingRepository jobPostingRepository;
     private final PayrollRepository payrollRepository;
+    private final DepartmentRepository departmentRepository;
 
     public Map<String, Object> getDirectorStats() {
         Map<String, Object> stats = new HashMap<>();
@@ -113,6 +115,96 @@ public class DashboardService {
         if (duration.toMinutes() < 60) return duration.toMinutes() + " phút trước";
         if (duration.toHours() < 24) return duration.toHours() + " giờ trước";
         return duration.toDays() + " ngày trước";
+    }
+
+    public Map<String, Object> getDepartmentDirectorStats(com.hrm.security.CustomUserDetails userDetails) {
+        Map<String, Object> stats = new HashMap<>();
+        Long deptId = userDetails.getDepartmentId();
+        
+        departmentRepository.findById(deptId).ifPresent(dept -> {
+            stats.put("departmentName", dept.getTenPhong());
+        });
+        
+        java.util.List<com.hrm.common.entity.User> employees = userRepository.findByDepartmentId(deptId);
+        
+        long totalEmployees = employees.stream()
+            .filter(e -> e.getRole() == com.hrm.common.entity.Role.NHAN_VIEN || e.getRole() == com.hrm.common.entity.Role.TRUONG_PHONG)
+            .count();
+            
+        stats.put("totalEmployees", totalEmployees);
+
+        Double totalBudget = userRepository.sumTotalSalaryBudgetByDepartmentId(deptId);
+        stats.put("totalSalaryBudget", totalBudget != null ? totalBudget : 0.0);
+        
+        long totalOpenJobs = jobPostingRepository.countByStatusAndDepartmentId("OPEN", deptId);
+        stats.put("openJobs", totalOpenJobs);
+        
+        long pendingDirectorApps = applicationRepository.countByApprovalStatusAndJobPosting_DepartmentId("PENDING_DIRECTOR", deptId);
+        stats.put("pendingApplications", pendingDirectorApps);
+        
+        // Count pending payrolls for this department
+        long pendingPayrolls = 0;
+        if (!employees.isEmpty()) {
+            java.util.List<Long> empIds = employees.stream().map(com.hrm.common.entity.User::getId).toList();
+            LocalDate now = LocalDate.now();
+            java.util.List<com.hrm.common.payroll.entity.Payroll> payrolls = payrollRepository.findByMonthAndYearAndEmployeeIdIn(now.getMonthValue(), now.getYear(), empIds);
+            pendingPayrolls = payrolls.stream().filter(p -> "DRAFT".equals(p.getStatus())).count();
+        }
+        stats.put("pendingPayrolls", pendingPayrolls);
+        
+        long todayPresent = attendanceRepository.countByDepartmentIdAndDateAndPresentOrLate(deptId, LocalDate.now());
+        long todayNotCheckedIn = totalEmployees - todayPresent;
+        if (todayNotCheckedIn < 0) todayNotCheckedIn = 0;
+        
+        // we can fetch late from DB as well.
+        long todayLate = 0; // Or write query. Let's just say present/late/absent
+        long totalPresentOnly = todayPresent - todayLate;
+        
+        Map<String, Long> todayAttendance = new HashMap<>();
+        todayAttendance.put("present", todayPresent);
+        todayAttendance.put("late", 0L); // placeholder
+        todayAttendance.put("absent", todayNotCheckedIn);
+        stats.put("todayAttendance", todayAttendance);
+        
+        // Role distribution
+        List<Object[]> roleRaw = userRepository.getRoleDistributionByDepartmentId(deptId);
+        List<Map<String, Object>> roleDist = new ArrayList<>();
+        for (Object[] row : roleRaw) {
+            Map<String, Object> map = new HashMap<>();
+            String roleStr = row[0] != null ? row[0].toString() : "Unknown";
+            if ("GIAM_DOC_PHONG_BAN".equals(roleStr)) continue; // Ignore director
+
+            String friendlyRole = roleStr;
+            switch(roleStr) {
+                case "NHAN_VIEN": friendlyRole = "Nhân viên"; break;
+                case "TRUONG_PHONG": friendlyRole = "Trưởng phòng"; break;
+            }
+            map.put("name", friendlyRole);
+            map.put("value", row[1]);
+            roleDist.add(map);
+        }
+        stats.put("departmentDistribution", roleDist); // Keep key name to not break frontend easily
+        
+        // Recent Activities
+        List<Map<String, Object>> recentActivities = new ArrayList<>();
+        applicationRepository.findTop5ByJobPosting_DepartmentIdOrderByCreatedAtDesc(deptId).forEach(app -> {
+            Map<String, Object> act = new HashMap<>();
+            act.put("type", "APPLICATION");
+            act.put("avatar", app.getFullName().substring(0, 1).toUpperCase());
+            act.put("title", app.getFullName() + " ứng tuyển vào " + (app.getJobPosting() != null ? app.getJobPosting().getTitle() : ""));
+            act.put("time", getTimeAgo(app.getCreatedAt()));
+            act.put("createdAt", app.getCreatedAt());
+            recentActivities.add(act);
+        });
+        
+        recentActivities.sort((a, b) -> ((LocalDateTime) b.get("createdAt")).compareTo((LocalDateTime) a.get("createdAt")));
+        if (recentActivities.size() > 5) {
+            stats.put("recentActivities", recentActivities.subList(0, 5));
+        } else {
+            stats.put("recentActivities", recentActivities);
+        }
+        
+        return stats;
     }
 
     public Map<String, Object> getManagerStats(com.hrm.security.CustomUserDetails userDetails) {

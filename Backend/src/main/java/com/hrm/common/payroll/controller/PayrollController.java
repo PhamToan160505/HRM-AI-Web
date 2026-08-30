@@ -33,14 +33,14 @@ public class PayrollController {
     }
 
     @PostMapping("/{id}/approve")
-    @PreAuthorize("hasAnyRole('GIAM_DOC_PHONG_BAN', 'CEO')")
+    @PreAuthorize("hasAnyRole('TRUONG_PHONG', 'GIAM_DOC_PHONG_BAN', 'CEO')")
     public ResponseEntity<ApiResponse<Void>> approvePayroll(@PathVariable Long id) {
         payrollService.approvePayrollRecord(id);
         return ResponseEntity.ok(ApiResponse.ok(null, "Duyệt lương thành công"));
     }
 
     @PostMapping("/{id}/reject")
-    @PreAuthorize("hasAnyRole('GIAM_DOC_PHONG_BAN', 'CEO')")
+    @PreAuthorize("hasAnyRole('TRUONG_PHONG', 'GIAM_DOC_PHONG_BAN', 'CEO')")
     public ResponseEntity<ApiResponse<Void>> rejectPayroll(
             @PathVariable Long id,
             @RequestBody Map<String, String> request) {
@@ -70,11 +70,19 @@ public class PayrollController {
     }
 
     @GetMapping("/summary-by-department")
-    @PreAuthorize("hasRole('CEO')")
+    @PreAuthorize("hasAnyRole('CEO', 'GIAM_DOC_PHONG_BAN')")
     public ResponseEntity<ApiResponse<List<DepartmentPayrollSummary>>> getDepartmentPayrollSummaries(
             @RequestParam int month,
-            @RequestParam int year) {
-        return ResponseEntity.ok(ApiResponse.ok(payrollService.getDepartmentPayrollSummaries(month, year), "Lấy thống kê thành công"));
+            @RequestParam int year,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        List<DepartmentPayrollSummary> summaries = payrollService.getDepartmentPayrollSummaries(month, year);
+        if (userDetails.getRole() == com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN) {
+            summaries = summaries.stream()
+                    .filter(s -> s.getDepartmentId().equals(userDetails.getDepartmentId()))
+                    .filter(s -> "Chờ Giám đốc duyệt".equals(s.getStatus()) || "Đã duyệt".equals(s.getStatus()) || "Bị từ chối".equals(s.getStatus()))
+                    .collect(java.util.stream.Collectors.toList());
+        }
+        return ResponseEntity.ok(ApiResponse.ok(summaries, "Lấy thống kê thành công"));
     }
 
     @PostMapping("/department/approve")

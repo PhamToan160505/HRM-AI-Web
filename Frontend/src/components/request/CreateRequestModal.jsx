@@ -34,14 +34,61 @@ export default function CreateRequestModal({ isOpen, onClose, onSuccess }) {
     }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!formData.startDate || !formData.endDate || !formData.reason) {
-      toast.show('Lỗi', 'Vui lòng điền đầy đủ thông tin', 'error');
+  const handleDateBlur = (e) => {
+    const { name, value } = e.target;
+
+    if (e.target.validity && e.target.validity.badInput) {
+      toast.show('Lỗi', 'Định dạng ngày không hợp lệ (Vui lòng nhập dd/mm/yyyy)', 'error');
       return;
     }
 
-    if (new Date(formData.startDate) > new Date(formData.endDate)) {
+    if (!value) return;
+
+    const date = new Date(value);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (isNaN(date.getTime()) || date.getFullYear() > 9999 || date.getFullYear() < 1900) {
+      toast.show('Lỗi', 'Năm không hợp lệ (Vui lòng nhập đúng 4 chữ số)', 'error');
+      return;
+    }
+
+    if (date < today) {
+      toast.show('Lỗi', 'Không thể chọn ngày trong quá khứ', 'error');
+      return;
+    }
+
+    if (name === 'endDate' && formData.startDate) {
+      if (date < new Date(formData.startDate)) {
+        toast.show('Lỗi', 'Ngày kết thúc không thể nhỏ hơn ngày bắt đầu', 'error');
+      }
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!formData.startDate || !formData.endDate || !formData.reason) {
+      toast.show('Lỗi', 'Vui lòng điền đầy đủ thông tin (hoặc kiểm tra lại định dạng ngày)', 'error');
+      return;
+    }
+
+    const start = new Date(formData.startDate);
+    const end = new Date(formData.endDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (isNaN(start.getTime()) || start.getFullYear() > 9999 || start.getFullYear() < 1900 ||
+        isNaN(end.getTime()) || end.getFullYear() > 9999 || end.getFullYear() < 1900) {
+      toast.show('Lỗi', 'Định dạng ngày không hợp lệ (Vui lòng nhập đúng năm 4 chữ số)', 'error');
+      return;
+    }
+
+    if (start < today) {
+      toast.show('Lỗi', 'Không thể chọn ngày bắt đầu trong quá khứ', 'error');
+      return;
+    }
+
+    if (start > end) {
       toast.show('Lỗi', 'Ngày bắt đầu không thể lớn hơn ngày kết thúc', 'error');
       return;
     }
@@ -111,6 +158,8 @@ export default function CreateRequestModal({ isOpen, onClose, onSuccess }) {
                   name="startDate"
                   value={formData.startDate}
                   onChange={handleChange}
+                  onBlur={handleDateBlur}
+                  min={new Date().toISOString().split('T')[0]}
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors pl-10 text-slate-700"
                 />
                 <Calendar size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -126,7 +175,8 @@ export default function CreateRequestModal({ isOpen, onClose, onSuccess }) {
                   name="endDate"
                   value={formData.endDate}
                   onChange={handleChange}
-                  min={formData.startDate}
+                  onBlur={handleDateBlur}
+                  min={formData.startDate || new Date().toISOString().split('T')[0]}
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors pl-10 text-slate-700"
                 />
                 <Calendar size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />

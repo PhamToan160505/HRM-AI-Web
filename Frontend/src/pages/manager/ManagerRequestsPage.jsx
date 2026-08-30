@@ -1,15 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { requestService } from '../../services/request.service';
 import Button from '../../components/common/Button';
-import { Clock, CheckCircle2, XCircle, FileText, Check, X } from 'lucide-react';
+import { Clock, CheckCircle2, XCircle, FileText, Check, X, Eye, Search, Filter } from 'lucide-react';
 import { useToast } from '../../components/common/Toast';
+import { useAuth } from '../../context/AuthContext';
 
 export default function ManagerRequestsPage() {
+  const { role } = useAuth();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // Modal state
+  const [selectedRequest, setSelectedRequest] = useState(null);
   const [processingId, setProcessingId] = useState(null);
   const [rejectNote, setRejectNote] = useState('');
-  const [rejectingId, setRejectingId] = useState(null);
+  const [showRejectInput, setShowRejectInput] = useState(false);
+  const [showForwardInput, setShowForwardInput] = useState(false);
+
+  // Filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterRole, setFilterRole] = useState('ALL');
+  const [filterType, setFilterType] = useState('ALL');
+
   const toast = useToast();
 
   const loadRequests = async () => {
@@ -33,6 +45,7 @@ export default function ManagerRequestsPage() {
       setProcessingId(id);
       await requestService.approveRequest(id, 'Đồng ý duyệt');
       toast.show('Thành công', 'Đã duyệt đơn thành công', 'success');
+      setSelectedRequest(null);
       loadRequests();
     } catch (error) {
       toast.show('Lỗi', error.response?.data?.message || 'Có lỗi khi duyệt đơn', 'error');
@@ -50,11 +63,28 @@ export default function ManagerRequestsPage() {
       setProcessingId(id);
       await requestService.rejectRequest(id, rejectNote);
       toast.show('Thành công', 'Đã từ chối đơn', 'success');
-      setRejectingId(null);
       setRejectNote('');
+      setShowRejectInput(false);
+      setSelectedRequest(null);
       loadRequests();
     } catch (error) {
       toast.show('Lỗi', error.response?.data?.message || 'Có lỗi khi từ chối đơn', 'error');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleForward = async (id) => {
+    try {
+      setProcessingId(id);
+      await requestService.forwardRequest(id, rejectNote); // reuse rejectNote state for note if needed
+      toast.show('Thành công', 'Đã chuyển tiếp đơn lên Giám đốc', 'success');
+      setRejectNote('');
+      setShowForwardInput(false);
+      setSelectedRequest(null);
+      loadRequests();
+    } catch (error) {
+      toast.show('Lỗi', error.response?.data?.message || 'Có lỗi khi chuyển tiếp đơn', 'error');
     } finally {
       setProcessingId(null);
     }
@@ -64,20 +94,26 @@ export default function ManagerRequestsPage() {
     switch (status) {
       case 'APPROVED':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-600">
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-600 border border-emerald-200">
             <CheckCircle2 size={12} /> Đã duyệt
           </span>
         );
       case 'REJECTED':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-rose-50 text-rose-600">
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-rose-50 text-rose-600 border border-rose-200">
             <XCircle size={12} /> Từ chối
+          </span>
+        );
+      case 'FORWARDED':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-600 border border-blue-200">
+            <Clock size={12} /> Đã chuyển tiếp
           </span>
         );
       case 'PENDING':
       default:
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-600">
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-600 border border-amber-200">
             <Clock size={12} /> Chờ duyệt
           </span>
         );
@@ -100,7 +136,47 @@ export default function ManagerRequestsPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Quản lý Đơn từ</h1>
-          <p className="text-sm text-slate-500 mt-1">Duyệt yêu cầu nghỉ phép, làm thêm giờ của nhân viên</p>
+          <p className="text-sm text-slate-500 mt-1">Duyệt yêu cầu nghỉ phép, làm thêm giờ của nhân viên cấp dưới</p>
+        </div>
+      </div>
+
+      <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-wrap gap-4 items-center shadow-sm">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <input
+            type="text"
+            placeholder="Tìm kiếm theo tên nhân viên..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Filter className="text-slate-400" size={18} />
+          <select
+            value={filterRole}
+            onChange={(e) => setFilterRole(e.target.value)}
+            className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="ALL">Tất cả chức vụ</option>
+            <option value="NHAN_VIEN">Nhân viên</option>
+            <option value="TRUONG_PHONG">Trưởng phòng</option>
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <Filter className="text-slate-400" size={18} />
+          <select
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value)}
+            className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="ALL">Tất cả loại đơn</option>
+            <option value="NORMAL_LEAVE">Nghỉ phép thường</option>
+            <option value="HALF_DAY_LEAVE">Nghỉ nửa ngày</option>
+            <option value="SPECIAL_WFH_LEAVE">Làm việc từ xa (WFH)</option>
+            <option value="UNPAID_LEAVE">Nghỉ không lương</option>
+            <option value="OVERTIME">Làm thêm giờ</option>
+          </select>
         </div>
       </div>
 
@@ -135,8 +211,28 @@ export default function ManagerRequestsPage() {
                     <p className="text-sm mt-1">Chưa có nhân viên nào gửi yêu cầu</p>
                   </td>
                 </tr>
-              ) : (
-                requests.map((req) => (
+              ) : (() => {
+                const filteredRequests = requests.filter(req => {
+                  const matchesSearch = req.hoTen?.toLowerCase().includes(searchQuery.toLowerCase());
+                  const matchesRole = filterRole === 'ALL' || req.role === filterRole;
+                  const matchesType = filterType === 'ALL' || req.requestType === filterType;
+                  return matchesSearch && matchesRole && matchesType;
+                });
+
+                if (filteredRequests.length === 0) {
+                  return (
+                    <tr>
+                      <td colSpan="6" className="px-6 py-12 text-center text-slate-500">
+                        <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                          <FileText size={24} className="text-slate-400" />
+                        </div>
+                        <p className="text-slate-600 font-medium">Không tìm thấy đơn từ nào phù hợp</p>
+                      </td>
+                    </tr>
+                  );
+                }
+
+                return filteredRequests.map((req) => (
                   <tr key={req.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -163,62 +259,184 @@ export default function ManagerRequestsPage() {
                       {getStatusBadge(req.status)}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      {req.status === 'PENDING' ? (
-                        rejectingId === req.id ? (
-                          <div className="flex items-center justify-end gap-2">
-                            <input
-                              type="text"
-                              value={rejectNote}
-                              onChange={(e) => setRejectNote(e.target.value)}
-                              placeholder="Lý do từ chối..."
-                              className="px-2 py-1 text-xs rounded border border-slate-200 focus:outline-none focus:border-rose-500 w-32"
-                              autoFocus
-                            />
-                            <button
-                              onClick={() => handleReject(req.id)}
-                              disabled={processingId === req.id}
-                              className="p-1.5 text-white bg-rose-500 hover:bg-rose-600 rounded-md transition-colors disabled:opacity-50"
-                              title="Xác nhận từ chối"
-                            >
-                              <Check size={14} />
-                            </button>
-                            <button
-                              onClick={() => { setRejectingId(null); setRejectNote(''); }}
-                              className="p-1.5 text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors"
-                              title="Hủy"
-                            >
-                              <X size={14} />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => handleApprove(req.id)}
-                              disabled={processingId === req.id}
-                              className="px-3 py-1.5 text-xs font-medium text-white bg-emerald-500 hover:bg-emerald-600 rounded-lg transition-colors shadow-sm disabled:opacity-50"
-                            >
-                              Duyệt
-                            </button>
-                            <button
-                              onClick={() => setRejectingId(req.id)}
-                              disabled={processingId === req.id}
-                              className="px-3 py-1.5 text-xs font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors disabled:opacity-50"
-                            >
-                              Từ chối
-                            </button>
-                          </div>
-                        )
-                      ) : (
-                        <span className="text-xs text-slate-400 italic">Đã xử lý</span>
-                      )}
+                      <button
+                        onClick={() => {
+                          setSelectedRequest(req);
+                          setShowRejectInput(false);
+                          setShowForwardInput(false);
+                          setRejectNote('');
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors border border-blue-100"
+                      >
+                        <Eye size={14} />
+                        Xem chi tiết
+                      </button>
                     </td>
                   </tr>
                 ))
-              )}
+              })()}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Modal Chi tiết Đơn từ */}
+      {selectedRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-slide-in-up">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <FileText className="text-blue-600" size={20} />
+                Chi tiết Đơn từ
+              </h3>
+              <button 
+                onClick={() => setSelectedRequest(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-200 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4 text-sm">
+              <div className="flex items-center gap-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-lg shrink-0">
+                  {selectedRequest.hoTen.charAt(0)}
+                </div>
+                <div>
+                  <p className="font-bold text-slate-800 text-base">{selectedRequest.hoTen}</p>
+                  <p className="text-slate-500">Mã NV: {selectedRequest.maNhanVien}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-y-3 gap-x-4 border-b border-slate-100 pb-4">
+                <div className="col-span-1 text-slate-500 font-medium">Loại đơn:</div>
+                <div className="col-span-2 font-semibold text-slate-800">{getTypeLabel(selectedRequest.requestType)}</div>
+                
+                <div className="col-span-1 text-slate-500 font-medium">Trạng thái:</div>
+                <div className="col-span-2">{getStatusBadge(selectedRequest.status)}</div>
+
+                <div className="col-span-1 text-slate-500 font-medium">Thời gian:</div>
+                <div className="col-span-2 text-slate-800">
+                  {new Date(selectedRequest.startDate).toLocaleDateString('vi-VN')}
+                  {selectedRequest.startDate !== selectedRequest.endDate && 
+                    ` - ${new Date(selectedRequest.endDate).toLocaleDateString('vi-VN')}`
+                  }
+                </div>
+              </div>
+
+              <div>
+                <div className="text-slate-500 font-medium mb-1">Lý do:</div>
+                <div className="p-3 bg-blue-50/50 rounded-lg border border-blue-100 text-slate-700 whitespace-pre-wrap min-h-[60px]">
+                  {selectedRequest.reason}
+                </div>
+              </div>
+
+              {selectedRequest.status !== 'PENDING' && selectedRequest.note && (
+                <div>
+                  <div className="text-slate-500 font-medium mb-1">Ghi chú duyệt:</div>
+                  <div className={`p-3 rounded-lg border ${selectedRequest.status === 'REJECTED' ? 'bg-rose-50 border-rose-100 text-rose-700' : 'bg-emerald-50 border-emerald-100 text-emerald-700'} whitespace-pre-wrap`}>
+                    {selectedRequest.note}
+                  </div>
+                </div>
+              )}
+
+              {/* Input ghi chú khi từ chối / chuyển tiếp */}
+              {(showRejectInput || showForwardInput) && selectedRequest.status === 'PENDING' && (
+                <div className="pt-2 animate-fade-in">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    {showRejectInput ? 'Lý do từ chối' : 'Ghi chú chuyển tiếp'} {showRejectInput && <span className="text-rose-500">*</span>}
+                  </label>
+                  <textarea
+                    value={rejectNote}
+                    onChange={(e) => setRejectNote(e.target.value)}
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 ${showRejectInput ? 'border-slate-300 focus:ring-rose-500 focus:border-rose-500' : 'border-slate-300 focus:ring-blue-500 focus:border-blue-500'}`}
+                    rows="2"
+                    placeholder={showRejectInput ? 'Nhập lý do từ chối để nhân viên biết...' : 'Ghi chú thêm cho Giám đốc (không bắt buộc)...'}
+                    autoFocus
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Actions Footer */}
+            {(selectedRequest.status === 'PENDING' || (selectedRequest.status === 'FORWARDED' && role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN')) && (
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+                {showRejectInput ? (
+                  <>
+                    <button
+                      onClick={() => setShowRejectInput(false)}
+                      className="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition-colors"
+                    >
+                      Hủy
+                    </button>
+                    <button
+                      onClick={() => handleReject(selectedRequest.id)}
+                      disabled={processingId === selectedRequest.id}
+                      className="px-4 py-2 text-sm font-medium text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition-colors shadow-sm disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {processingId === selectedRequest.id && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                      Xác nhận từ chối
+                    </button>
+                  </>
+                ) : showForwardInput ? (
+                  <>
+                    <button
+                      onClick={() => setShowForwardInput(false)}
+                      className="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition-colors"
+                    >
+                      Hủy
+                    </button>
+                    <button
+                      onClick={() => handleForward(selectedRequest.id)}
+                      disabled={processingId === selectedRequest.id}
+                      className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-sm disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {processingId === selectedRequest.id && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                      Xác nhận chuyển tiếp
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => setShowRejectInput(true)}
+                      className="px-4 py-2 text-sm font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors"
+                    >
+                      Từ chối
+                    </button>
+                    {role?.toUpperCase() === 'TRUONG_PHONG' && selectedRequest.status === 'PENDING' && (
+                      <button
+                        onClick={() => setShowForwardInput(true)}
+                        className="px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors"
+                      >
+                        Chuyển tiếp
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleApprove(selectedRequest.id)}
+                      disabled={processingId === selectedRequest.id}
+                      className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors shadow-sm disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {processingId === selectedRequest.id && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                      Duyệt đơn
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+            
+            {selectedRequest.status !== 'PENDING' && !(selectedRequest.status === 'FORWARDED' && role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN') && (
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end">
+                <button
+                  onClick={() => setSelectedRequest(null)}
+                  className="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition-colors"
+                >
+                  Đóng
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

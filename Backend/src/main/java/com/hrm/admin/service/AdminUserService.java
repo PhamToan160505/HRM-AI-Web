@@ -25,10 +25,13 @@ public class AdminUserService {
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new RuntimeException("Email đã tồn tại trong hệ thống");
         }
+        
+        String maNhanVien = generateMaNhanVien(request.getDepartmentId());
 
         User user = User.builder()
                 .hoTen(request.getHoTen())
                 .email(request.getEmail())
+                .maNhanVien(maNhanVien)
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
                 .role(request.getRole())
                 .departmentId(request.getDepartmentId())
@@ -58,7 +61,26 @@ public class AdminUserService {
     public User resetPassword(Long id, String newPassword) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng"));
+        
         user.setPasswordHash(passwordEncoder.encode(newPassword));
         return userRepository.save(user);
+    }
+
+    private String generateMaNhanVien(Long departmentId) {
+        String companyCode = "23";
+        String deptCode = String.format("%02d", departmentId != null ? departmentId : 99);
+        String prefix = companyCode + deptCode;
+        
+        String maxMaNhanVien = userRepository.findMaxMaNhanVienByPrefix(prefix);
+        if (maxMaNhanVien == null || maxMaNhanVien.length() < 8) {
+            return prefix + "0001";
+        }
+        
+        try {
+            int currentSequence = Integer.parseInt(maxMaNhanVien.substring(4));
+            return prefix + String.format("%04d", currentSequence + 1);
+        } catch (NumberFormatException e) {
+            return prefix + "0001";
+        }
     }
 }

@@ -94,7 +94,6 @@ function SidebarContent({ role, onClose }) {
     { to: '/ceo/recruitment', icon: Briefcase, label: 'Tuyển dụng' },
     { to: '/ceo/attendance', icon: ClipboardCheck, label: 'Quản lý chấm công' },
     { to: '/ceo/requests', icon: FileText, label: 'Quản lý Đơn từ' },
-    { to: '/ceo/my-requests', icon: FileText, label: 'Đơn từ của tôi' },
     { to: '/ceo/payroll', icon: Banknote, label: 'Quản lý bảng lương' },
   ];
   const directorNav = [
@@ -102,6 +101,7 @@ function SidebarContent({ role, onClose }) {
     { to: '/director/employees', icon: Users, label: 'Nhân sự' },
     { to: '/director/recruitment', icon: Briefcase, label: 'Tuyển dụng' },
     { to: '/director/attendance', icon: ClipboardCheck, label: 'Quản lý chấm công' },
+    { to: '/director/my-attendance', icon: Clock, label: 'Chấm công cá nhân' },
     { to: '/director/requests', icon: FileText, label: 'Quản lý Đơn từ' },
     { to: '/director/my-requests', icon: FileText, label: 'Đơn từ của tôi' },
     { to: '/director/payroll', icon: Banknote, label: 'Quản lý bảng lương' },

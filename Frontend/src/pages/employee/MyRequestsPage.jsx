@@ -4,7 +4,8 @@ import Button from '../../components/common/Button';
 import CreateRequestModal from '../../components/request/CreateRequestModal';
 import {
   Plus, Clock, CheckCircle2, XCircle, FileText,
-  Umbrella, Monitor, SunMedium, AlarmClock, AlertCircle
+  Umbrella, Monitor, SunMedium, AlarmClock, AlertCircle,
+  ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { useToast } from '../../components/common/Toast';
 
@@ -89,6 +90,14 @@ function LeaveSalaryImpact({ summary }) {
       colorClass: 'text-rose-600',
       bgClass: 'bg-rose-50',
     },
+    {
+      label: 'Làm thêm giờ',
+      days: summary.overtimeDays,
+      rate: '150%',
+      impact: summary.overtimeDays > 0 ? `+${(summary.overtimeDays * 1.5 * 100).toFixed(0)}% ngày công/ngày OT` : 'Không ảnh hưởng',
+      colorClass: 'text-purple-600',
+      bgClass: 'bg-purple-50',
+    },
   ];
 
   return (
@@ -109,17 +118,58 @@ function LeaveSalaryImpact({ summary }) {
           </div>
         ))}
       </div>
-      {summary.overtimeRequests > 0 && (
-        <div className="px-5 py-3 bg-purple-50 border-t border-slate-100 flex items-center gap-2">
-          <AlarmClock size={14} className="text-purple-600" />
-          <span className="text-sm text-purple-700 font-medium">
-            {summary.overtimeRequests} đơn làm thêm giờ đã được duyệt tháng này
-          </span>
-        </div>
-      )}
     </div>
   );
 }
+
+const calculateFrontendSummary = (reqList, backendSummary, selectedMonth, selectedYear) => {
+  let normalLeaveDays = 0;
+  let wfhDays = 0;
+  let halfDayCount = 0;
+  let unpaidDays = 0;
+  let overtimeDays = 0;
+
+  reqList.filter(r => r.status === 'APPROVED').forEach(req => {
+    let count = 0;
+    let d = new Date(req.startDate);
+    let e = new Date(req.endDate);
+    d.setHours(0,0,0,0);
+    e.setHours(0,0,0,0);
+
+    while (d <= e) {
+      if (d.getMonth() === selectedMonth && d.getFullYear() === selectedYear) {
+        if (req.requestType === 'OVERTIME' || (d.getDay() !== 0 && d.getDay() !== 6)) {
+          count++;
+        }
+      }
+      d.setDate(d.getDate() + 1);
+    }
+
+    switch (req.requestType) {
+      case 'NORMAL_LEAVE': normalLeaveDays += count; break;
+      case 'SPECIAL_WFH_LEAVE': wfhDays += count; break;
+      case 'HALF_DAY_LEAVE': halfDayCount += count; break;
+      case 'UNPAID_LEAVE': unpaidDays += count; break;
+      case 'OVERTIME': overtimeDays += count; break;
+    }
+  });
+
+  const quota = backendSummary?.paidLeaveQuota || 1;
+  const usedPaidLeave = Math.min(normalLeaveDays, quota);
+  const extraUnpaidFromLeave = Math.max(0, normalLeaveDays - quota);
+
+  return {
+    ...backendSummary,
+    month: selectedMonth + 1,
+    year: selectedYear,
+    paidLeaveUsed: usedPaidLeave,
+    paidLeaveRemaining: Math.max(0, quota - usedPaidLeave),
+    wfhDays,
+    halfDayCount,
+    unpaidDays: unpaidDays + extraUnpaidFromLeave,
+    overtimeDays
+  };
+};
 
 // ─── Main Page ───────────────────────────────────────────────────────────────
 export default function MyRequestsPage() {
@@ -127,6 +177,7 @@ export default function MyRequestsPage() {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [currentDate, setCurrentDate] = useState(new Date());
   const toast = useToast();
 
   const loadData = async () => {
@@ -137,7 +188,7 @@ export default function MyRequestsPage() {
         requestService.getMonthlySummary(),
       ]);
       setRequests(reqData);
-      setSummary(summaryData);
+      setSummary(calculateFrontendSummary(reqData, summaryData, currentDate.getMonth(), currentDate.getFullYear()));
     } catch (error) {
       toast.show('Lỗi', 'Lỗi khi tải dữ liệu đơn từ', 'error');
     } finally {
@@ -147,7 +198,25 @@ export default function MyRequestsPage() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [currentDate]);
+
+  const prevMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+  };
+
+  const nextMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+  };
+
+  const filteredRequests = requests.filter(req => {
+      const s = new Date(req.startDate);
+      const e = new Date(req.endDate);
+      const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+      const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+      s.setHours(0,0,0,0);
+      e.setHours(23,59,59,999);
+      return s <= endOfMonth && e >= startOfMonth;
+  });
 
   const getStatusBadge = (status) => {
     switch (status) {
@@ -161,6 +230,12 @@ export default function MyRequestsPage() {
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-rose-50 text-rose-600">
             <XCircle size={12} /> Từ chối
+          </span>
+        );
+      case 'FORWARDED':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-600">
+            <Clock size={12} /> Đã chuyển tiếp
           </span>
         );
       default:
@@ -191,15 +266,28 @@ export default function MyRequestsPage() {
           <h1 className="text-2xl font-bold text-slate-800">Đơn từ của tôi</h1>
           <p className="text-sm text-slate-500 mt-1">Quản lý yêu cầu nghỉ phép, WFH và làm thêm giờ</p>
         </div>
-        <Button onClick={() => setShowCreateModal(true)} icon={Plus}>
-          Tạo đơn mới
-        </Button>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 bg-white border border-slate-200 rounded-lg p-1">
+            <button onClick={prevMonth} className="p-1 hover:bg-slate-100 rounded text-slate-600 transition-colors">
+              <ChevronLeft size={20} />
+            </button>
+            <span className="font-semibold text-slate-700 min-w-[120px] text-center">
+              Tháng {currentDate.getMonth() + 1}, {currentDate.getFullYear()}
+            </span>
+            <button onClick={nextMonth} className="p-1 hover:bg-slate-100 rounded text-slate-600 transition-colors">
+              <ChevronRight size={20} />
+            </button>
+          </div>
+          <Button onClick={() => setShowCreateModal(true)} icon={Plus}>
+            Tạo đơn mới
+          </Button>
+        </div>
       </div>
 
       {/* Summary grid */}
       {summary && !loading && (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
             <SummaryCard
               icon={Umbrella}
               label="Phép có lương còn lại"
@@ -219,7 +307,7 @@ export default function MyRequestsPage() {
             <SummaryCard
               icon={SunMedium}
               label="Nghỉ nửa ngày"
-              value={`${summary.halfDayCount} lần`}
+              value={`${summary.halfDayCount} ngày`}
               sub="Hưởng 50% lương/lần"
               color="text-amber-600"
               bgColor="bg-amber-50"
@@ -232,6 +320,14 @@ export default function MyRequestsPage() {
               color="text-rose-600"
               bgColor="bg-rose-50"
             />
+            <SummaryCard
+              icon={AlarmClock}
+              label="Làm thêm giờ"
+              value={`${summary.overtimeDays} ngày`}
+              sub="Hưởng 150% lương/ngày"
+              color="text-purple-600"
+              bgColor="bg-purple-50"
+            />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -242,53 +338,52 @@ export default function MyRequestsPage() {
       )}
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
           <FileText size={16} className="text-slate-500" />
-          <h2 className="text-sm font-semibold text-slate-700">Lịch sử đơn từ</h2>
+          <h3 className="font-semibold text-slate-700">Lịch sử đơn từ trong tháng</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-medium">
+            <thead className="bg-slate-50/50 text-slate-500">
               <tr>
-                <th className="px-6 py-4">Loại đơn</th>
-                <th className="px-6 py-4">Lý do</th>
-                <th className="px-6 py-4">Thời gian</th>
-                <th className="px-6 py-4">Ngày tạo</th>
-                <th className="px-6 py-4">Trạng thái</th>
-                <th className="px-6 py-4">Ghi chú duyệt</th>
+                <th className="px-5 py-3 font-medium">Loại đơn</th>
+                <th className="px-5 py-3 font-medium">Lý do</th>
+                <th className="px-5 py-3 font-medium">Thời gian</th>
+                <th className="px-5 py-3 font-medium">Ngày tạo</th>
+                <th className="px-5 py-3 font-medium">Trạng thái</th>
+                <th className="px-5 py-3 font-medium">Ghi chú duyệt</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan="6" className="px-6 py-8 text-center text-slate-500">
-                    <div className="animate-spin w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-2" />
+                  <td colSpan="6" className="px-5 py-8 text-center text-slate-500">
                     Đang tải dữ liệu...
                   </td>
                 </tr>
-              ) : requests.length === 0 ? (
+              ) : filteredRequests.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="px-6 py-12 text-center text-slate-500">
+                  <td colSpan="6" className="px-5 py-12 text-center text-slate-500">
                     <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
                       <FileText size={24} className="text-slate-400" />
                     </div>
-                    <p className="text-slate-600 font-medium">Bạn chưa có đơn nào</p>
-                    <p className="text-sm mt-1">Nhấn "Tạo đơn mới" để gửi yêu cầu</p>
+                    <p className="text-slate-600 font-medium">Chưa có đơn từ nào trong tháng này</p>
+                    <p className="text-sm mt-1">Các đơn yêu cầu của bạn sẽ hiển thị ở đây</p>
                   </td>
                 </tr>
               ) : (
-                requests.map((req) => (
+                filteredRequests.map((req) => (
                   <tr key={req.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4 font-medium text-slate-800">{getTypeLabel(req.requestType)}</td>
-                    <td className="px-6 py-4 text-slate-600 max-w-xs truncate" title={req.reason}>{req.reason}</td>
-                    <td className="px-6 py-4 text-slate-600">
+                    <td className="px-5 py-3 font-medium text-slate-800">{getTypeLabel(req.requestType)}</td>
+                    <td className="px-5 py-3 text-slate-600 max-w-xs truncate" title={req.reason}>{req.reason}</td>
+                    <td className="px-5 py-3 text-slate-600">
                       {new Date(req.startDate).toLocaleDateString('vi-VN')}
                       {req.startDate !== req.endDate && ` - ${new Date(req.endDate).toLocaleDateString('vi-VN')}`}
                     </td>
-                    <td className="px-6 py-4 text-slate-500">{new Date(req.createdAt).toLocaleDateString('vi-VN')}</td>
-                    <td className="px-6 py-4">{getStatusBadge(req.status)}</td>
-                    <td className="px-6 py-4 text-slate-600 text-xs max-w-xs truncate" title={req.note}>{req.note || '-'}</td>
+                    <td className="px-5 py-3 text-slate-500">{new Date(req.createdAt).toLocaleDateString('vi-VN')}</td>
+                    <td className="px-5 py-3">{getStatusBadge(req.status)}</td>
+                    <td className="px-5 py-3 text-slate-600 text-xs max-w-xs truncate" title={req.note}>{req.note || '-'}</td>
                   </tr>
                 ))
               )}

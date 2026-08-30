@@ -191,11 +191,11 @@ export default function LoginPage() {
               </p>
               <div className="space-y-1">
                 {[
-                  { label: 'Admin (Quản trị)', maNhanVien: '100001' },
-                  { label: 'Tổng Giám đốc', maNhanVien: '100002' },
-                  { label: 'Giám đốc phòng ban', maNhanVien: '100003' },
-                  { label: 'Trưởng phòng', maNhanVien: '100004' },
-                  { label: 'Nhân viên', maNhanVien: '100005' },
+                  { label: 'Admin (Quản trị)', maNhanVien: '23990002' },
+                  { label: 'Tổng Giám đốc', maNhanVien: '23990001' },
+                  { label: 'Giám đốc phòng ban', maNhanVien: '23010001' },
+                  { label: 'Trưởng phòng', maNhanVien: '23010002' },
+                  { label: 'Nhân viên', maNhanVien: '23010003' },
                 ].map(({ label, maNhanVien: demoMaNhanVien }) => (
                   <button
                     key={demoMaNhanVien}

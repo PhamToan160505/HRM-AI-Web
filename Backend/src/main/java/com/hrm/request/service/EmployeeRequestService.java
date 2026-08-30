@@ -66,8 +66,10 @@ public class EmployeeRequestService {
             int days = 0;
             LocalDate d = req.getStartDate();
             while (!d.isAfter(req.getEndDate())) {
-                if (d.getDayOfWeek() != java.time.DayOfWeek.SATURDAY && d.getDayOfWeek() != java.time.DayOfWeek.SUNDAY) {
-                    days++;
+                if (!d.isBefore(startOfMonth) && !d.isAfter(endOfMonth)) {
+                    if (d.getDayOfWeek() != java.time.DayOfWeek.SATURDAY && d.getDayOfWeek() != java.time.DayOfWeek.SUNDAY) {
+                        days++;
+                    }
                 }
                 d = d.plusDays(1);
             }
@@ -148,6 +150,19 @@ public class EmployeeRequestService {
             subordinates = userRepository.findByDepartmentIdAndRole(manager.getDepartmentId(), com.hrm.common.entity.Role.NHAN_VIEN);
         } else if (manager.getRole() == com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN) {
             subordinates = userRepository.findByDepartmentIdAndRole(manager.getDepartmentId(), com.hrm.common.entity.Role.TRUONG_PHONG);
+            // Also include NHAN_VIEN requests that are forwarded
+            List<User> nhanViens = userRepository.findByDepartmentIdAndRole(manager.getDepartmentId(), com.hrm.common.entity.Role.NHAN_VIEN);
+            List<Long> nvIds = nhanViens.stream().map(User::getId).collect(Collectors.toList());
+            List<EmployeeRequest> forwardedReqs = nvIds.isEmpty() ? new java.util.ArrayList<>() : requestRepository.findByUserIdInOrderByCreatedAtDesc(nvIds)
+                .stream().filter(r -> r.getStatus() == RequestStatus.FORWARDED).collect(Collectors.toList());
+            
+            List<Long> trPhongIds = subordinates.stream().map(User::getId).collect(Collectors.toList());
+            List<EmployeeRequest> allReqs = new java.util.ArrayList<>(forwardedReqs);
+            if (!trPhongIds.isEmpty()) {
+                allReqs.addAll(requestRepository.findByUserIdInOrderByCreatedAtDesc(trPhongIds));
+            }
+            allReqs.sort((r1, r2) -> r2.getCreatedAt().compareTo(r1.getCreatedAt()));
+            return allReqs.stream().map(this::mapToDto).collect(Collectors.toList());
         } else if (manager.getRole() == com.hrm.common.entity.Role.CEO) {
             subordinates = userRepository.findByRole(com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN);
         } else {
@@ -172,8 +187,8 @@ public class EmployeeRequestService {
         User manager = userRepository.findById(managerId)
                 .orElseThrow(() -> new RuntimeException("User không tồn tại"));
 
-        if (request.getStatus() != RequestStatus.PENDING) {
-            throw new RuntimeException("Chỉ có thể duyệt đơn ở trạng thái chờ (PENDING)");
+        if (request.getStatus() != RequestStatus.PENDING && request.getStatus() != RequestStatus.FORWARDED) {
+            throw new RuntimeException("Chỉ có thể duyệt đơn ở trạng thái chờ duyệt hoặc chuyển tiếp (PENDING, FORWARDED)");
         }
 
         request.setStatus(RequestStatus.APPROVED);
@@ -242,8 +257,8 @@ public class EmployeeRequestService {
         User manager = userRepository.findById(managerId)
                 .orElseThrow(() -> new RuntimeException("User không tồn tại"));
 
-        if (request.getStatus() != RequestStatus.PENDING) {
-            throw new RuntimeException("Chỉ có thể từ chối đơn ở trạng thái chờ (PENDING)");
+        if (request.getStatus() != RequestStatus.PENDING && request.getStatus() != RequestStatus.FORWARDED) {
+            throw new RuntimeException("Chỉ có thể từ chối đơn ở trạng thái chờ duyệt hoặc chuyển tiếp (PENDING, FORWARDED)");
         }
 
         request.setStatus(RequestStatus.REJECTED);
@@ -267,12 +282,52 @@ public class EmployeeRequestService {
         return mapToDto(saved);
     }
 
+    @Transactional
+    public EmployeeRequestDto forwardRequest(Long managerId, Long requestId, ApproveRequestDto dto) {
+        EmployeeRequest request = requestRepository.findById(requestId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn yêu cầu"));
+
+        User manager = userRepository.findById(managerId)
+                .orElseThrow(() -> new RuntimeException("User không tồn tại"));
+
+        if (manager.getRole() != com.hrm.common.entity.Role.TRUONG_PHONG) {
+            throw new RuntimeException("Chỉ Trưởng phòng mới có quyền chuyển tiếp đơn");
+        }
+
+        if (request.getStatus() != RequestStatus.PENDING) {
+            throw new RuntimeException("Chỉ có thể chuyển tiếp đơn ở trạng thái chờ (PENDING)");
+        }
+
+        request.setStatus(RequestStatus.FORWARDED);
+        if (dto != null && dto.getNote() != null) {
+            request.setNote(dto.getNote());
+        }
+
+        EmployeeRequest saved = requestRepository.save(request);
+
+        // Notify GIAM_DOC_PHONG_BAN
+        List<User> directors = userRepository.findByDepartmentIdAndRole(manager.getDepartmentId(), com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN);
+        for (User director : directors) {
+            notificationService.createNotification(
+                    director.getId(),
+                    "REQUEST",
+                    "Đơn từ được chuyển tiếp",
+                    "Trưởng phòng " + manager.getHoTen() + " vừa chuyển tiếp một đơn từ.",
+                    "quan_trong",
+                    "/director/requests"
+            );
+        }
+
+        return mapToDto(saved);
+    }
+
     private EmployeeRequestDto mapToDto(EmployeeRequest req) {
         return EmployeeRequestDto.builder()
                 .id(req.getId())
                 .userId(req.getUser().getId())
                 .hoTen(req.getUser().getHoTen())
                 .maNhanVien(req.getUser().getMaNhanVien())
+                .role(req.getUser().getRole() != null ? req.getUser().getRole().name() : null)
                 .avatarUrl(req.getUser().getAvatarUrl())
                 .requestType(req.getRequestType())
                 .reason(req.getReason())

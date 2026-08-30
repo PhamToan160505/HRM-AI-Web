@@ -61,6 +61,7 @@ public class DataSeeder implements CommandLineRunner {
         
         seedDepartments();
         seedUsers();
+        migrateMaNhanVien();
     }
 
     private void migrateApplicationsTable() {
@@ -130,7 +131,6 @@ public class DataSeeder implements CommandLineRunner {
             User admin = User.builder()
                     .hoTen("Hệ Thống Admin")
                     .email("admin@hrm.vn")
-                    .maNhanVien("100001")
                     .passwordHash(hashedPassword)
                     .role(Role.ADMIN)
                     .departmentId(null)
@@ -145,7 +145,6 @@ public class DataSeeder implements CommandLineRunner {
             User ceo = User.builder()
                     .hoTen("Trịnh Văn Tổng Giám Đốc")
                     .email("ceo@hrm.vn")
-                    .maNhanVien("100002")
                     .passwordHash(hashedPassword)
                     .role(Role.CEO)
                     .departmentId(null) // CEO không thuộc phòng cụ thể
@@ -178,7 +177,6 @@ public class DataSeeder implements CommandLineRunner {
             User giamDocPhong = User.builder()
                     .hoTen("Phạm Văn Giám Đốc Phòng")
                     .email("giamdocphong@hrm.vn")
-                    .maNhanVien("100003")
                     .passwordHash(hashedPassword)
                     .role(Role.GIAM_DOC_PHONG_BAN)
                     .departmentId(kyThuatDeptId)
@@ -193,7 +191,6 @@ public class DataSeeder implements CommandLineRunner {
             User truongPhong = User.builder()
                     .hoTen("Trần Thị Trưởng Phòng")
                     .email("truongphong@hrm.vn")
-                    .maNhanVien("100004")
                     .passwordHash(hashedPassword)
                     .role(Role.TRUONG_PHONG)
                     .departmentId(nhanSuDeptId)
@@ -208,7 +205,6 @@ public class DataSeeder implements CommandLineRunner {
             User nhanVien = User.builder()
                     .hoTen("Lê Văn Nhân Viên")
                     .email("nhanvien@hrm.vn")
-                    .maNhanVien("100005")
                     .passwordHash(hashedPassword)
                     .role(Role.NHAN_VIEN)
                     .departmentId(nhanSuDeptId)
@@ -218,17 +214,30 @@ public class DataSeeder implements CommandLineRunner {
             log.info("[Seed] Tạo tài khoản: nhanvien@hrm.vn (NHAN_VIEN, phòng Nhân sự id={})", nhanSuDeptId);
         }
 
-        // Cập nhật maNhanVien cho các tài khoản hiện tại (nếu trước đây bị thiếu)
-        try {
-            jdbcTemplate.execute("UPDATE users SET ma_nhan_vien = '100001' WHERE email = 'admin@hrm.vn' AND ma_nhan_vien IS NULL");
-            jdbcTemplate.execute("UPDATE users SET ma_nhan_vien = '100002' WHERE email = 'giamdoc@hrm.vn' AND ma_nhan_vien IS NULL");
-            jdbcTemplate.execute("UPDATE users SET ma_nhan_vien = '100003' WHERE email = 'giamdocphong@hrm.vn' AND ma_nhan_vien IS NULL");
-            jdbcTemplate.execute("UPDATE users SET ma_nhan_vien = '100004' WHERE email = 'truongphong@hrm.vn' AND ma_nhan_vien IS NULL");
-            jdbcTemplate.execute("UPDATE users SET ma_nhan_vien = '100005' WHERE email = 'nhanvien@hrm.vn' AND ma_nhan_vien IS NULL");
-        } catch (Exception e) {
-            log.error("[Migration] Lỗi khi cập nhật maNhanVien cho tài khoản cũ: ", e);
-        }
-
         log.info("[Seed] Hoàn tất. Password mặc định: Admin@123 — đổi ngay trên môi trường production.");
+    }
+
+    private void migrateMaNhanVien() {
+        java.util.List<User> users = userRepository.findAll();
+        for (User user : users) {
+            if (user.getMaNhanVien() == null || user.getMaNhanVien().length() != 8 || user.getMaNhanVien().startsWith("1000")) {
+                String companyCode = "23";
+                String deptCode = String.format("%02d", user.getDepartmentId() != null ? user.getDepartmentId() : 99);
+                String prefix = companyCode + deptCode;
+                
+                String maxMaNhanVien = userRepository.findMaxMaNhanVienByPrefix(prefix);
+                int nextSeq = 1;
+                if (maxMaNhanVien != null && maxMaNhanVien.length() == 8) {
+                    try {
+                        nextSeq = Integer.parseInt(maxMaNhanVien.substring(4)) + 1;
+                    } catch (Exception ignored) {}
+                }
+                
+                String newMa = prefix + String.format("%04d", nextSeq);
+                user.setMaNhanVien(newMa);
+                userRepository.save(user);
+                log.info("[Migration] Cập nhật user {} thành mã mới: {}", user.getEmail(), newMa);
+            }
+        }
     }
 }

@@ -38,6 +38,9 @@ export default function PayrollPage() {
     
     const toast = useToast();
     const { user } = useAuth();
+    
+    const isCeo = user?.role?.toUpperCase() === 'CEO';
+    const isCeoOrDirector = isCeo || user?.role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN';
 
     useEffect(() => {
         fetchPayrolls();
@@ -46,9 +49,8 @@ export default function PayrollPage() {
     const fetchPayrolls = async () => {
         try {
             setLoading(true);
-            const isCeo = user?.role?.toUpperCase() === 'CEO';
             
-            if (isCeo && !viewingDepartment) {
+            if (isCeoOrDirector && !viewingDepartment) {
                 const res = await api.get(`/api/payroll/summary-by-department?month=${month}&year=${year}`);
                 if (res.data?.success) {
                     setDepartmentSummaries(res.data.data || []);
@@ -72,7 +74,7 @@ export default function PayrollPage() {
                         departmentId: empMap[p.employeeId]?.departmentId
                     }));
 
-                    if (isCeo && viewingDepartment) {
+                    if (isCeoOrDirector && viewingDepartment) {
                         enrichedPayrolls = enrichedPayrolls.filter(p => p.departmentId === viewingDepartment.id);
                     }
 
@@ -91,12 +93,14 @@ export default function PayrollPage() {
         fetchPayrolls();
     }, [viewingDepartment]);
 
-    const handleApproveDepartment = async () => {
+    const handleApproveDepartment = async (departmentId) => {
         if (!window.confirm("Bạn có chắc muốn duyệt báo cáo bảng lương của phòng ban? Toàn bộ phiếu lương sẽ được gửi lên Tổng giám đốc.")) return;
         try {
+            // Note: Currently backend approves the director's own department. If departmentId is needed in future, pass it here.
             const res = await api.post(`/api/payroll/department/approve?month=${month}&year=${year}`);
             if (res.data?.success) {
                 toast.show("Thành công", "Đã duyệt báo cáo bảng lương phòng ban", "success");
+                setViewingDepartment(null);
                 fetchPayrolls();
             }
         } catch (error) {
@@ -305,8 +309,8 @@ export default function PayrollPage() {
                                 </Button>
                             )}
                             {user?.role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN' && (
-                                <Button variant="primary" className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-600/20" onClick={handleApproveDepartment}>
-                                    <CheckCircle size={16} /> Duyệt báo cáo phòng ban
+                                <Button variant="primary" className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-600/20" onClick={() => handleApproveDepartment()}>
+                                    <CheckCircle size={16} /> Duyệt tất cả báo cáo
                                 </Button>
                             )}
                             <Button variant="outline" className="flex items-center gap-2 text-green-700 border-green-200 hover:bg-green-50">
@@ -335,9 +339,11 @@ export default function PayrollPage() {
                     <Card>
                         <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 rounded-t-xl flex justify-between items-center">
                             <h2 className="text-lg font-bold text-gray-800">
-                                {user?.role?.toUpperCase() === 'CEO'
-                                    ? `Báo cáo bảng lương các phòng ban tháng ${month}/${year}` 
-                                    : `Bảng lương chi tiết tháng ${month}/${year}`
+                                {isCeo
+                                    ? `Báo cáo bảng lương toàn công ty tháng ${month}/${year}` 
+                                    : user?.role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN' && !viewingDepartment
+                                        ? `Báo cáo bảng lương phòng ban tháng ${month}/${year}`
+                                        : `Bảng lương chi tiết tháng ${month}/${year}`
                                 }
                             </h2>
                         </div>
@@ -348,9 +354,11 @@ export default function PayrollPage() {
                                 <div className="text-gray-500 font-medium">Đang tải dữ liệu...</div>
                             </div>
                         ) : (
-                            user?.role?.toUpperCase() === 'CEO' ? (
+                            (isCeo || user?.role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN') && !viewingDepartment ? (
                                 <DepartmentPayrollSummaryTable 
                                     summaries={departmentSummaries}
+                                    role={user?.role}
+                                    onApprove={(id) => handleApproveDepartment(id)}
                                     onViewDetail={(id, name) => setViewingDepartment({ id, name })}
                                 />
                             ) : (
@@ -364,8 +372,8 @@ export default function PayrollPage() {
                         )}
                     </Card>
 
-                    {/* CEO Viewing Department Detail Modal */}
-                    {user?.role?.toUpperCase() === 'CEO' && viewingDepartment && (
+                    {/* CEO or Director Viewing Department Detail Modal */}
+                    {(isCeo || user?.role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN') && viewingDepartment && (
                         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[40] p-4">
                             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-fade-in-up">
                                 <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/80">
@@ -435,9 +443,16 @@ export default function PayrollPage() {
                                 </div>
                                 <div className="px-6 py-4 border-t border-gray-100 bg-white flex justify-end gap-3">
                                     <Button variant="outline" onClick={() => setViewingDepartment(null)} className="px-6">Đóng</Button>
-                                    <Button variant="primary" onClick={() => setIsRejectDepartmentModalOpen(true)} className="bg-red-600 hover:bg-red-700 focus:ring-4 focus:ring-red-600/20 border-transparent px-6 flex items-center gap-2">
-                                        <AlertTriangle size={16} /> Từ chối báo cáo
-                                    </Button>
+                                    {(isCeo || user?.role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN') && (
+                                        <Button variant="primary" onClick={() => setIsRejectDepartmentModalOpen(true)} className="bg-red-600 hover:bg-red-700 focus:ring-4 focus:ring-red-600/20 border-transparent px-6 flex items-center gap-2">
+                                            <AlertTriangle size={16} /> Từ chối báo cáo
+                                        </Button>
+                                    )}
+                                    {user?.role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN' && (
+                                        <Button variant="primary" onClick={() => handleApproveDepartment(viewingDepartment.id)} className="bg-emerald-600 hover:bg-emerald-700 focus:ring-4 focus:ring-emerald-600/20 border-transparent px-6 flex items-center gap-2">
+                                            <CheckCircle size={16} /> Duyệt báo cáo
+                                        </Button>
+                                    )}
                                 </div>
                             </div>
                         </div>

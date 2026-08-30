@@ -47,8 +47,8 @@ public class AccountCreationService {
             throw new AppException(HttpStatus.BAD_REQUEST, "Email " + request.getEmail() + " đã tồn tại trong hệ thống");
         }
 
-        // 1. Sinh mã nhân viên (6 số, bắt đầu từ 100001)
-        String maNhanVien = generateMaNhanVien();
+        // 1. Sinh mã nhân viên (8 số, format 23 + departmentCode + 000X)
+        String maNhanVien = generateMaNhanVien(request.getDepartmentId());
 
         // 2. Sinh mật khẩu ngẫu nhiên (8 ký tự)
         String rawPassword = generateRandomPassword(8);
@@ -87,17 +87,21 @@ public class AccountCreationService {
         log.info("Đã từ chối yêu cầu tạo tài khoản {}", requestId);
     }
 
-    private String generateMaNhanVien() {
-        Optional<User> lastUserOpt = userRepository.findTopByOrderByMaNhanVienDesc();
-        if (lastUserOpt.isEmpty() || lastUserOpt.get().getMaNhanVien() == null) {
-            return "100001";
+    private String generateMaNhanVien(Long departmentId) {
+        String companyCode = "23";
+        String deptCode = String.format("%02d", departmentId != null ? departmentId : 99);
+        String prefix = companyCode + deptCode;
+        
+        String maxMaNhanVien = userRepository.findMaxMaNhanVienByPrefix(prefix);
+        if (maxMaNhanVien == null || maxMaNhanVien.length() < 8) {
+            return prefix + "0001";
         }
         
         try {
-            int currentMax = Integer.parseInt(lastUserOpt.get().getMaNhanVien());
-            return String.valueOf(currentMax + 1);
+            int currentSequence = Integer.parseInt(maxMaNhanVien.substring(4));
+            return prefix + String.format("%04d", currentSequence + 1);
         } catch (NumberFormatException e) {
-            return "100001";
+            return prefix + "0001";
         }
     }
 

@@ -21,6 +21,7 @@ import UserManagementPage from './pages/admin/UserManagementPage';
 import SystemSettingsPage from './pages/admin/SystemSettingsPage';
 import ManagerDashboardPage from './pages/manager/DashboardPage';
 import DirectorRecruitmentPage from './pages/director/DirectorRecruitmentPage';
+import DirectorMyAttendancePage from './pages/manager/DirectorMyAttendancePage';
 import RecruitmentLayout from './pages/manager/recruitment/RecruitmentLayout';
 import JobPostingList from './pages/manager/recruitment/JobPostingList';
 import JobPostingForm from './pages/manager/recruitment/JobPostingForm';
@@ -125,7 +126,7 @@ export default function App() {
             <Route path="recruitment" element={<DirectorRecruitmentPage />} />
             <Route path="recruitment/applications/:id" element={<ApplicationDetailPage />} />
             <Route path="attendance" element={<ManagerAttendancePage />} />
-            <Route path="my-attendance" element={<EmployeeAttendancePage />} />
+            <Route path="my-attendance" element={<DirectorMyAttendancePage />} />
             <Route path="requests" element={<ManagerRequestsPage />} />
             <Route path="my-requests" element={<MyRequestsPage />} />
             <Route path="holidays" element={<HolidayPage />} />

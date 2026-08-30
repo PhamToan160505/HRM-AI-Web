@@ -21,6 +21,10 @@ export const requestService = {
     const response = await api.post(`/api/requests/${id}/reject`, { note });
     return response.data;
   },
+  forwardRequest: async (id, note = '') => {
+    const response = await api.post(`/api/requests/${id}/forward`, { note });
+    return response.data;
+  },
   getLeaveQuota: async () => {
     const response = await api.get('/api/requests/leave-quota');
     return response.data;

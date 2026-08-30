@@ -69,4 +69,13 @@ public class EmployeeRequestController {
             @RequestBody(required = false) ApproveRequestDto dto) {
         return ResponseEntity.ok(requestService.rejectRequest(userDetails.getUserId(), id, dto));
     }
+
+    @PostMapping("/{id}/forward")
+    @PreAuthorize("hasRole('TRUONG_PHONG')")
+    public ResponseEntity<EmployeeRequestDto> forwardRequest(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long id,
+            @RequestBody(required = false) ApproveRequestDto dto) {
+        return ResponseEntity.ok(requestService.forwardRequest(userDetails.getUserId(), id, dto));
+    }
 }

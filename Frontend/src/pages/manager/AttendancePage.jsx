@@ -115,6 +115,9 @@ export default function ManagerAttendancePage() {
     
     const filteredRecords = records.filter(record => {
         if (record.role === 'CEO') return false;
+        if (user?.role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN' && record.role === 'GIAM_DOC_PHONG_BAN') return false;
+        if (user?.role?.toUpperCase() === 'TRUONG_PHONG' && (record.role === 'GIAM_DOC_PHONG_BAN' || record.role === 'TRUONG_PHONG')) return false;
+        
         if (selectedDepartment && record.departmentId !== selectedDepartment.id) return false;
         
         const matchSearch = record.hoTen?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -238,8 +241,12 @@ export default function ManagerAttendancePage() {
                                 className="px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer text-gray-600 bg-white"
                             >
                                 <option value="">Tất cả chức vụ</option>
-                                <option value="GIAM_DOC_PHONG_BAN">Giám đốc phòng ban</option>
-                                <option value="TRUONG_PHONG">Trưởng phòng</option>
+                                {user?.role?.toUpperCase() === 'CEO' && (
+                                    <option value="GIAM_DOC_PHONG_BAN">Giám đốc phòng ban</option>
+                                )}
+                                {user?.role?.toUpperCase() !== 'TRUONG_PHONG' && (
+                                    <option value="TRUONG_PHONG">Trưởng phòng</option>
+                                )}
                                 <option value="NHAN_VIEN">Nhân viên</option>
                             </select>
                         </div>
