@@ -33,6 +33,10 @@ public class Department {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "is_lock", nullable = false)
+    @Builder.Default
+    private Boolean isLock = false;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

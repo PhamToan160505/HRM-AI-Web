@@ -11,4 +11,5 @@ public class CreateUserRequest {
     private Role role;
     private Long departmentId;
     private String chucVu;
+    private Long requestId;
 }

@@ -7,6 +7,7 @@ import com.hrm.ai.service.CvParserService;
 import com.hrm.ai.service.FraudDetectionService;
 import com.hrm.ai.service.SemanticFitScoreService;
 import com.hrm.recruitment.entity.Application;
+import com.hrm.recruitment.entity.ApplicationStatus;
 import com.hrm.recruitment.entity.JobPosting;
 import com.hrm.recruitment.repository.ApplicationRepository;
 import lombok.RequiredArgsConstructor;
@@ -42,6 +43,8 @@ public class ApplicationService {
     private final EmailService emailService;
     private final AsyncUploadService asyncUploadService;
     private final AccountCreationRequestRepository accountCreationRequestRepository;
+    private final com.hrm.recruitment.repository.JobPostingRepository jobPostingRepository;
+    private final com.hrm.common.repository.DepartmentRepository departmentRepository;
 
     public Application getApplicationById(Long id) {
         return applicationRepository.findById(id)
@@ -52,110 +55,213 @@ public class ApplicationService {
         return aiDecisionLogRepository.findByApplicationId(applicationId);
     }
 
-    public List<Application> getApplicationsByJobPosting(Long jobId) {
+    public List<Application> getApplicationsByJobPosting(Long jobId, com.hrm.security.CustomUserDetails currentUser) {
+        if (!jobPostingService.hasAccessToJob(jobId, currentUser)) {
+            return java.util.Collections.emptyList();
+        }
         return applicationRepository.findByJobPostingId(jobId);
     }
 
     public List<Application> getAllApplications() {
-        return applicationRepository.findAll();
+        return applicationRepository.findAll(org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt"));
     }
 
-    public Application submitToDirector(Long id, boolean isPriority) {
-        Application app = getApplicationById(id);
-        if (!"PENDING".equals(app.getApprovalStatus())) {
-            throw new RuntimeException("Chỉ có thể trình Giám đốc khi hồ sơ đang ở trạng thái PENDING");
+    public org.springframework.data.domain.Page<Application> getApplicationsPaginated(Long jobPostingId, String status, String search, int page, int size, com.hrm.security.CustomUserDetails currentUser) {
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page, size, org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt"));
+        
+        org.springframework.data.jpa.domain.Specification<Application> spec = (root, query, cb) -> {
+            java.util.List<jakarta.persistence.criteria.Predicate> predicates = new java.util.ArrayList<>();
+            
+            if (jobPostingId != null) {
+                predicates.add(cb.equal(root.get("jobPosting").get("id"), jobPostingId));
+            }
+            if (!jobPostingService.isSpecialRole(currentUser)) {
+                jakarta.persistence.criteria.Subquery<Long> subquery = query.subquery(Long.class);
+                jakarta.persistence.criteria.Root<com.hrm.recruitment.entity.JobRequisition> reqRoot = subquery.from(com.hrm.recruitment.entity.JobRequisition.class);
+                subquery.select(reqRoot.get("id")).where(cb.equal(reqRoot.get("requesterId"), currentUser.getUserId()));
+                
+                predicates.add(root.get("jobPosting").get("jobRequisitionId").in(subquery));
+            }
+            if (status != null && !status.isEmpty() && !"ALL".equals(status)) {
+                if ("NEEDS_VERIFICATION".equals(status)) {
+                    predicates.add(cb.equal(root.get("approvalStatus"), ApplicationStatus.NEW));
+                    predicates.add(cb.isTrue(root.get("needsVerification")));
+                } else if ("PENDING_HR_CV_REVIEW".equals(status)) {
+                    predicates.add(cb.equal(root.get("approvalStatus"), ApplicationStatus.PENDING_HR_CV_REVIEW));
+                    predicates.add(cb.isFalse(root.get("needsVerification")));
+                } else {
+                    predicates.add(cb.equal(root.get("approvalStatus"), ApplicationStatus.valueOf(status)));
+                }
+            }
+            if (search != null && !search.isEmpty()) {
+                String searchPattern = "%" + search.toLowerCase() + "%";
+                predicates.add(cb.or(
+                        cb.like(cb.lower(root.get("fullName")), searchPattern),
+                        cb.like(cb.lower(root.get("email")), searchPattern)
+                ));
+            }
+            
+            return cb.and(predicates.toArray(new jakarta.persistence.criteria.Predicate[0]));
+        };
+        
+        return applicationRepository.findAll(spec, pageable);
+    }
+
+    private String getReviewerString(com.hrm.security.CustomUserDetails userDetails) {
+        String departmentName = "";
+        if (userDetails.getDepartmentId() != null) {
+            com.hrm.common.entity.Department dept = departmentRepository.findById(userDetails.getDepartmentId()).orElse(null);
+            if (dept != null) {
+                departmentName = dept.getTenPhong();
+            }
         }
-        app.setApprovalStatus("PENDING_DIRECTOR");
-        app.setIsPriority(isPriority);
+
+        String roleName = "";
+        if (userDetails.getRole() != null) {
+            switch (userDetails.getRole()) {
+                case TRUONG_PHONG: roleName = "Trưởng phòng"; break;
+                case GIAM_DOC_PHONG_BAN: roleName = "Giám đốc"; break;
+                case CEO: roleName = "Tổng Giám đốc (CEO)"; break;
+                case ADMIN: roleName = "Admin"; break;
+                default: roleName = "Nhân viên"; break;
+            }
+        }
+
+        String chucDanh = roleName + (departmentName.isEmpty() ? "" : " " + departmentName);
+        return userDetails.getHoTen() + " - " + chucDanh;
+    }
+
+    public Application approveApplication(Long id, com.hrm.security.CustomUserDetails userDetails, String feedback) {
+        Application app = getApplicationById(id);
+        Role targetRole = app.getJobPosting().getTargetRole();
+        if (targetRole == null) {
+            targetRole = Role.NHAN_VIEN; // fallback
+        }
         
-        Application savedApp = applicationRepository.save(app);
-        
-        // Gửi thông báo cho Giám đốc phòng ban của phòng ban đang tuyển dụng
-        Long departmentId = app.getJobPosting().getDepartmentId();
-        if (departmentId != null) {
-            List<User> giamDocs = userRepository.findByDepartmentId(departmentId).stream()
-                .filter(u -> u.getRole() == Role.GIAM_DOC_PHONG_BAN)
-                .toList();
-            for (User gd : giamDocs) {
-                String message = String.format("Trưởng phòng tuyển dụng vừa trình lên 1 hồ sơ của ứng viên %s cho vị trí %s. Vui lòng xem xét.", 
-                                               app.getFullName(), app.getJobPosting().getTitle());
-                notificationService.createNotification(
-                        gd.getId(),
-                        "tuyen_dung",
-                        "Hồ sơ chờ phê duyệt",
-                        message,
-                        "binh_thuong", // Vẫn là bình thường dù có ưu tiên hay không
-                        "/manager/dashboard" // Đi tới dashboard giám đốc
-                );
+        // --- BẢO MẬT: Phân quyền duyệt chuyên môn Nhân viên ---
+        if (targetRole == Role.NHAN_VIEN && userDetails.getRole() == Role.TRUONG_PHONG) {
+            if (app.getApprovalStatus() == ApplicationStatus.PENDING_TECH_CV_REVIEW ||
+                app.getApprovalStatus() == ApplicationStatus.PENDING_INTERVIEW_1 ||
+                app.getApprovalStatus() == ApplicationStatus.PENDING_INTERVIEW_2) {
+                
+                if (userDetails.getDepartmentId() == null || 
+                    !userDetails.getDepartmentId().equals(app.getJobPosting().getDepartmentId())) {
+                    throw new RuntimeException("Bạn không có quyền duyệt hồ sơ chuyên môn của phòng ban khác");
+                }
             }
         }
         
-        return savedApp;
+        // State Machine Logic
+        switch (app.getApprovalStatus()) {
+            case PENDING_HR_CV_REVIEW:
+                // HR Duyệt CV
+                app.setHrReviewFeedback(feedback);
+                app.setHrReviewer(getReviewerString(userDetails));
+                app.setApprovalStatus(ApplicationStatus.PENDING_TECH_CV_REVIEW);
+                break;
+            case PENDING_TECH_CV_REVIEW:
+                // Trưởng phòng / GĐ Duyệt CV
+                app.setTechReviewFeedback(feedback);
+                app.setTechReviewer(getReviewerString(userDetails));
+                app.setApprovalStatus(ApplicationStatus.PENDING_INTERVIEW_1);
+                break;
+            case PENDING_INTERVIEW_1:
+                // Pass Phỏng vấn vòng 1
+                app.setInterview1Feedback(feedback);
+                app.setInterview1Reviewer(getReviewerString(userDetails));
+                if (targetRole == Role.TRUONG_PHONG) {
+                    app.setApprovalStatus(ApplicationStatus.PENDING_CEO_EVALUATION);
+                } else {
+                    app.setApprovalStatus(ApplicationStatus.PENDING_INTERVIEW_2);
+                }
+                break;
+            case PENDING_CEO_EVALUATION:
+                // TGĐ đánh giá PV 1 của Trưởng phòng
+                app.setApprovalStatus(ApplicationStatus.PENDING_INTERVIEW_2);
+                break;
+            case PENDING_INTERVIEW_2:
+                // Pass Phỏng vấn vòng 2 (Đàm phán)
+                app.setInterview2Feedback(feedback);
+                app.setInterview2Reviewer(getReviewerString(userDetails));
+                app.setApprovalStatus(ApplicationStatus.PENDING_HR_OFFER);
+                break;
+            case PENDING_HR_OFFER:
+                // HR lên Bảng Offer trình CEO
+                app.setOfferDetails(feedback);
+                app.setApprovalStatus(ApplicationStatus.PENDING_OFFER_APPROVAL);
+                break;
+            case PENDING_OFFER_APPROVAL:
+                // TGĐ Duyệt Offer cuối cùng (Có thể lưu lại CEO feedback nếu cần, ở đây tạm thời chỉ duyệt)
+                // app.setCeoFeedback(feedback); // Nếu có
+                app.setApprovalStatus(ApplicationStatus.OFFER_APPROVED);
+                // Gửi Offer Letter
+                emailService.sendApprovalEmail(app.getEmail(), app.getFullName(), app.getJobPosting().getTitle()); // Tạm dùng Approval email
+                // Tạo tài khoản cho nhân viên mới
+                AccountCreationRequest accountReq = AccountCreationRequest.builder()
+                        .applicationId(app.getId())
+                        .hoTen(app.getFullName())
+                        .email(app.getEmail())
+                        .chucVu(app.getJobPosting().getTitle())
+                        .departmentId(app.getJobPosting().getDepartmentId())
+                        .status(AccountCreationRequest.RequestStatus.PENDING)
+                        .build();
+                accountCreationRequestRepository.save(accountReq);
+
+                // Tự động đóng chiến dịch nếu đã tuyển đủ số lượng
+                int currentAccepted = (int) applicationRepository.countByJobPostingIdAndApprovalStatus(app.getJobPosting().getId(), ApplicationStatus.OFFER_APPROVED);
+                if (currentAccepted + 1 >= app.getJobPosting().getSoLuongTuyen()) {
+                    app.getJobPosting().setStatus("CLOSED");
+                    jobPostingRepository.save(app.getJobPosting());
+                }
+                
+                break;
+            default:
+                throw new RuntimeException("Trạng thái hiện tại không cho phép duyệt: " + app.getApprovalStatus());
+        }
+        return applicationRepository.save(app);
     }
 
-    public Application rejectByHr(Long id) {
+    public Application rejectApplication(Long id, com.hrm.security.CustomUserDetails userDetails, String reason) {
         Application app = getApplicationById(id);
-        if (!"PENDING".equals(app.getApprovalStatus())) {
-            throw new RuntimeException("Chỉ có thể loại hồ sơ khi đang ở trạng thái PENDING");
+        if (app.getApprovalStatus() == ApplicationStatus.OFFER_APPROVED || app.getApprovalStatus() == ApplicationStatus.REJECTED) {
+            throw new RuntimeException("Hồ sơ đã đóng, không thể từ chối");
         }
-        app.setApprovalStatus("REJECTED");
-        Application savedApp = applicationRepository.save(app);
-        
-        // Gửi email cảm ơn
-        emailService.sendRejectionEmail(savedApp.getEmail(), savedApp.getFullName(), savedApp.getJobPosting().getTitle());
-        
-        return savedApp;
-    }
 
-    public Application approveByDirector(Long id, com.hrm.security.CustomUserDetails userDetails) {
-        Application app = getApplicationById(id);
-        if (!"PENDING_DIRECTOR".equals(app.getApprovalStatus())) {
-            throw new RuntimeException("Chỉ có thể duyệt hồ sơ khi đang ở trạng thái PENDING_DIRECTOR");
-        }
-        if (userDetails.getRole() == Role.GIAM_DOC_PHONG_BAN) {
-            Long deptId = app.getJobPosting().getDepartmentId();
-            if (deptId != null && !deptId.equals(userDetails.getDepartmentId())) {
-                throw new RuntimeException("Bạn không có quyền duyệt hồ sơ của phòng ban khác");
+        Role targetRole = app.getJobPosting().getTargetRole();
+        if (targetRole == null) targetRole = Role.NHAN_VIEN;
+
+        // --- BẢO MẬT: Phân quyền từ chối chuyên môn Nhân viên ---
+        if (targetRole == Role.NHAN_VIEN && userDetails.getRole() == Role.TRUONG_PHONG) {
+            if (app.getApprovalStatus() == ApplicationStatus.PENDING_TECH_CV_REVIEW ||
+                app.getApprovalStatus() == ApplicationStatus.PENDING_INTERVIEW_1 ||
+                app.getApprovalStatus() == ApplicationStatus.PENDING_INTERVIEW_2) {
+                
+                boolean isSameDepartment = userDetails.getDepartmentId() != null && 
+                    userDetails.getDepartmentId().equals(app.getJobPosting().getDepartmentId());
+                
+                boolean isHR = false;
+                if (userDetails.getDepartmentId() != null) {
+                    com.hrm.common.entity.Department dept = departmentRepository.findById(userDetails.getDepartmentId()).orElse(null);
+                    if (dept != null && "Nhân sự".equals(dept.getTenPhong())) {
+                        isHR = true;
+                    }
+                }
+                
+                if (!isSameDepartment && !isHR) {
+                    throw new RuntimeException("Bạn không có quyền từ chối hồ sơ chuyên môn của phòng ban khác");
+                }
             }
         }
-        app.setApprovalStatus("APPROVED");
-        Application savedApp = applicationRepository.save(app);
+        app.setApprovalStatus(ApplicationStatus.REJECTED);
+        app.setRejectionReason(reason);
+        app.setRejectorName(getReviewerString(userDetails));
         
-        // Gửi email trúng tuyển
-        emailService.sendApprovalEmail(savedApp.getEmail(), savedApp.getFullName(), savedApp.getJobPosting().getTitle());
-        
-        // Tạo yêu cầu sinh tài khoản cho Admin
-        AccountCreationRequest accountReq = AccountCreationRequest.builder()
-                .applicationId(savedApp.getId())
-                .hoTen(savedApp.getFullName())
-                .email(savedApp.getEmail())
-                .chucVu(savedApp.getJobPosting().getTitle())
-                .status(AccountCreationRequest.RequestStatus.PENDING)
-                .build();
-        accountCreationRequestRepository.save(accountReq);
-        
-        return savedApp;
-    }
-
-    public Application rejectByDirector(Long id, String reason, com.hrm.security.CustomUserDetails userDetails) {
-        Application app = getApplicationById(id);
-        if (!"PENDING_DIRECTOR".equals(app.getApprovalStatus())) {
-            throw new RuntimeException("Chỉ có thể loại hồ sơ khi đang ở trạng thái PENDING_DIRECTOR");
-        }
-        if (userDetails.getRole() == Role.GIAM_DOC_PHONG_BAN) {
-            Long deptId = app.getJobPosting().getDepartmentId();
-            if (deptId != null && !deptId.equals(userDetails.getDepartmentId())) {
-                throw new RuntimeException("Bạn không có quyền từ chối hồ sơ của phòng ban khác");
-            }
-        }
-        app.setApprovalStatus("REJECTED");
-        
-        String directorName = userDetails.getHoTen() != null ? userDetails.getHoTen() : "Giám đốc";
-        
+        // Ghi Log AI Decision cho việc từ chối thủ công
+        String rejecterName = userDetails.getHoTen() != null ? userDetails.getHoTen() : "Người duyệt";
         AiDecisionLog logEntry = AiDecisionLog.builder()
                 .applicationId(app.getId())
                 .actionType("MANUAL_REJECTION")
-                .rawRequest(directorName + " từ chối")
+                .rawRequest(rejecterName + " từ chối")
                 .decisionReason(reason)
                 .isSuccess(true)
                 .build();
@@ -191,10 +297,7 @@ public class ApplicationService {
             throw new RuntimeException("Đợt tuyển dụng này đã hết hạn nộp hồ sơ (" + job.getHanNopHoSo().toLocalDate() + ")");
         }
         
-        long currentAppCount = applicationRepository.findByJobPostingId(job.getId()).size();
-        if (currentAppCount >= job.getSoLuongTuyen()) {
-            throw new RuntimeException("Đợt tuyển dụng này đã nhận đủ giới hạn số lượng hồ sơ (" + job.getSoLuongTuyen() + " ứng viên)");
-        }
+
 
         // Chống nộp trùng (Double-submit prevention)
         java.time.LocalDateTime fiveMinutesAgo = java.time.LocalDateTime.now().minusMinutes(5);
@@ -216,7 +319,7 @@ public class ApplicationService {
                 .cccdUrl("UPLOADING")
                 .rawCvText("Đang trích xuất văn bản (chạy ngầm)...") // Lưu tạm thời, AsyncUploadService sẽ cập nhật
                 .extractedData(extractedData)     // Lưu thông tin người dùng đã xác nhận từ frontend
-                .approvalStatus("PENDING") // Chờ HR xử lý (sau khi AI đánh giá)
+                .approvalStatus(com.hrm.recruitment.entity.ApplicationStatus.NEW) // Vừa mới tạo, chờ AI duyệt
                 .needsVerification(false)
                 .isPriority(false)
                 .fraudFlagged(false)
@@ -232,10 +335,7 @@ public class ApplicationService {
         
         asyncUploadService.uploadFilesAndUpdateApplicationAsync(savedApp.getId(), cvBytes, cvFilename, cccdBytes, cccdFilename);
         
-        // Tự động đóng form nếu đạt giới hạn
-        if (currentAppCount + 1 >= job.getSoLuongTuyen()) {
-            jobPostingService.updateJobStatus(job.getId(), "CLOSED");
-        }
+
         
         return savedApp;
     }
@@ -301,7 +401,7 @@ public class ApplicationService {
         }
 
         // 1. Chấm Fit Score ĐẦU TIÊN (Để tiết kiệm token)
-        String capBacStr = jd.getCapBac() != null ? jd.getCapBac().name() : null;
+        String capBacStr = jd.getCapBac() != null ? jd.getCapBac() : null;
         String combinedJd = jd.getDescription() + "\n" + (jd.getRequirements() != null ? jd.getRequirements() : "");
         SemanticFitScoreService.FitScoreResult fitScoreResult = semanticFitScoreService.calculateFitScore(app.getId(), rawCvText, combinedJd, capBacStr);
         app.setFitScore(fitScoreResult.score());
@@ -309,8 +409,10 @@ public class ApplicationService {
         // Nếu điểm quá thấp (< 40), chứng tỏ CV không phù hợp (mismatch)
         // -> Từ chối luôn, KHÔNG chạy kiểm tra gian lận và KHÔNG trích xuất câu hỏi phỏng vấn để tiết kiệm token.
         if (fitScoreResult.score() < 40) {
-            app.setApprovalStatus("REJECTED");
+            app.setApprovalStatus(com.hrm.recruitment.entity.ApplicationStatus.REJECTED);
             applicationRepository.save(app);
+            // Gửi email cảm ơn
+            emailService.sendRejectionEmail(app.getEmail(), app.getFullName(), jd.getTitle());
             return;
         }
 
@@ -348,9 +450,10 @@ public class ApplicationService {
                 log.warn("Không thể merge extractedData: " + e.getMessage());
             }
         }
-        // removed extra brace
         // Đánh giá hoàn tất thành công
         app.setExtractedData(extractedJson);
+        // AI duyệt xong, chuyển qua cho HR review CV
+        app.setApprovalStatus(com.hrm.recruitment.entity.ApplicationStatus.PENDING_HR_CV_REVIEW);
 
         applicationRepository.save(app);
     }

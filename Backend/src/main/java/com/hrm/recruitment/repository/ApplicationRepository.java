@@ -8,8 +8,10 @@ import java.util.List;
 
 import java.time.LocalDateTime;
 
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+
 @Repository
-public interface ApplicationRepository extends JpaRepository<Application, Long> {
+public interface ApplicationRepository extends JpaRepository<Application, Long>, JpaSpecificationExecutor<Application> {
     List<Application> findByJobPostingId(Long jobPostingId);
     List<Application> findByCreatedAtAfter(LocalDateTime date);
     
@@ -19,6 +21,8 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
     java.util.List<Application> findTop5ByOrderByCreatedAtDesc();
     
     boolean existsByEmailAndJobPostingIdAndCreatedAtAfter(String email, Long jobPostingId, LocalDateTime time);
+    long countByJobPostingId(Long jobPostingId);
+    long countByJobPostingIdAndApprovalStatus(Long jobPostingId, com.hrm.recruitment.entity.ApplicationStatus status);
     long countByApprovalStatusAndJobPosting_DepartmentId(String status, Long departmentId);
     java.util.List<Application> findTop5ByJobPosting_DepartmentIdOrderByCreatedAtDesc(Long departmentId);
 }

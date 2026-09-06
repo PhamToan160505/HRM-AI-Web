@@ -1,5 +1,6 @@
 package com.hrm.recruitment.entity;
 
+import com.hrm.common.entity.Role;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -41,9 +42,8 @@ public class JobPosting {
     @Column(nullable = false)
     private String diaDiem;
 
-    @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private HinhThucLamViec hinhThucLamViec;
+    private String hinhThucLamViec;
 
     @Column(nullable = false)
     private LocalDateTime ngayBatDau;
@@ -59,11 +59,17 @@ public class JobPosting {
     @Column(columnDefinition = "TEXT")
     private String quyenLoi;
 
-    @Enumerated(EnumType.STRING)
-    private CapBac capBac;
+    private String capBac;
 
     @Column(name = "department_id")
     private Long departmentId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "target_role", nullable = false)
+    private Role targetRole; // NHAN_VIEN, TRUONG_PHONG, GIAM_DOC_PHONG
+
+    @Column(name = "job_requisition_id")
+    private Long jobRequisitionId;
 
     @CreationTimestamp
     private LocalDateTime createdAt;

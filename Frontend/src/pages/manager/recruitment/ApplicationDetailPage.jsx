@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, X, ShieldAlert, Sparkles, Loader2, FileText } from 'lucide-react';
+import { ArrowLeft, Check, X, ShieldAlert, Sparkles, Loader2, FileText, XCircle } from 'lucide-react';
 import { useNotification } from '../../../context/NotificationContext';
 import { useAuth } from '../../../context/AuthContext';
 import api, { apiAi } from '../../../services/api';
@@ -25,10 +25,15 @@ export default function ApplicationDetailPage() {
   const [decisionLogModal, setDecisionLogModal] = useState({ isOpen: false, log: null });
   const [runningAi, setRunningAi] = useState(false);
   const [showAiDrawer, setShowAiDrawer] = useState(false);
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, status: null, currentLabel: '', newLabel: '' });
   const [submitModal, setSubmitModal] = useState({ isOpen: false, isPriority: false });
   const [rejectModal, setRejectModal] = useState({ isOpen: false, reason: '' });
+  const [approveModal, setApproveModal] = useState({ 
+    isOpen: false, 
+    feedback: '', 
+    fields: { luongCoBan: '', phuCap: '', thuViec: '' }
+  });
 
   useEffect(() => {
     const fetchApp = api.get(`/api/recruitment/applications/${id}`);
@@ -56,50 +61,42 @@ export default function ApplicationDetailPage() {
     // legacy method, removed.
   };
 
-  const executeSubmitToDirector = async () => {
+  const executeApprove = async () => {
     try {
-      const res = await api.post(`/api/recruitment/applications/${id}/submit-to-director`, { isPriority: submitModal.isPriority });
-      if (res.data.success) {
-        setApplication(res.data.data);
-        showNotification('Thành công', 'Đã trình lên Giám đốc', 'success');
-        setSubmitModal({ isOpen: false, isPriority: false });
+      let payload = {};
+      
+      // Nếu đang ở bước lên Offer, gộp các trường lại thành 1 chuỗi Bảng Offer hoàn chỉnh
+      if (application?.approvalStatus === 'PENDING_HR_OFFER') {
+        const { luongCoBan, phuCap, thuViec } = approveModal.fields;
+        let offerText = `[BẢNG ĐỀ XUẤT OFFER]\n`;
+        if (luongCoBan) offerText += `- Lương cơ bản: ${luongCoBan}\n`;
+        if (phuCap) offerText += `- Phụ cấp/Phúc lợi: ${phuCap}\n`;
+        if (thuViec) offerText += `- Thời gian thử việc: ${thuViec}\n`;
+        if (approveModal.feedback) offerText += `\n[Nội dung khác]\n${approveModal.feedback}`;
+        
+        payload.feedback = offerText;
+      } else if (approveModal.feedback) {
+        payload.feedback = approveModal.feedback;
       }
-    } catch (e) {
-      showNotification('Lỗi', e.response?.data?.message || 'Không thể trình GĐ', 'error');
-    }
-  };
 
-  const executeHrReject = async () => {
-    try {
-      const res = await api.post(`/api/recruitment/applications/${id}/reject-hr`);
+      const res = await api.post(`/api/recruitment/applications/${id}/approve`, payload);
       if (res.data.success) {
         setApplication(res.data.data);
-        showNotification('Thành công', 'Đã loại hồ sơ', 'success');
-      }
-    } catch (e) {
-      showNotification('Lỗi', e.response?.data?.message || 'Không thể loại hồ sơ', 'error');
-    }
-  };
-
-  const executeDirectorApprove = async () => {
-    try {
-      const res = await api.post(`/api/recruitment/applications/${id}/approve-director`);
-      if (res.data.success) {
-        setApplication(res.data.data);
-        showNotification('Thành công', 'Đã phê duyệt hồ sơ', 'success');
+        showNotification('Thành công', 'Đã duyệt hồ sơ sang bước tiếp theo', 'success');
+        setApproveModal({ isOpen: false, feedback: '', fields: { luongCoBan: '', phuCap: '', thuViec: '' } });
       }
     } catch (e) {
       showNotification('Lỗi', e.response?.data?.message || 'Không thể phê duyệt', 'error');
     }
   };
 
-  const executeDirectorReject = async () => {
+  const executeReject = async () => {
     if (!rejectModal.reason.trim()) {
       showNotification('Lỗi', 'Vui lòng nhập lý do từ chối', 'error');
       return;
     }
     try {
-      const res = await api.post(`/api/recruitment/applications/${id}/reject-director`, { reason: rejectModal.reason });
+      const res = await api.post(`/api/recruitment/applications/${id}/reject`, { reason: rejectModal.reason });
       if (res.data.success) {
         setApplication(res.data.data);
         showNotification('Thành công', 'Đã từ chối hồ sơ', 'success');
@@ -108,6 +105,62 @@ export default function ApplicationDetailPage() {
     } catch (e) {
       showNotification('Lỗi', e.response?.data?.message || 'Không thể từ chối', 'error');
     }
+  };
+
+  const canApprove = () => {
+    if (!application) return false;
+    const s = application.approvalStatus;
+    const targetRole = application.jobPosting?.targetRole || 'NHAN_VIEN';
+    
+    if (s === 'OFFER_APPROVED' || s === 'REJECTED' || s === 'NEW') return false;
+    if (role === 'admin') return true;
+    
+    // CEO Logic
+    if (role === 'ceo') {
+      if (s === 'PENDING_OFFER_APPROVAL') return true;
+      if (targetRole === 'TRUONG_PHONG') {
+        if (s === 'PENDING_CEO_EVALUATION') return true;
+      }
+      if (targetRole === 'GIAM_DOC_PHONG_BAN') {
+        if (s === 'PENDING_TECH_CV_REVIEW' || s === 'PENDING_INTERVIEW_1' || s === 'PENDING_INTERVIEW_2') return true;
+      }
+      return false;
+    }
+
+    // Giám đốc phòng ban Logic
+    if (role === 'giam_doc_phong_ban') {
+      if (targetRole === 'TRUONG_PHONG') {
+        if (s === 'PENDING_TECH_CV_REVIEW' || s === 'PENDING_INTERVIEW_1' || s === 'PENDING_INTERVIEW_2') return true;
+      }
+      return false;
+    }
+
+    // Trưởng phòng Logic
+    if (role === 'truong_phong') {
+      if (s === 'PENDING_HR_CV_REVIEW' && user?.tenPhong === 'Nhân sự') return true;
+      if (s === 'PENDING_HR_OFFER' && user?.tenPhong === 'Nhân sự') return true; // Chỉ HR mới được soạn Offer
+      if (targetRole === 'NHAN_VIEN') {
+        if (s === 'PENDING_TECH_CV_REVIEW' || s === 'PENDING_INTERVIEW_1' || s === 'PENDING_INTERVIEW_2') {
+          // Chỉ Trưởng phòng của đúng phòng ban đó mới có quyền duyệt chuyên môn
+          if (user?.departmentId === application?.jobPosting?.departmentId) return true;
+        }
+      }
+      return false;
+    }
+
+    return false;
+  };
+
+  const canReject = () => {
+    if (!application) return false;
+    const s = application.approvalStatus;
+    if (s === 'OFFER_APPROVED' || s === 'REJECTED' || s === 'NEW') return false;
+    if (role === 'admin' || role === 'ceo') return true;
+    
+    // Trưởng phòng Nhân sự luôn có quyền từ chối ở bất kỳ bước nào
+    if (role === 'truong_phong' && user?.tenPhong === 'Nhân sự') return true;
+    
+    return canApprove();
   };
 
   const handleRunAi = async () => {
@@ -167,9 +220,15 @@ export default function ApplicationDetailPage() {
                 'REJECTED':          'bg-rose-50 text-rose-700 border-rose-200',
               }[application.decisionStatus] || 'bg-slate-100 text-slate-700 border-slate-200'
             }`}>
-              {application.approvalStatus === 'PENDING' && 'Chờ HR xử lý'}
-              {application.approvalStatus === 'PENDING_DIRECTOR' && 'Chờ GĐ duyệt'}
-              {application.approvalStatus === 'APPROVED' && 'Đã duyệt'}
+              {application.approvalStatus === 'NEW' && 'Chờ AI xử lý'}
+              {application.approvalStatus === 'PENDING_HR_CV_REVIEW' && 'HR Duyệt CV'}
+              {application.approvalStatus === 'PENDING_TECH_CV_REVIEW' && 'Chuyên môn Duyệt CV'}
+              {application.approvalStatus === 'PENDING_INTERVIEW_1' && 'Phỏng vấn 1'}
+              {application.approvalStatus === 'PENDING_CEO_EVALUATION' && 'TGĐ Đánh giá'}
+              {application.approvalStatus === 'PENDING_INTERVIEW_2' && 'Phỏng vấn 2'}
+              {application.approvalStatus === 'PENDING_HR_OFFER' && 'Chờ HR lên Offer'}
+              {application.approvalStatus === 'PENDING_OFFER_APPROVAL' && 'Chờ duyệt Offer'}
+              {application.approvalStatus === 'OFFER_APPROVED' && 'Đã nhận việc'}
               {application.approvalStatus === 'REJECTED' && 'Đã loại'}
             </span>
             {application.isPriority && (
@@ -180,37 +239,21 @@ export default function ApplicationDetailPage() {
             )}
           </div>
           <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
-            {role === 'truong_phong' && application.approvalStatus === 'PENDING' && (
-              <>
+            {canApprove() && (
                 <button 
-                  onClick={() => setSubmitModal({ isOpen: true, isPriority: false })}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-medium transition-colors text-sm border bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200"
-                >
-                  <Check size={16} /> Trình GĐ
-                </button>
-                <button 
-                  onClick={executeHrReject}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-medium transition-colors text-sm border bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200"
-                >
-                  <X size={16} /> Loại
-                </button>
-              </>
-            )}
-            {role === 'giam_doc_phong_ban' && application.approvalStatus === 'PENDING_DIRECTOR' && (
-              <>
-                <button 
-                  onClick={executeDirectorApprove}
+                  onClick={() => setApproveModal({ ...approveModal, isOpen: true })}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-medium transition-colors text-sm border bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200"
                 >
-                  <Check size={16} /> Phê duyệt
+                  <Check size={16} /> Duyệt chuyển bước
                 </button>
+            )}
+            {canReject() && (
                 <button 
                   onClick={() => setRejectModal({ isOpen: true, reason: '' })}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-medium transition-colors text-sm border bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200"
                 >
                   <X size={16} /> Từ chối
                 </button>
-              </>
             )}
           </div>
 
@@ -224,18 +267,6 @@ export default function ApplicationDetailPage() {
       </div>
 
       {/* Main Content Area */}
-      {application.approvalStatus === 'REJECTED' && (
-        <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 mb-6 flex items-start gap-3">
-          <X className="text-rose-600 mt-0.5 shrink-0" size={20} />
-          <div>
-            <h3 className="text-rose-800 font-bold text-sm">Hồ sơ đã bị từ chối</h3>
-            <p className="text-rose-700 text-sm mt-1">
-              Lý do: {aiLogs.find(l => l.actionType === 'MANUAL_REJECTION')?.decisionReason || 'Không có lý do chi tiết.'}
-            </p>
-          </div>
-        </div>
-      )}
-
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
         <div className="flex flex-col lg:flex-row gap-12">
           
@@ -247,6 +278,69 @@ export default function ApplicationDetailPage() {
             <div className="w-full h-px bg-slate-100 my-8"></div>
             
             <CandidateExperienceList experienceList={extractedData?.experience || []} />
+            
+            {/* Hiển thị Lịch sử Nhận xét */}
+            {(application.hrReviewFeedback || application.techReviewFeedback || application.interview1Feedback || application.interview2Feedback || application.rejectionReason) && (
+              <div className="mt-8 bg-blue-50 border border-blue-200 rounded-xl p-5 shadow-sm">
+                <h3 className="text-blue-800 font-bold text-lg mb-4 flex items-center gap-2">
+                  <FileText size={20} className="text-blue-600" /> Lịch sử nhận xét
+                </h3>
+                <div className="space-y-4">
+                  {application.hrReviewFeedback && (
+                    <div className="bg-white p-4 rounded-lg border border-blue-100 shadow-sm">
+                      <p className="text-xs font-bold text-slate-500 uppercase mb-1">
+                        HR Duyệt CV {application.hrReviewer && <span className="text-blue-600 normal-case font-medium ml-1">(Bởi: {application.hrReviewer})</span>}
+                      </p>
+                      <p className="text-sm text-slate-700 whitespace-pre-wrap">{application.hrReviewFeedback}</p>
+                    </div>
+                  )}
+                  {application.techReviewFeedback && (
+                    <div className="bg-white p-4 rounded-lg border border-blue-100 shadow-sm">
+                      <p className="text-xs font-bold text-slate-500 uppercase mb-1">
+                        Chuyên môn duyệt CV {application.techReviewer && <span className="text-blue-600 normal-case font-medium ml-1">(Bởi: {application.techReviewer})</span>}
+                      </p>
+                      <p className="text-sm text-slate-700 whitespace-pre-wrap">{application.techReviewFeedback}</p>
+                    </div>
+                  )}
+                  {application.interview1Feedback && (
+                    <div className="bg-white p-4 rounded-lg border border-blue-100 shadow-sm">
+                      <p className="text-xs font-bold text-slate-500 uppercase mb-1">
+                        Phỏng vấn lần 1 {application.interview1Reviewer && <span className="text-blue-600 normal-case font-medium ml-1">(Bởi: {application.interview1Reviewer})</span>}
+                      </p>
+                      <p className="text-sm text-slate-700 whitespace-pre-wrap">{application.interview1Feedback}</p>
+                    </div>
+                  )}
+                  {application.interview2Feedback && (
+                    <div className="bg-white p-4 rounded-lg border border-blue-100 shadow-sm">
+                      <p className="text-xs font-bold text-slate-500 uppercase mb-1">
+                        Phỏng vấn lần 2 {application.interview2Reviewer && <span className="text-blue-600 normal-case font-medium ml-1">(Bởi: {application.interview2Reviewer})</span>}
+                      </p>
+                      <p className="text-sm text-slate-700 whitespace-pre-wrap">{application.interview2Feedback}</p>
+                    </div>
+                  )}
+                  {application.rejectionReason && (
+                    <div className="bg-rose-50 p-4 rounded-lg border border-rose-200 shadow-sm">
+                      <p className="text-xs font-bold text-rose-600 uppercase mb-1">
+                        Từ chối hồ sơ {application.rejectorName && <span className="text-rose-700 normal-case font-medium ml-1">(Bởi: {application.rejectorName})</span>}
+                      </p>
+                      <p className="text-sm text-rose-800 whitespace-pre-wrap">{application.rejectionReason}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            
+            {/* Hiển thị Bảng Đề xuất Offer (Nếu có) */}
+            {application.offerDetails && (
+              <div className="mt-8 bg-emerald-50 border border-emerald-200 rounded-xl p-5 shadow-sm">
+                <h3 className="text-emerald-800 font-bold text-lg mb-3 flex items-center gap-2">
+                  <Check size={20} className="text-emerald-600" /> Bảng Đề xuất Offer (Từ HR)
+                </h3>
+                <div className="text-sm text-slate-700 whitespace-pre-wrap bg-white p-4 rounded-lg border border-emerald-100 shadow-sm">
+                  {application.offerDetails}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Đường line chia cột (chỉ hiện trên màn hình lớn) */}
@@ -431,31 +525,122 @@ export default function ApplicationDetailPage() {
         </div>
       )}
 
-      {/* Reject Director Modal */}
+      {/* Modal Từ chối */}
       {rejectModal.isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setRejectModal({ isOpen: false, reason: '' })}></div>
-          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-            <h3 className="text-lg font-bold text-slate-800 mb-4">Từ chối hồ sơ</h3>
-            <p className="text-sm text-slate-600 mb-3">Vui lòng ghi rõ lý do từ chối để bộ phận nhân sự nắm thông tin.</p>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setRejectModal({isOpen: false, reason: ''})}></div>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md relative p-6 animate-in zoom-in-95 duration-200">
+            <h3 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <XCircle className="text-rose-500" /> Từ chối và Loại ứng viên
+            </h3>
+            <p className="text-sm text-slate-600 mb-4">Bạn có chắc chắn muốn từ chối ứng viên này không? Hãy nhập lý do (thông tin này sẽ được lưu trong hệ thống).</p>
             <textarea
-              className="w-full border border-slate-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-rose-500 focus:border-rose-500 min-h-[100px] mb-6 outline-none"
-              placeholder="Ví dụ: Chưa đủ kinh nghiệm quản lý dự án..."
+              className="w-full border border-slate-200 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 bg-slate-50 min-h-[100px] mb-6 text-sm"
+              placeholder="Nhập lý do chi tiết..."
               value={rejectModal.reason}
-              onChange={(e) => setRejectModal({ ...rejectModal, reason: e.target.value })}
-            ></textarea>
-            <div className="flex justify-end gap-3">
+              onChange={e => setRejectModal({...rejectModal, reason: e.target.value})}
+            />
+            <div className="flex gap-3 justify-end">
               <button 
-                onClick={() => setRejectModal({ isOpen: false, reason: '' })}
-                className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg"
+                onClick={() => setRejectModal({isOpen: false, reason: ''})}
+                className="px-4 py-2 rounded-lg text-slate-600 font-medium hover:bg-slate-100 transition-colors"
               >
-                Hủy
+                Hủy bỏ
               </button>
               <button 
-                onClick={executeDirectorReject}
+                onClick={executeReject}
                 className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-medium rounded-lg"
               >
                 Xác nhận Từ chối
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Duyệt & Lên Offer */}
+      {approveModal.isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setApproveModal({...approveModal, isOpen: false})}></div>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg relative p-6 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <Check className="text-emerald-500" /> Xác nhận Duyệt Hồ Sơ
+            </h3>
+            
+            {application?.approvalStatus === 'PENDING_HR_OFFER' ? (
+              <div className="space-y-4 mb-6">
+                <p className="text-sm text-slate-600">Vui lòng soạn Bảng Đề xuất Offer để trình lên Tổng Giám đốc phê duyệt.</p>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Lương cơ bản</label>
+                  <input 
+                    type="text" 
+                    className="w-full border border-slate-200 rounded-xl p-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-slate-50 text-sm"
+                    placeholder="VD: 20.000.000"
+                    value={approveModal.fields.luongCoBan}
+                    onChange={(e) => {
+                      const rawValue = e.target.value.replace(/\D/g, '');
+                      let formatted = '';
+                      if (rawValue) {
+                        formatted = Number(rawValue).toLocaleString('vi-VN');
+                      }
+                      setApproveModal({...approveModal, fields: {...approveModal.fields, luongCoBan: formatted}});
+                    }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Phụ cấp & Phúc lợi</label>
+                  <input 
+                    type="text" 
+                    className="w-full border border-slate-200 rounded-xl p-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-slate-50 text-sm"
+                    placeholder="VD: Phụ cấp ăn trưa 50k/ngày, BHXH..."
+                    value={approveModal.fields.phuCap}
+                    onChange={(e) => setApproveModal({...approveModal, fields: {...approveModal.fields, phuCap: e.target.value}})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Thời gian thử việc</label>
+                  <input 
+                    type="text" 
+                    className="w-full border border-slate-200 rounded-xl p-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-slate-50 text-sm"
+                    placeholder="VD: 2 tháng (85% lương)"
+                    value={approveModal.fields.thuViec}
+                    onChange={(e) => setApproveModal({...approveModal, fields: {...approveModal.fields, thuViec: e.target.value}})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Thêm nội dung khác (Tùy chọn)</label>
+                  <textarea
+                    className="w-full border border-slate-200 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-slate-50 min-h-[80px] text-sm"
+                    placeholder="Nhập các điều khoản hoặc lưu ý khác cho CEO..."
+                    value={approveModal.feedback}
+                    onChange={e => setApproveModal({...approveModal, feedback: e.target.value})}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="mb-6">
+                <p className="text-sm text-slate-600 mb-4">Bạn có chắc chắn muốn duyệt ứng viên này sang bước tiếp theo? Bạn có thể để lại lời nhắn hoặc nhận xét (Tùy chọn).</p>
+                <textarea
+                  className="w-full border border-slate-200 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-slate-50 min-h-[100px] text-sm"
+                  placeholder="Nhập nhận xét của bạn..."
+                  value={approveModal.feedback}
+                  onChange={e => setApproveModal({...approveModal, feedback: e.target.value})}
+                />
+              </div>
+            )}
+            
+            <div className="flex gap-3 justify-end">
+              <button 
+                onClick={() => setApproveModal({...approveModal, isOpen: false})}
+                className="px-4 py-2 rounded-lg text-slate-600 font-medium hover:bg-slate-100 transition-colors"
+              >
+                Hủy bỏ
+              </button>
+              <button 
+                onClick={executeApprove}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg"
+              >
+                Xác nhận Duyệt
               </button>
             </div>
           </div>

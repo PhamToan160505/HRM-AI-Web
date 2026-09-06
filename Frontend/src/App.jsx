@@ -17,6 +17,7 @@ import PublicApplyForm from './pages/public/PublicApplyForm';
 import CeoDashboardPage from './pages/ceo/CeoDashboardPage';
 import DirectorDashboardPage from './pages/director/DashboardPage';
 import AdminDashboardPage from './pages/admin/AdminDashboardPage';
+import DepartmentManagementPage from './pages/admin/DepartmentManagementPage';
 import UserManagementPage from './pages/admin/UserManagementPage';
 import SystemSettingsPage from './pages/admin/SystemSettingsPage';
 import ManagerDashboardPage from './pages/manager/DashboardPage';
@@ -27,6 +28,9 @@ import JobPostingList from './pages/manager/recruitment/JobPostingList';
 import JobPostingForm from './pages/manager/recruitment/JobPostingForm';
 import ApplicationListPage from './pages/manager/recruitment/ApplicationListPage';
 import ApplicationDetailPage from './pages/manager/recruitment/ApplicationDetailPage';
+import JobRequisitionPage from './pages/manager/recruitment/JobRequisitionPage';
+import JobRequisitionForm from './pages/manager/recruitment/JobRequisitionForm';
+import ApplicationPipeline from './pages/manager/recruitment/ApplicationPipeline';
 import EmployeeDashboardPage from './pages/employee/DashboardPage';
 import EmployeeListPage from './pages/manager/employees/EmployeeListPage';
 import FaceEnrollment from './pages/employee/FaceEnrollment';
@@ -78,6 +82,7 @@ export default function App() {
           >
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<AdminDashboardPage />} />
+            <Route path="departments" element={<DepartmentManagementPage />} />
             <Route path="users" element={<UserManagementPage />} />
             <Route path="settings" element={<SystemSettingsPage />} />
             <Route path="profile" element={<ProfilePage />} />
@@ -95,8 +100,17 @@ export default function App() {
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<CeoDashboardPage />} />
             <Route path="employees" element={<EmployeeListPage />} />
-            <Route path="recruitment" element={<DirectorRecruitmentPage />} />
-            <Route path="recruitment/applications/:id" element={<ApplicationDetailPage />} />
+            <Route path="recruitment" element={<RecruitmentLayout />}>
+              <Route index element={<Navigate to="campaigns" replace />} />
+              <Route path="requisitions" element={<JobRequisitionPage />} />
+              <Route path="requisitions/new" element={<JobRequisitionForm />} />
+              <Route path="campaigns" element={<JobPostingList />} />
+              <Route path="campaigns/new" element={<JobPostingForm />} />
+              <Route path="campaigns/edit/:id" element={<JobPostingForm />} />
+              <Route path="applications" element={<ApplicationListPage />} />
+              <Route path="pipeline" element={<ApplicationPipeline />} />
+              <Route path="applications/:id" element={<ApplicationDetailPage />} />
+            </Route>
             <Route path="attendance" element={<ManagerAttendancePage />} />
             <Route path="my-attendance" element={<EmployeeAttendancePage />} />
             <Route path="requests" element={<ManagerRequestsPage />} />
@@ -123,8 +137,17 @@ export default function App() {
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<DirectorDashboardPage />} />
             <Route path="employees" element={<EmployeeListPage />} />
-            <Route path="recruitment" element={<DirectorRecruitmentPage />} />
-            <Route path="recruitment/applications/:id" element={<ApplicationDetailPage />} />
+            <Route path="recruitment" element={<RecruitmentLayout />}>
+              <Route index element={<Navigate to="campaigns" replace />} />
+              <Route path="requisitions" element={<JobRequisitionPage />} />
+              <Route path="requisitions/new" element={<JobRequisitionForm />} />
+              <Route path="campaigns" element={<JobPostingList />} />
+              <Route path="campaigns/new" element={<JobPostingForm />} />
+              <Route path="campaigns/edit/:id" element={<JobPostingForm />} />
+              <Route path="applications" element={<ApplicationListPage />} />
+              <Route path="pipeline" element={<ApplicationPipeline />} />
+              <Route path="applications/:id" element={<ApplicationDetailPage />} />
+            </Route>
             <Route path="attendance" element={<ManagerAttendancePage />} />
             <Route path="my-attendance" element={<DirectorMyAttendancePage />} />
             <Route path="requests" element={<ManagerRequestsPage />} />
@@ -165,10 +188,13 @@ export default function App() {
             {/* Module Tuyển dụng (Bước 4) */}
             <Route path="recruitment" element={<RecruitmentLayout />}>
               <Route index element={<Navigate to="campaigns" replace />} />
+              <Route path="requisitions" element={<JobRequisitionPage />} />
+              <Route path="requisitions/new" element={<JobRequisitionForm />} />
               <Route path="campaigns" element={<JobPostingList />} />
               <Route path="campaigns/new" element={<JobPostingForm />} />
               <Route path="campaigns/edit/:id" element={<JobPostingForm />} />
               <Route path="applications" element={<ApplicationListPage />} />
+              <Route path="pipeline" element={<ApplicationPipeline />} />
               <Route path="applications/:id" element={<ApplicationDetailPage />} />
             </Route>
           </Route>

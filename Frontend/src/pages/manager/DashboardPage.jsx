@@ -52,8 +52,11 @@ export default function ManagerDashboardPage() {
 
   const currentMonth = new Date().getMonth() + 1;
 
-  const { role } = useAuth();
-  const title = role === 'giam_doc_phong_ban' ? 'Tổng quan — Giám Đốc Phòng Ban' : 'Tổng quan — Trưởng Phòng';
+  const { role, user } = useAuth();
+  const titleRole = role === 'giam_doc_phong_ban' ? 'Giám đốc' : 'Trưởng phòng';
+  let tenPhong = user?.tenPhong || '';
+  if (tenPhong.toLowerCase().startsWith('phòng ')) tenPhong = tenPhong.substring(6);
+  const title = tenPhong ? `Tổng quan — ${titleRole} ${tenPhong}` : `Tổng quan — ${titleRole}`;
   
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-10">

@@ -18,6 +18,8 @@ export default function PublicApplyForm() {
   const [cvFile, setCvFile] = useState(null);
   const [cccdFile, setCccdFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [extractingCv, setExtractingCv] = useState(false);
+  const [extractedCvData, setExtractedCvData] = useState(null);
 
   useEffect(() => {
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
@@ -43,6 +45,37 @@ export default function PublicApplyForm() {
       return;
     }
     setStep(2);
+  };
+
+  const handleExtractAI = async () => {
+    if (!cvFile) {
+      showNotification('Lỗi', 'Không có CV để trích xuất', 'error');
+      return;
+    }
+
+    setExtractingCv(true);
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+      const formData = new FormData();
+      formData.append('cvFile', cvFile);
+
+      const res = await fetch(`${apiUrl}/public/apply/${jobSlug}/extract-cv`, {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        setExtractedCvData(JSON.parse(data.data));
+        showNotification('Thành công', 'Đã trích xuất thông tin từ CV', 'success');
+      } else {
+        showNotification('Lỗi', data.message || 'Không thể trích xuất thông tin từ CV', 'error');
+      }
+    } catch (err) {
+      showNotification('Lỗi', 'Lỗi kết nối khi trích xuất CV', 'error');
+    } finally {
+      setExtractingCv(false);
+    }
   };
 
   const handleSubmit = async (formData) => {
@@ -198,12 +231,12 @@ export default function PublicApplyForm() {
               <label className="block">
                 <span className="text-sm font-medium text-slate-700 block mb-2">Tải lên CV (Bắt buộc)</span>
                 <div className="border-2 border-dashed border-blue-200 rounded-xl p-8 text-center hover:bg-blue-50 transition-colors cursor-pointer relative">
-                  <input type="file" accept=".pdf,.doc,.docx" onChange={(e) => setCvFile(e.target.files[0])} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                  <input type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={(e) => setCvFile(e.target.files[0])} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
                   <Upload size={32} className="text-blue-500 mx-auto mb-3" />
                   <p className="text-sm font-medium text-blue-700">
                     {cvFile ? cvFile.name : 'Nhấn để chọn file hoặc kéo thả vào đây'}
                   </p>
-                  <p className="text-xs text-slate-500 mt-1">Hỗ trợ PDF, DOCX (Tối đa 5MB)</p>
+                  <p className="text-xs text-slate-500 mt-1">Hỗ trợ PDF, DOCX, JPG, PNG (Tối đa 5MB)</p>
                 </div>
               </label>
 
@@ -237,13 +270,24 @@ export default function PublicApplyForm() {
               </div>
             )}
             
-            <div className="bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded-lg text-sm text-center">
-              Hệ thống đã nhận được CV của bạn. Vui lòng điền thêm hoặc kiểm tra các thông tin liên lạc cơ bản trước khi nộp.
+            <div className="bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded-lg text-sm flex items-center justify-between">
+              <span>Hệ thống đã nhận được CV của bạn. Bạn có thể tự điền thông tin hoặc sử dụng AI để tự động trích xuất.</span>
+              <button 
+                onClick={handleExtractAI}
+                disabled={extractingCv}
+                className="flex items-center gap-2 bg-white text-blue-600 px-4 py-2 rounded-md font-medium border border-blue-200 hover:bg-blue-50 transition-colors shadow-sm disabled:opacity-70 disabled:cursor-not-allowed whitespace-nowrap ml-4"
+              >
+                {extractingCv ? (
+                  <><Loader2 className="animate-spin" size={16} /> Đang xử lý...</>
+                ) : (
+                  <>✨ Trích xuất bằng AI</>
+                )}
+              </button>
             </div>
 
             <ApplicationPersonalInfoForm 
               mode="public" 
-              initialData={{ fullName: { value: '' } }} // Form trống, chờ User điền
+              initialData={extractedCvData || { fullName: { value: '' } }} // Dữ liệu AI bóc tách
               onSave={handleSubmit}
             />
             

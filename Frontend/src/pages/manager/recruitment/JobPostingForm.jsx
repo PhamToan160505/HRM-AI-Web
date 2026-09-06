@@ -1,8 +1,31 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { ArrowLeft, Save, Copy, CheckCircle2, X } from 'lucide-react';
 import { useNotification } from '../../../context/NotificationContext';
 import api from '../../../services/api';
+
+const getMinStartDate = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
+
+const getMinEndDate = (startDateStr) => {
+  if (!startDateStr) return getMinStartDate();
+  const startDate = new Date(startDateStr);
+  startDate.setDate(startDate.getDate() + 1);
+  
+  const year = startDate.getFullYear();
+  const month = String(startDate.getMonth() + 1).padStart(2, '0');
+  const day = String(startDate.getDate()).padStart(2, '0');
+  const hours = String(startDate.getHours()).padStart(2, '0');
+  const minutes = String(startDate.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
 
 export default function JobPostingForm() {
   const { id } = useParams();
@@ -14,20 +37,40 @@ export default function JobPostingForm() {
   const [createdJob, setCreatedJob] = useState(null);
   const [isCopied, setIsCopied] = useState(false);
   const [errors, setErrors] = useState({});
+  const [requisitions, setRequisitions] = useState([]);
+
+  const location = useLocation();
+  const prefillReq = location.state?.reqData;
+  const searchParams = new URLSearchParams(location.search);
+  const isReopen = searchParams.get('reopen') === 'true';
+
+  const standardCapBac = ['', '-- Chọn cấp bậc --', 'Thực tập sinh (Intern)', 'Nhân viên (Junior)', 'Chuyên viên (Mid-level)', 'Chuyên viên cao cấp (Senior)', 'Quản lý (Manager)', 'Giám đốc (Director)'];
+  const standardHinhThuc = ['Toàn thời gian (Full-time)', 'Bán thời gian (Part-time)', 'Làm việc từ xa (Remote)', 'Linh hoạt (Hybrid)'];
+
+  const initCapBac = prefillReq?.capBac || '';
+  const isCustomCapBac = initCapBac && !standardCapBac.includes(initCapBac);
+
+  const initHinhThuc = prefillReq?.hinhThucLamViec || 'Toàn thời gian (Full-time)';
+  const isCustomHinhThuc = initHinhThuc && !standardHinhThuc.includes(initHinhThuc);
 
   const [formData, setFormData] = useState({
-    title: '',
-    soLuongTuyen: '',
+    title: prefillReq ? prefillReq.title : '',
+    soLuongTuyen: prefillReq ? prefillReq.soLuong : '',
     diaDiem: '',
-    hinhThucLamViec: 'FULL_TIME',
+    hinhThucLamViec: isCustomHinhThuc ? 'Khác' : initHinhThuc,
+    hinhThucLamViecKhac: isCustomHinhThuc ? initHinhThuc : '',
     ngayBatDau: '',
     hanNopHoSo: '',
-    mucLuong: '',
+    mucLuong: prefillReq ? prefillReq.budget || '' : '',
     coThoaThuan: false,
-    capBac: '',
-    description: '',
-    requirements: '',
-    quyenLoi: ''
+    capBac: isCustomCapBac ? 'Khác' : initCapBac,
+    capBacKhac: isCustomCapBac ? initCapBac : '',
+    description: prefillReq ? prefillReq.description || '' : '',
+    requirements: prefillReq ? prefillReq.requirements || '' : '',
+    quyenLoi: '',
+    targetRole: prefillReq ? prefillReq.targetRole : 'NHAN_VIEN',
+    departmentId: prefillReq ? prefillReq.departmentId : '',
+    jobRequisitionId: prefillReq ? prefillReq.id : ''
   });
 
   useEffect(() => {
@@ -37,16 +80,24 @@ export default function JobPostingForm() {
           const res = await api.get(`/api/recruitment/jobs/${id}`);
           if (res.data.success) {
             const data = res.data.data;
+            const fetchedCapBac = data.capBac || '';
+            const isFetchedCustomCapBac = fetchedCapBac && !standardCapBac.includes(fetchedCapBac);
+            
+            const fetchedHinhThuc = data.hinhThucLamViec || 'Toàn thời gian (Full-time)';
+            const isFetchedCustomHinhThuc = fetchedHinhThuc && !standardHinhThuc.includes(fetchedHinhThuc);
+
             setFormData({
               title: data.title || '',
               soLuongTuyen: data.soLuongTuyen || '',
               diaDiem: data.diaDiem || '',
-              hinhThucLamViec: data.hinhThucLamViec || 'FULL_TIME',
+              hinhThucLamViec: isFetchedCustomHinhThuc ? 'Khác' : fetchedHinhThuc,
+              hinhThucLamViecKhac: isFetchedCustomHinhThuc ? fetchedHinhThuc : '',
               ngayBatDau: data.ngayBatDau ? data.ngayBatDau.substring(0, 16) : '',
               hanNopHoSo: data.hanNopHoSo ? data.hanNopHoSo.substring(0, 16) : '',
               mucLuong: data.mucLuong || '',
               coThoaThuan: data.coThoaThuan || false,
-              capBac: data.capBac || '',
+              capBac: isFetchedCustomCapBac ? 'Khác' : fetchedCapBac,
+              capBacKhac: isFetchedCustomCapBac ? fetchedCapBac : '',
               description: data.description || '',
               requirements: data.requirements || '',
               quyenLoi: data.quyenLoi || ''
@@ -61,7 +112,57 @@ export default function JobPostingForm() {
       };
       fetchJobData();
     }
-  }, [id, isEditMode, navigate, showNotification]);
+    
+    // Fetch approved requisitions for creation mode
+    if (!isEditMode) {
+      const fetchReqs = async () => {
+        try {
+          const res = await api.get('/api/job-requisitions');
+          if (res.data.success) {
+            setRequisitions(res.data.data.filter(r => r.status === 'APPROVED'));
+          }
+        } catch (err) {}
+      };
+      fetchReqs();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, isEditMode]);
+
+  const handleRequisitionSelect = (reqId) => {
+    const req = requisitions.find(r => r.id === Number(reqId));
+    if (req) {
+      const initCapBac = req.capBac || '';
+      const isCustomCapBac = initCapBac && !standardCapBac.includes(initCapBac);
+      const initHinhThuc = req.hinhThucLamViec || 'Toàn thời gian (Full-time)';
+      const isCustomHinhThuc = initHinhThuc && !standardHinhThuc.includes(initHinhThuc);
+
+      setFormData({
+        ...formData,
+        jobRequisitionId: req.id,
+        title: req.title,
+        targetRole: req.targetRole,
+        departmentId: req.departmentId,
+        soLuongTuyen: req.soLuong,
+        mucLuong: req.budget || '',
+        requirements: req.requirements || '',
+        description: req.description || '',
+        capBac: isCustomCapBac ? 'Khác' : initCapBac,
+        capBacKhac: isCustomCapBac ? initCapBac : '',
+        hinhThucLamViec: isCustomHinhThuc ? 'Khác' : initHinhThuc,
+        hinhThucLamViecKhac: isCustomHinhThuc ? initHinhThuc : ''
+      });
+      if (errors.title) setErrors({...errors, title: null});
+      if (errors.soLuongTuyen) setErrors({...errors, soLuongTuyen: null});
+    } else {
+      setFormData({
+        ...formData,
+        jobRequisitionId: '',
+        title: '',
+        soLuongTuyen: '',
+        requirements: ''
+      });
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -78,8 +179,24 @@ export default function JobPostingForm() {
 
     if (!formData.hinhThucLamViec) newErrors.hinhThucLamViec = 'Vui lòng chọn hình thức làm việc';
     if (!formData.diaDiem.trim()) newErrors.diaDiem = 'Vui lòng nhập địa điểm làm việc';
-    if (!formData.ngayBatDau) newErrors.ngayBatDau = 'Vui lòng chọn thời gian bắt đầu';
-    if (!formData.hanNopHoSo) newErrors.hanNopHoSo = 'Vui lòng chọn hạn nộp hồ sơ';
+    if (!formData.ngayBatDau) {
+      newErrors.ngayBatDau = 'Vui lòng chọn thời gian bắt đầu';
+    } else if (!isEditMode || isReopen) {
+      // Chỉ kiểm tra quá khứ khi tạo mới hoặc mở lại đợt
+      const minStart = getMinStartDate();
+      if (formData.ngayBatDau < minStart) {
+        newErrors.ngayBatDau = 'Thời gian bắt đầu không được trong quá khứ';
+      }
+    }
+    
+    if (!formData.hanNopHoSo) {
+      newErrors.hanNopHoSo = 'Vui lòng chọn hạn nộp hồ sơ';
+    } else if (formData.ngayBatDau) {
+      const minEnd = getMinEndDate(formData.ngayBatDau);
+      if (formData.hanNopHoSo < minEnd) {
+        newErrors.hanNopHoSo = 'Hạn nộp hồ sơ phải sau thời gian bắt đầu ít nhất 1 ngày';
+      }
+    }
     if (!formData.description.trim()) newErrors.description = 'Vui lòng nhập mô tả công việc (JD)';
     
     if (!formData.coThoaThuan && formData.mucLuong && formData.mucLuong.trim().startsWith('-')) {
@@ -96,15 +213,24 @@ export default function JobPostingForm() {
     setErrors({});
 
     try {
+      let payload = {
+        ...formData,
+        capBac: formData.capBac === 'Khác' ? formData.capBacKhac : formData.capBac,
+        hinhThucLamViec: formData.hinhThucLamViec === 'Khác' ? formData.hinhThucLamViecKhac : formData.hinhThucLamViec
+      };
+
       let res;
       if (isEditMode) {
-        res = await api.put(`/api/recruitment/jobs/${id}`, formData);
+        res = await api.put(`/api/recruitment/jobs/${id}`, payload);
       } else {
-        res = await api.post('/api/recruitment/jobs', formData);
+        res = await api.post('/api/recruitment/jobs', payload);
       }
       
       if (res.data.success) {
-        showNotification('Thành công', isEditMode ? 'Đã cập nhật chiến dịch' : 'Đã tạo chiến dịch tuyển dụng mới', 'success');
+        if (isReopen) {
+          await api.patch(`/api/recruitment/jobs/${id}/status`, { status: 'OPEN' });
+        }
+        showNotification('Thành công', isReopen ? 'Đã mở lại chiến dịch' : (isEditMode ? 'Đã cập nhật chiến dịch' : 'Đã tạo chiến dịch tuyển dụng mới'), 'success');
         if (isEditMode) {
           navigate('/manager/recruitment/campaigns');
         } else {
@@ -143,7 +269,7 @@ export default function JobPostingForm() {
         </button>
         <div>
           <h1 className="text-2xl font-bold text-slate-800">
-            {isEditMode ? 'Sửa chiến dịch tuyển dụng' : 'Tạo chiến dịch tuyển dụng'}
+            {isReopen ? 'Mở lại chiến dịch tuyển dụng' : (isEditMode ? 'Sửa chiến dịch tuyển dụng' : 'Tạo chiến dịch tuyển dụng')}
           </h1>
           <p className="text-sm text-slate-500 mt-1">Điền thông tin chi tiết (JD) để AI dùng làm cơ sở chấm điểm ứng viên.</p>
         </div>
@@ -156,6 +282,24 @@ export default function JobPostingForm() {
           <h2 className="text-lg font-semibold text-slate-800 border-b border-slate-100 pb-2">Thông tin cơ bản</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {!isEditMode && (
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Chọn từ Yêu cầu tuyển dụng đã duyệt
+                </label>
+                <select 
+                  value={formData.jobRequisitionId}
+                  onChange={(e) => handleRequisitionSelect(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                >
+                  <option value="">-- Tạo tự do (Không liên kết) --</option>
+                  {requisitions.map(req => (
+                    <option key={req.id} value={req.id}>{req.title}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 Vị trí tuyển dụng <span className="text-red-500">*</span>
@@ -207,11 +351,24 @@ export default function JobPostingForm() {
                 onChange={(e) => setFormData({...formData, capBac: e.target.value})}
               >
                 <option value="">-- Chọn cấp bậc --</option>
-                <option value="INTERN">Thực tập sinh (Intern)</option>
-                <option value="JUNIOR">Nhân viên (Junior)</option>
-                <option value="MID">Chuyên viên (Mid-level)</option>
-                <option value="SENIOR">Chuyên viên cao cấp (Senior)</option>
+                <option value="Thực tập sinh (Intern)">Thực tập sinh (Intern)</option>
+                <option value="Nhân viên (Junior)">Nhân viên (Junior)</option>
+                <option value="Chuyên viên (Mid-level)">Chuyên viên (Mid-level)</option>
+                <option value="Chuyên viên cao cấp (Senior)">Chuyên viên cao cấp (Senior)</option>
+                <option value="Quản lý (Manager)">Quản lý (Manager)</option>
+                <option value="Giám đốc (Director)">Giám đốc (Director)</option>
+                <option value="Khác">Khác</option>
               </select>
+              {formData.capBac === 'Khác' && (
+                <input 
+                  type="text"
+                  required
+                  value={formData.capBacKhac}
+                  onChange={(e) => setFormData({...formData, capBacKhac: e.target.value})}
+                  placeholder="Nhập cấp bậc khác..."
+                  className="mt-2 w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                />
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -226,11 +383,22 @@ export default function JobPostingForm() {
                   if (errors.hinhThucLamViec) setErrors({...errors, hinhThucLamViec: null});
                 }}
               >
-                <option value="FULL_TIME">Toàn thời gian (Full-time)</option>
-                <option value="PART_TIME">Bán thời gian (Part-time)</option>
-                <option value="REMOTE">Làm việc từ xa (Remote)</option>
-                <option value="HYBRID">Linh hoạt (Hybrid)</option>
+                <option value="Toàn thời gian (Full-time)">Toàn thời gian (Full-time)</option>
+                <option value="Bán thời gian (Part-time)">Bán thời gian (Part-time)</option>
+                <option value="Làm việc từ xa (Remote)">Làm việc từ xa (Remote)</option>
+                <option value="Linh hoạt (Hybrid)">Linh hoạt (Hybrid)</option>
+                <option value="Khác">Khác</option>
               </select>
+              {formData.hinhThucLamViec === 'Khác' && (
+                <input 
+                  type="text"
+                  required
+                  value={formData.hinhThucLamViecKhac}
+                  onChange={(e) => setFormData({...formData, hinhThucLamViecKhac: e.target.value})}
+                  placeholder="Nhập hình thức làm việc khác..."
+                  className="mt-2 w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                />
+              )}
               {errors.hinhThucLamViec && <p className="mt-1 text-xs text-red-500">{errors.hinhThucLamViec}</p>}
             </div>
           </div>
@@ -284,9 +452,18 @@ export default function JobPostingForm() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Thời gian bắt đầu nhận hồ sơ <span className="text-red-500">*</span>
-              </label>
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-sm font-medium text-slate-700">
+                  Thời gian bắt đầu nhận hồ sơ <span className="text-red-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setFormData({...formData, ngayBatDau: getMinStartDate()})}
+                  className="text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors"
+                >
+                  Hôm nay
+                </button>
+              </div>
               <input 
                 type="datetime-local" 
                 required
@@ -300,9 +477,18 @@ export default function JobPostingForm() {
               {errors.ngayBatDau && <p className="mt-1 text-xs text-red-500">{errors.ngayBatDau}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Hạn nộp hồ sơ <span className="text-red-500">*</span>
-              </label>
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-sm font-medium text-slate-700">
+                  Hạn nộp hồ sơ <span className="text-red-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setFormData({...formData, hanNopHoSo: getMinEndDate(formData.ngayBatDau || getMinStartDate())})}
+                  className="text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors"
+                >
+                  Gợi ý (+1 ngày)
+                </button>
+              </div>
               <input 
                 type="datetime-local" 
                 required
@@ -379,7 +565,7 @@ export default function JobPostingForm() {
             className="flex items-center gap-2 bg-blue-600 text-white px-6 py-2.5 rounded-lg hover:bg-blue-700 transition-colors shadow-sm font-medium disabled:opacity-70"
           >
             <Save size={18} />
-            {loading ? 'Đang lưu...' : (isEditMode ? 'Lưu cập nhật' : 'Lưu và Đăng tin')}
+            {loading ? 'Đang lưu...' : (isReopen ? 'Lưu và Mở lại đợt' : (isEditMode ? 'Lưu cập nhật' : 'Lưu và Đăng tin'))}
           </button>
         </div>
       </form>

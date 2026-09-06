@@ -19,7 +19,7 @@ export default function UserManagementPage() {
 
   // Form states
   const [formData, setFormData] = useState({
-    hoTen: '', email: '', password: '', role: 'NHAN_VIEN', departmentId: '', chucVu: ''
+    hoTen: '', email: '', password: '', role: 'NHAN_VIEN', departmentId: '', chucVu: '', requestId: null
   });
   const [newPassword, setNewPassword] = useState('');
 
@@ -57,7 +57,8 @@ export default function UserManagementPage() {
       if (res.data.success || res.data.data?.id) {
         toast.success('Tạo tài khoản thành công');
         setIsCreateModalOpen(false);
-        setFormData({ hoTen: '', email: '', password: '', role: 'NHAN_VIEN', departmentId: '', chucVu: '' });
+        setActiveTab('USERS');
+        setFormData({ hoTen: '', email: '', password: '', role: 'NHAN_VIEN', departmentId: '', chucVu: '', requestId: null });
         fetchData();
       } else {
         toast.error(res.data.message || 'Lỗi khi tạo tài khoản');
@@ -120,15 +121,40 @@ export default function UserManagementPage() {
     }
   };
 
+  const handleOpenCreateFromRequest = (req) => {
+    let deducedRole = 'NHAN_VIEN';
+    if (req.chucVu) {
+      const cv = req.chucVu.toLowerCase();
+      if (cv.includes('tổng giám đốc') || cv.includes('ceo')) {
+        deducedRole = 'CEO';
+      } else if (cv.includes('giám đốc') || cv.includes('giam doc')) {
+        deducedRole = 'GIAM_DOC_PHONG_BAN';
+      } else if (cv.includes('trưởng phòng') || cv.includes('truong phong')) {
+        deducedRole = 'TRUONG_PHONG';
+      }
+    }
+
+    setFormData({
+      hoTen: req.hoTen || '',
+      email: req.email || '',
+      password: '',
+      role: deducedRole, 
+      departmentId: req.departmentId || '',
+      chucVu: req.chucVu || '',
+      requestId: req.id
+    });
+    setIsCreateModalOpen(true);
+  };
+
   const getRoleBadge = (role) => {
     const badges = {
       ADMIN: 'bg-red-100 text-red-700',
-      GIAM_DOC: 'bg-purple-100 text-purple-700',
-      GIAM_DOC_PHONG: 'bg-indigo-100 text-indigo-700',
+      CEO: 'bg-purple-100 text-purple-700',
+      GIAM_DOC_PHONG_BAN: 'bg-indigo-100 text-indigo-700',
       TRUONG_PHONG: 'bg-blue-100 text-blue-700',
       NHAN_VIEN: 'bg-slate-100 text-slate-700'
     };
-    return <span className={`px-2 py-1 rounded-md text-xs font-medium ${badges[role]}`}>{role}</span>;
+    return <span className={`px-2 py-1 rounded-md text-xs font-medium ${badges[role] || 'bg-slate-100 text-slate-700'}`}>{role}</span>;
   };
 
   return (
@@ -275,10 +301,10 @@ export default function UserManagementPage() {
                         </Button>
                         <Button 
                           variant="primary"
-                          onClick={() => handleApproveRequest(req.id)}
+                          onClick={() => handleOpenCreateFromRequest(req)}
                           className="!px-3 !py-1.5"
                         >
-                          <Check size={16} className="mr-1 inline" /> Duyệt & Tạo TK
+                          <Plus size={16} className="mr-1 inline" /> Tạo tài khoản
                         </Button>
                       </td>
                     </tr>
@@ -295,7 +321,7 @@ export default function UserManagementPage() {
         <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-slide-up">
             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-              <h3 className="text-lg font-semibold text-slate-800">Thêm tài khoản thủ công</h3>
+              <h3 className="text-lg font-semibold text-slate-800">Thêm tài khoản</h3>
             </div>
             <form onSubmit={handleCreateUser} className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -329,8 +355,8 @@ export default function UserManagementPage() {
                   >
                     <option value="NHAN_VIEN">Nhân viên</option>
                     <option value="TRUONG_PHONG">Trưởng phòng</option>
-                    <option value="GIAM_DOC_PHONG">Giám đốc phòng ban</option>
-                    <option value="GIAM_DOC">Tổng Giám Đốc</option>
+                    <option value="GIAM_DOC_PHONG_BAN">Giám đốc phòng ban</option>
+                    <option value="CEO">Tổng Giám Đốc</option>
                     <option value="ADMIN">Admin Quản trị</option>
                   </select>
                 </div>
@@ -339,7 +365,7 @@ export default function UserManagementPage() {
                   <select 
                     value={formData.departmentId} 
                     onChange={e => setFormData({...formData, departmentId: e.target.value})}
-                    disabled={['ADMIN', 'GIAM_DOC'].includes(formData.role)}
+                    disabled={['ADMIN', 'CEO'].includes(formData.role)}
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all disabled:bg-slate-100 disabled:text-slate-400"
                   >
                     <option value="">-- Không thuộc phòng --</option>

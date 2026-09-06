@@ -191,8 +191,8 @@ export default function LoginPage() {
               </p>
               <div className="space-y-1">
                 {[
-                  { label: 'Admin (Quản trị)', maNhanVien: '23990002' },
-                  { label: 'Tổng Giám đốc', maNhanVien: '23990001' },
+                  { label: 'Admin (Quản trị)', maNhanVien: '23990001' },
+                  { label: 'Tổng Giám đốc', maNhanVien: '23990002' },
                   { label: 'Giám đốc phòng ban', maNhanVien: '23010001' },
                   { label: 'Trưởng phòng', maNhanVien: '23010002' },
                   { label: 'Nhân viên', maNhanVien: '23010003' },

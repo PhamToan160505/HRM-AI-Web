@@ -40,12 +40,26 @@ public class CvParserService {
         "Chỉ trả về văn bản thuần túy, KHÔNG giải thích, KHÔNG thêm markdown.";
 
     /**
-     * Hàm chính: nhận bytes PDF → trả về text đầy đủ (từ text layer hoặc Vision OCR).
+     * Hàm chính: nhận bytes file (PDF hoặc Image) → trả về text đầy đủ (từ text layer hoặc Vision OCR).
      */
-    public String parseCvPdf(byte[] fileBytes) {
+    public String parseCvFile(byte[] fileBytes, String filename) {
         if (fileBytes == null || fileBytes.length == 0) {
-            log.warn("[CvParser] Không có bytes PDF để đọc");
+            log.warn("[CvParser] Không có bytes để đọc");
             return "";
+        }
+
+        boolean isImage = false;
+        if (filename != null) {
+            String lower = filename.toLowerCase();
+            if (lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png")) {
+                isImage = true;
+            }
+        }
+
+        if (isImage) {
+            log.info("[CvParser] File là ảnh, gọi trực tiếp Gemini Vision OCR");
+            String base64Image = java.util.Base64.getEncoder().encodeToString(fileBytes);
+            return callGeminiForImages(java.util.Collections.singletonList(base64Image));
         }
 
         // Bước 1: Thử đọc text layer (nhanh)
@@ -81,9 +95,12 @@ public class CvParserService {
         }
 
         log.info("[CvParser] Render được {} trang → gửi lên Gemini Vision OCR", base64Pages.size());
+        return callGeminiForImages(base64Pages);
+    }
 
+    private String callGeminiForImages(List<String> base64Pages) {
         try {
-            String rawResponse = geminiClientService.callGeminiVision(base64Pages, OCR_PROMPT).block();
+            String rawResponse = geminiClientService.callGeminiVision(base64Pages, OCR_PROMPT).block(java.time.Duration.ofSeconds(30));
             String ocrText = geminiClientService.extractTextFromGeminiResponse(rawResponse);
 
             if (ocrText != null && !ocrText.isBlank()) {

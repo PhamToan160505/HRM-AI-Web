@@ -16,6 +16,7 @@ public class AdminUserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final com.hrm.admin.repository.AccountCreationRequestRepository accountCreationRequestRepository;
 
     public List<User> getAllUsers() {
         return userRepository.findAll();
@@ -39,7 +40,16 @@ public class AdminUserService {
                 .active(true)
                 .build();
 
-        return userRepository.save(user);
+        User savedUser = userRepository.save(user);
+
+        if (request.getRequestId() != null) {
+            accountCreationRequestRepository.findById(request.getRequestId()).ifPresent(req -> {
+                req.setStatus(com.hrm.admin.entity.AccountCreationRequest.RequestStatus.APPROVED);
+                accountCreationRequestRepository.save(req);
+            });
+        }
+
+        return savedUser;
     }
 
     public User updateUser(Long id, UpdateUserRequest request) {

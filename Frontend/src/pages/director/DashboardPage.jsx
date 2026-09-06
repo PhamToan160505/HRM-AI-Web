@@ -2,10 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { AlertCircle, ChevronRight, Star } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
 export default function DirectorDashboardPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [profile, setProfile] = useState({});
   const [stats, setStats] = useState({
     totalEmployees: 0,
@@ -50,7 +52,7 @@ export default function DirectorDashboardPage() {
       <div className="flex justify-between items-center mb-6">
         <div>
             <h1 className="text-2xl font-bold text-slate-800">
-                Bảng điều khiển tổng quan {stats?.departmentName ? `- ${stats.departmentName}` : ''}
+                Tổng quan — Giám đốc {user?.tenPhong ? (user.tenPhong.toLowerCase().startsWith('phòng ') ? user.tenPhong.substring(6) : user.tenPhong) : ''}
             </h1>
         </div>
       </div>

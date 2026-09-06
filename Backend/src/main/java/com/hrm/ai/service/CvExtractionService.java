@@ -42,7 +42,7 @@ public class CvExtractionService {
                 "Nội dung CV:\n" + rawCvText;
 
         try {
-            String rawResponse = geminiClientService.callGemini(prompt).block();
+            String rawResponse = geminiClientService.callGemini(prompt).block(java.time.Duration.ofSeconds(30));
             String aiResponse = geminiClientService.extractTextFromGeminiResponse(rawResponse);
             
             // Lọc bỏ markdown nếu có
@@ -60,28 +60,32 @@ public class CvExtractionService {
 
             String finalJson = objectMapper.writeValueAsString(extractedData);
 
-            decisionLogService.logDecision(
-                    applicationId,
-                    "OCR",
-                    prompt,
-                    finalJson,
-                    "CV Extraction successful",
-                    true,
-                    null
-            );
+            if (applicationId != null) {
+                decisionLogService.logDecision(
+                        applicationId,
+                        "OCR",
+                        prompt,
+                        finalJson,
+                        "CV Extraction successful",
+                        true,
+                        null
+                );
+            }
 
             return finalJson;
         } catch (Exception e) {
             log.error("Error during CV Extraction: ", e);
-            decisionLogService.logDecision(
-                    applicationId,
-                    "OCR",
-                    prompt,
-                    null,
-                    "CV Extraction failed",
-                    false,
-                    e.getMessage()
-            );
+            if (applicationId != null) {
+                decisionLogService.logDecision(
+                        applicationId,
+                        "OCR",
+                        prompt,
+                        null,
+                        "CV Extraction failed",
+                        false,
+                        e.getMessage()
+                );
+            }
             throw new RuntimeException("Lỗi trích xuất CV: " + e.getMessage());
         }
     }

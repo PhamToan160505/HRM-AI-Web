@@ -1,11 +1,23 @@
 import React from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
-import { Briefcase, FileText, CheckSquare, Settings, BarChart2, Users, LayoutDashboard } from 'lucide-react';
+import { Briefcase, FileText, CheckSquare, Settings, BarChart2, Users, LayoutDashboard, List, Kanban } from 'lucide-react';
+
+import { useAuth } from '../../../context/AuthContext';
 
 export default function RecruitmentLayout() {
+  const { role } = useAuth();
+  
+  // Xác định base path theo role
+  let basePath = '/manager/recruitment';
+  if (role === 'giam_doc_phong_ban') basePath = '/director/recruitment';
+  if (role === 'ceo') basePath = '/ceo/recruitment';
+  if (role === 'admin') basePath = '/admin/recruitment';
+
   const tabs = [
-    { path: '/manager/recruitment/campaigns', label: 'Chiến dịch tuyển dụng', icon: <Briefcase size={18} /> },
-    { path: '/manager/recruitment/applications', label: 'Hồ sơ ứng viên', icon: <Users size={18} /> },
+    { path: `${basePath}/requisitions`, label: 'Yêu cầu tuyển dụng', icon: <FileText size={18} /> },
+    { path: `${basePath}/campaigns`, label: 'Chiến dịch tuyển dụng', icon: <Briefcase size={18} /> },
+    { path: `${basePath}/applications`, label: 'Danh sách hồ sơ', icon: <List size={18} /> },
+    { path: `${basePath}/pipeline`, label: 'Pipeline & Thống kê', icon: <Kanban size={18} /> },
   ];
 
   return (

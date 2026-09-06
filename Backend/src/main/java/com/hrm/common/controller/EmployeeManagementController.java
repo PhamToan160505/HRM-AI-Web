@@ -46,6 +46,39 @@ public class EmployeeManagementController {
         return ResponseEntity.ok(ApiResponse.ok(employees, "Thành công"));
     }
 
+    @GetMapping("/paginated")
+    @PreAuthorize("hasAnyRole('TRUONG_PHONG', 'GIAM_DOC_PHONG_BAN', 'CEO')")
+    public ResponseEntity<ApiResponse<org.springframework.data.domain.Page<User>>> getEmployeesPaginated(
+            @RequestParam(required = false) Long departmentId,
+            @RequestParam(required = false) com.hrm.common.entity.Role targetRole,
+            @RequestParam(required = false) String searchTerm,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "5") int size,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page, size, org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt"));
+        org.springframework.data.domain.Page<User> employeePage = null;
+
+        if (userDetails.getRole() == com.hrm.common.entity.Role.CEO) {
+            employeePage = userRepository.findWithFilters(java.util.List.of(
+                com.hrm.common.entity.Role.NHAN_VIEN,
+                com.hrm.common.entity.Role.TRUONG_PHONG,
+                com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN
+            ), departmentId, targetRole, searchTerm, pageable);
+        } else if (userDetails.getRole() == com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN) {
+            employeePage = userRepository.findWithFilters(java.util.List.of(
+                com.hrm.common.entity.Role.NHAN_VIEN,
+                com.hrm.common.entity.Role.TRUONG_PHONG
+            ), userDetails.getDepartmentId(), targetRole, searchTerm, pageable);
+        } else if (userDetails.getRole() == com.hrm.common.entity.Role.TRUONG_PHONG) {
+            employeePage = userRepository.findWithFilters(java.util.List.of(
+                com.hrm.common.entity.Role.NHAN_VIEN
+            ), userDetails.getDepartmentId(), targetRole, searchTerm, pageable);
+        }
+        
+        return ResponseEntity.ok(ApiResponse.ok(employeePage, "Thành công"));
+    }
+
     @PutMapping("/{id}/assignment")
     @PreAuthorize("hasAnyRole('TRUONG_PHONG', 'GIAM_DOC_PHONG_BAN', 'CEO')")
     public ResponseEntity<ApiResponse<User>> updateAssignment(

@@ -80,8 +80,17 @@ export function ToastProvider({ children }) {
     }
   }, [dismiss]);
 
+  const toastAPI = {
+    show,
+    dismiss,
+    success: (msg, title = 'Thành công') => show(title, msg, 'success'),
+    error: (msg, title = 'Lỗi') => show(title, msg, 'error'),
+    warning: (msg, title = 'Cảnh báo') => show(title, msg, 'warning'),
+    info: (msg, title = 'Thông báo') => show(title, msg, 'info'),
+  };
+
   return (
-    <ToastContext.Provider value={{ show, dismiss }}>
+    <ToastContext.Provider value={toastAPI}>
       {children}
       <ToastContainer toasts={toasts} onDismiss={dismiss} />
     </ToastContext.Provider>

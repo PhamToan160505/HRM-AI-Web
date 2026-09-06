@@ -47,7 +47,6 @@ export default function PayrollTable({ payrolls, onApprove, onReject, role }) {
                             <tr key={p.id} className="hover:bg-slate-50">
                                 <td className="px-6 py-4">
                                     <div className="font-medium text-gray-800">{p.employeeName || 'Chưa cập nhật'}</div>
-                                    <div className="text-xs text-gray-400 mt-0.5">NV{p.employeeId}</div>
                                 </td>
                                 <td className="px-6 py-4 tabular-nums">{formatCurrencyVND(p.baseSalary)}</td>
                                 <td className="px-6 py-4 tabular-nums">{formatCurrencyVND(p.allowance || 0)}</td>

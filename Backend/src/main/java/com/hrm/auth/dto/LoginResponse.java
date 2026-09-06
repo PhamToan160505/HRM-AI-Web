@@ -21,5 +21,6 @@ public class LoginResponse {
     private String hoTen;
     private Role role;
     private Long departmentId; // null cho CEO
+    private String tenPhong;   // Tên phòng ban
     private Long teamId;
 }

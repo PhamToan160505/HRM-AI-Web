@@ -12,6 +12,8 @@ import com.hrm.common.repository.UserRepository;
 import com.hrm.notification.service.NotificationService;
 import com.hrm.common.payroll.dto.DepartmentPayrollSummary;
 import com.hrm.common.entity.Department;
+import com.hrm.common.payroll.entity.PayrollReport;
+import com.hrm.common.payroll.repository.PayrollReportRepository;
 import com.hrm.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -35,6 +37,7 @@ public class PayrollService {
     private final UserRepository userRepository;
     private final DepartmentRepository departmentRepository;
     private final NotificationService notificationService;
+    private final PayrollReportRepository payrollReportRepository;
 
     @Value("${payroll.late-free-times:1}")
     private int lateFreeTimes;
@@ -96,7 +99,21 @@ public class PayrollService {
 
     @Transactional
     public List<Object> generatePayroll(int month, int year, Long departmentId, CustomUserDetails currentUser) {
-        List<User> employees = userRepository.findByDepartmentId(departmentId);
+        List<User> employees = new ArrayList<>();
+        if (currentUser.getRole() == com.hrm.common.entity.Role.CEO) {
+            employees = userRepository.findAll();
+        } else if (currentUser.getRole() == com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN) {
+            List<User> deptUsers = userRepository.findByDepartmentId(currentUser.getDepartmentId());
+            employees = deptUsers.stream()
+                    .filter(u -> u.getRole() == com.hrm.common.entity.Role.NHAN_VIEN || u.getRole() == com.hrm.common.entity.Role.TRUONG_PHONG)
+                    .toList();
+        } else if (currentUser.getRole() == com.hrm.common.entity.Role.TRUONG_PHONG) {
+            List<User> deptUsers = userRepository.findByDepartmentId(currentUser.getDepartmentId());
+            employees = deptUsers.stream()
+                    .filter(u -> u.getRole() == com.hrm.common.entity.Role.NHAN_VIEN)
+                    .toList();
+        }
+
         int standardDays = calculateStandardDays(month, year);
         
         YearMonth yearMonth = YearMonth.of(year, month);
@@ -248,6 +265,210 @@ public class PayrollService {
         payrollRepository.save(payroll);
     }
 
+    @Transactional
+    public void approveAllPayroll(int month, int year, Long departmentId) {
+        List<User> employees = userRepository.findByDepartmentId(departmentId);
+        if (employees.isEmpty()) return;
+        List<Long> employeeIds = employees.stream().map(User::getId).toList();
+        List<Payroll> payrolls = payrollRepository.findByMonthAndYearAndEmployeeIdIn(month, year, employeeIds);
+        
+        boolean hasChanges = false;
+        for (Payroll p : payrolls) {
+            if ("DRAFT".equals(p.getStatus())) {
+                p.setStatus("MANAGER_APPROVED");
+                hasChanges = true;
+            }
+        }
+        if (hasChanges) {
+            payrollRepository.saveAll(payrolls);
+        }
+    }
+
+    @Transactional
+    public void submitManagerReport(int month, int year, Long departmentId, Long managerId, boolean force) {
+        List<User> employees = userRepository.findByDepartmentId(departmentId);
+        if (employees.isEmpty()) return;
+        List<Long> employeeIds = employees.stream().map(User::getId).toList();
+        List<Payroll> payrolls = payrollRepository.findByMonthAndYearAndEmployeeIdIn(month, year, employeeIds);
+        
+        int totalEmployees = payrolls.size();
+        double totalGross = payrolls.stream().mapToDouble(p -> p.getGrossSalary() != null ? p.getGrossSalary() : 0.0).sum();
+        
+        Optional<PayrollReport> existingOpt = payrollReportRepository.findByDepartmentIdAndCreatedByAndMonthAndYearAndReportLevel(
+                departmentId, managerId, month, year, "MANAGER_LEVEL");
+                
+        if (existingOpt.isPresent()) {
+            PayrollReport report = existingOpt.get();
+            if ("APPROVED_BY_DIRECTOR".equals(report.getStatus()) || "APPROVED_BY_CEO".equals(report.getStatus()) || "PENDING_CEO".equals(report.getStatus())) {
+                throw new RuntimeException("Giám đốc phòng ban đã duyệt báo cáo này, không thể gửi lại (ghi đè)!");
+            }
+            if (!force && "PENDING_DIRECTOR".equals(report.getStatus())) {
+                throw new RuntimeException("WARNING_OVERWRITE: Báo cáo lương tháng này đã được bạn gửi trước đó và đang chờ duyệt. Việc gửi lại sẽ ghi đè lên dữ liệu báo cáo cũ. Bạn có chắc chắn muốn tiếp tục?");
+            }
+            report.setTotalEmployees(totalEmployees);
+            report.setTotalGrossSalary(totalGross);
+            report.setStatus("PENDING_DIRECTOR");
+            payrollReportRepository.save(report);
+        } else {
+            PayrollReport report = PayrollReport.builder()
+                .departmentId(departmentId)
+                .createdBy(managerId)
+                .month(month)
+                .year(year)
+                .reportLevel("MANAGER_LEVEL")
+                .totalEmployees(totalEmployees)
+                .totalGrossSalary(totalGross)
+                .status("PENDING_DIRECTOR")
+                .build();
+            payrollReportRepository.save(report);
+        }
+        
+        for (Payroll p : payrolls) {
+            if ("MANAGER_APPROVED".equals(p.getStatus()) || "DRAFT".equals(p.getStatus())) {
+                p.setStatus("PENDING_DIRECTOR");
+            }
+        }
+        payrollRepository.saveAll(payrolls);
+    }
+
+    public List<PayrollReport> getManagerReportsForDirector(int month, int year, Long departmentId) {
+        return payrollReportRepository.findByDepartmentIdAndMonthAndYearAndReportLevel(
+                departmentId, month, year, "MANAGER_LEVEL");
+    }
+
+    @Transactional
+    public void approveManagerReport(Long reportId) {
+        PayrollReport report = payrollReportRepository.findById(reportId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy báo cáo lương"));
+        if (!"PENDING_DIRECTOR".equals(report.getStatus())) {
+            throw new RuntimeException("Chỉ có thể duyệt báo cáo ở trạng thái chờ Giám đốc duyệt");
+        }
+        report.setStatus("APPROVED_BY_DIRECTOR");
+        payrollReportRepository.save(report);
+    }
+
+    @Transactional
+    public void submitDirectorReport(int month, int year, Long departmentId, Long directorId) {
+        List<PayrollReport> managerReports = payrollReportRepository.findByDepartmentIdAndMonthAndYearAndReportLevel(
+                departmentId, month, year, "MANAGER_LEVEL");
+        
+        if (managerReports.isEmpty()) {
+            throw new RuntimeException("Chưa có báo cáo nào từ Trưởng phòng");
+        }
+        
+        boolean allApproved = managerReports.stream().allMatch(r -> "APPROVED_BY_DIRECTOR".equals(r.getStatus()));
+        if (!allApproved) {
+            throw new RuntimeException("Vui lòng duyệt tất cả các báo cáo của Trưởng phòng trước khi gửi lên Tổng Giám đốc");
+        }
+        
+        int totalEmployees = managerReports.stream().mapToInt(r -> r.getTotalEmployees() != null ? r.getTotalEmployees() : 0).sum();
+        double totalGross = managerReports.stream().mapToDouble(r -> r.getTotalGrossSalary() != null ? r.getTotalGrossSalary() : 0.0).sum();
+        
+        Optional<PayrollReport> existingOpt = payrollReportRepository.findByDepartmentIdAndCreatedByAndMonthAndYearAndReportLevel(
+                departmentId, directorId, month, year, "DIRECTOR_LEVEL");
+                
+        if (existingOpt.isPresent()) {
+            PayrollReport report = existingOpt.get();
+            if ("APPROVED_BY_CEO".equals(report.getStatus())) {
+                 throw new RuntimeException("Tổng Giám đốc đã duyệt báo cáo này, không thể gửi lại!");
+            }
+            report.setTotalEmployees(totalEmployees);
+            report.setTotalGrossSalary(totalGross);
+            report.setStatus("PENDING_CEO");
+            payrollReportRepository.save(report);
+        } else {
+            PayrollReport report = PayrollReport.builder()
+                .departmentId(departmentId)
+                .createdBy(directorId)
+                .month(month)
+                .year(year)
+                .reportLevel("DIRECTOR_LEVEL")
+                .totalEmployees(totalEmployees)
+                .totalGrossSalary(totalGross)
+                .status("PENDING_CEO")
+                .build();
+            payrollReportRepository.save(report);
+        }
+        
+        List<User> employees = userRepository.findByDepartmentId(departmentId);
+        List<Long> employeeIds = employees.stream().map(User::getId).toList();
+        List<Payroll> payrolls = payrollRepository.findByMonthAndYearAndEmployeeIdIn(month, year, employeeIds);
+        
+        for (Payroll p : payrolls) {
+            if ("PENDING_DIRECTOR".equals(p.getStatus())) {
+                p.setStatus("PENDING_CEO");
+            }
+        }
+        payrollRepository.saveAll(payrolls);
+    }
+
+    public List<PayrollReport> getDirectorReportsForCeo(int month, int year) {
+        return payrollReportRepository.findByMonthAndYearAndReportLevel(month, year, "DIRECTOR_LEVEL");
+    }
+
+    @Transactional
+    public void approveDirectorReportByCeo(Long reportId) {
+        PayrollReport report = payrollReportRepository.findById(reportId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy báo cáo lương"));
+        if (!"PENDING_CEO".equals(report.getStatus())) {
+            throw new RuntimeException("Chỉ có thể duyệt báo cáo ở trạng thái chờ Tổng Giám đốc duyệt");
+        }
+        report.setStatus("APPROVED_BY_CEO");
+        payrollReportRepository.save(report);
+        
+        List<User> employees = userRepository.findByDepartmentId(report.getDepartmentId());
+        if (employees.isEmpty()) return;
+        List<Long> employeeIds = employees.stream().map(User::getId).toList();
+        List<Payroll> payrolls = payrollRepository.findByMonthAndYearAndEmployeeIdIn(report.getMonth(), report.getYear(), employeeIds);
+        
+        for (Payroll p : payrolls) {
+            if ("PENDING_CEO".equals(p.getStatus())) {
+                p.setStatus("APPROVED_BY_CEO");
+            }
+        }
+        payrollRepository.saveAll(payrolls);
+    }
+    
+    @Transactional
+    public void rejectDirectorReportByCeo(Long reportId, String reason) {
+        PayrollReport report = payrollReportRepository.findById(reportId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy báo cáo lương"));
+        if (!"PENDING_CEO".equals(report.getStatus())) {
+            throw new RuntimeException("Chỉ có thể từ chối báo cáo ở trạng thái chờ Tổng Giám đốc duyệt");
+        }
+        report.setStatus("REJECTED");
+        payrollReportRepository.save(report);
+        
+        List<User> employees = userRepository.findByDepartmentId(report.getDepartmentId());
+        if (employees.isEmpty()) return;
+        List<Long> employeeIds = employees.stream().map(User::getId).toList();
+        List<Payroll> payrolls = payrollRepository.findByMonthAndYearAndEmployeeIdIn(report.getMonth(), report.getYear(), employeeIds);
+        
+        for (Payroll p : payrolls) {
+            if ("PENDING_CEO".equals(p.getStatus())) {
+                p.setStatus("REJECTED_BY_CEO");
+                p.setRejectionReason(reason);
+            }
+        }
+        payrollRepository.saveAll(payrolls);
+
+        Department dept = departmentRepository.findById(report.getDepartmentId()).orElse(null);
+        String deptName = dept != null ? dept.getTenPhong() : "Unknown";
+
+        userRepository.findByRole(com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN).stream()
+                .filter(u -> report.getDepartmentId().equals(u.getDepartmentId()))
+                .forEach(director -> {
+            notificationService.createNotification(
+                    director.getId(),
+                    "PAYROLL",
+                    "Báo cáo bảng lương bị từ chối",
+                    "Tổng giám đốc đã từ chối báo cáo bảng lương tháng " + report.getMonth() + "/" + report.getYear() + " của phòng " + deptName + ". Lý do: " + reason,
+                    "quan_trong",
+                    "/director/payroll"
+            );
+        });
+    }
+
     public List<Payroll> getMyPayroll(Long employeeId) {
         return payrollRepository.findByEmployeeIdOrderByYearDescMonthDesc(employeeId)
                 .stream().filter(p -> "APPROVED".equals(p.getStatus())).toList();
@@ -256,120 +477,20 @@ public class PayrollService {
     public List<Payroll> getDepartmentPayroll(int month, int year, CustomUserDetails currentUser) {
         if ("CEO".equals(currentUser.getRole().name())) {
             return payrollRepository.findByMonthAndYear(month, year);
+        } else if ("GIAM_DOC_PHONG_BAN".equals(currentUser.getRole().name())) {
+            List<User> deptUsers = userRepository.findByDepartmentId(currentUser.getDepartmentId());
+            List<Long> employeeIds = deptUsers.stream()
+                    .filter(u -> u.getRole() == com.hrm.common.entity.Role.NHAN_VIEN || u.getRole() == com.hrm.common.entity.Role.TRUONG_PHONG)
+                    .map(User::getId)
+                    .toList();
+            return payrollRepository.findByMonthAndYearAndEmployeeIdIn(month, year, employeeIds);
         } else {
-            List<User> employees = userRepository.findByDepartmentId(currentUser.getDepartmentId());
-            List<Long> employeeIds = employees.stream().map(User::getId).toList();
+            List<User> deptUsers = userRepository.findByDepartmentId(currentUser.getDepartmentId());
+            List<Long> employeeIds = deptUsers.stream()
+                    .filter(u -> u.getRole() == com.hrm.common.entity.Role.NHAN_VIEN)
+                    .map(User::getId)
+                    .toList();
             return payrollRepository.findByMonthAndYearAndEmployeeIdIn(month, year, employeeIds);
         }
-    }
-
-    public List<DepartmentPayrollSummary> getDepartmentPayrollSummaries(int month, int year) {
-        List<Department> departments = departmentRepository.findAll();
-        List<DepartmentPayrollSummary> summaries = new ArrayList<>();
-
-        for (Department dept : departments) {
-            List<User> employees = userRepository.findByDepartmentId(dept.getId());
-            if (employees.isEmpty()) continue;
-
-            List<Long> employeeIds = employees.stream().map(User::getId).toList();
-            List<Payroll> payrolls = payrollRepository.findByMonthAndYearAndEmployeeIdIn(month, year, employeeIds);
-
-            if (payrolls.isEmpty()) {
-                summaries.add(DepartmentPayrollSummary.builder()
-                        .departmentId(dept.getId())
-                        .departmentName(dept.getTenPhong())
-                        .totalEmployees(employees.size())
-                        .totalGrossSalary(0.0)
-                        .status("Chưa có dữ liệu")
-                        .build());
-                continue;
-            }
-
-            double totalGrossSalary = payrolls.stream().mapToDouble(p -> p.getGrossSalary() != null ? p.getGrossSalary() : 0.0).sum();
-            
-            // Derive status
-            boolean allDirectorApproved = payrolls.stream().allMatch(p -> "DIRECTOR_APPROVED".equals(p.getStatus()));
-            boolean anyRejected = payrolls.stream().anyMatch(p -> p.getStatus() != null && p.getStatus().startsWith("REJECTED"));
-            boolean allDraft = payrolls.stream().allMatch(p -> "DRAFT".equals(p.getStatus()));
-            boolean allManagerApproved = payrolls.stream().allMatch(p -> "MANAGER_APPROVED".equals(p.getStatus()));
-            
-            String status = "Đang xử lý";
-            if (allDirectorApproved) status = "Đã duyệt";
-            else if (anyRejected) status = "Bị từ chối";
-            else if (allManagerApproved) status = "Chờ Giám đốc duyệt";
-            else if (allDraft) status = "Bản nháp";
-
-            summaries.add(DepartmentPayrollSummary.builder()
-                    .departmentId(dept.getId())
-                    .departmentName(dept.getTenPhong())
-                    .totalEmployees(payrolls.size())
-                    .totalGrossSalary(totalGrossSalary)
-                    .status(status)
-                    .build());
-        }
-        return summaries;
-    }
-
-    @Transactional
-    public void approveDepartmentPayroll(Long departmentId, int month, int year, Long directorId) {
-        List<User> employees = userRepository.findByDepartmentId(departmentId);
-        if (employees.isEmpty()) return;
-        List<Long> employeeIds = employees.stream().map(User::getId).toList();
-        List<Payroll> payrolls = payrollRepository.findByMonthAndYearAndEmployeeIdIn(month, year, employeeIds);
-        
-        for (Payroll p : payrolls) {
-            if ("DRAFT".equals(p.getStatus()) || "MANAGER_APPROVED".equals(p.getStatus())) {
-                p.setStatus("DIRECTOR_APPROVED");
-            }
-        }
-        payrollRepository.saveAll(payrolls);
-
-        Department dept = departmentRepository.findById(departmentId).orElse(null);
-        String deptName = dept != null ? dept.getTenPhong() : "Unknown";
-
-        // Notify CEO
-        userRepository.findByRole(com.hrm.common.entity.Role.CEO).forEach(ceo -> {
-            notificationService.createNotification(
-                    ceo.getId(),
-                    "PAYROLL",
-                    "Bảng lương đã được duyệt",
-                    "Giám đốc phòng ban đã duyệt báo cáo bảng lương tháng " + month + "/" + year + " của phòng " + deptName,
-                    "quan_trong",
-                    "/ceo/payroll"
-            );
-        });
-    }
-
-    @Transactional
-    public void rejectDepartmentPayroll(Long departmentId, int month, int year, String reason, Long ceoId) {
-        List<User> employees = userRepository.findByDepartmentId(departmentId);
-        if (employees.isEmpty()) return;
-        List<Long> employeeIds = employees.stream().map(User::getId).toList();
-        List<Payroll> payrolls = payrollRepository.findByMonthAndYearAndEmployeeIdIn(month, year, employeeIds);
-        
-        for (Payroll p : payrolls) {
-            if ("DIRECTOR_APPROVED".equals(p.getStatus())) {
-                p.setStatus("REJECTED_BY_CEO");
-                p.setRejectionReason(reason);
-            }
-        }
-        payrollRepository.saveAll(payrolls);
-
-        Department dept = departmentRepository.findById(departmentId).orElse(null);
-        String deptName = dept != null ? dept.getTenPhong() : "Unknown";
-
-        // Notify Giám đốc phòng ban (Department Director)
-        userRepository.findByRole(com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN).stream()
-                .filter(u -> departmentId.equals(u.getDepartmentId()))
-                .forEach(director -> {
-            notificationService.createNotification(
-                    director.getId(),
-                    "PAYROLL",
-                    "Báo cáo bảng lương bị từ chối",
-                    "Tổng giám đốc đã từ chối báo cáo bảng lương tháng " + month + "/" + year + " của phòng " + deptName + ". Lý do: " + reason,
-                    "quan_trong",
-                    "/director/payroll"
-            );
-        });
     }
 }

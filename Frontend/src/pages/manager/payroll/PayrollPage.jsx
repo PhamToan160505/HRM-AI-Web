@@ -6,7 +6,7 @@ import api from '../../../services/api';
 import { useToast } from '../../../components/common/Toast';
 import { useAuth } from '../../../context/AuthContext';
 import PayrollTable from '../../../components/payroll/PayrollTable';
-import DepartmentPayrollSummaryTable from '../../../components/payroll/DepartmentPayrollSummaryTable';
+import PayrollReportTable from '../../../components/payroll/PayrollReportTable';
 
 export default function PayrollPage() {
     const [payrolls, setPayrolls] = useState([]);
@@ -50,10 +50,40 @@ export default function PayrollPage() {
         try {
             setLoading(true);
             
-            if (isCeoOrDirector && !viewingDepartment) {
-                const res = await api.get(`/api/payroll/summary-by-department?month=${month}&year=${year}`);
-                if (res.data?.success) {
-                    setDepartmentSummaries(res.data.data || []);
+            if ((isCeo || user?.role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN') && !viewingDepartment) {
+                const endpoint = isCeo 
+                    ? `/api/payroll/ceo/reports?month=${month}&year=${year}`
+                    : `/api/payroll/director/reports?month=${month}&year=${year}`;
+                
+                const [res, deptRes, empRes] = await Promise.all([
+                    api.get(endpoint),
+                    api.get('/api/departments'),
+                    api.get('/api/employees')
+                ]);
+                
+                if (res.data?.success && deptRes.data?.success && empRes.data?.success) {
+                    const depts = deptRes.data.data;
+                    const deptMap = depts.reduce((acc, curr) => {
+                        acc[curr.id] = curr.tenPhong;
+                        return acc;
+                    }, {});
+
+                    const employees = empRes.data.data;
+                    const empMap = employees.reduce((acc, curr) => {
+                        acc[curr.id] = curr;
+                        return acc;
+                    }, {});
+                    
+                    const enrichedReports = (res.data.data || []).map(r => {
+                        const sender = empMap[r.createdBy];
+                        return {
+                            ...r,
+                            departmentName: deptMap[r.departmentId] || `Phòng ${r.departmentId}`,
+                            senderName: sender ? sender.hoTen : `User ${r.createdBy}`,
+                            senderRole: sender ? (sender.role === 'TRUONG_PHONG' ? 'Trưởng phòng' : sender.role === 'GIAM_DOC_PHONG_BAN' ? 'Giám đốc' : sender.role) : ''
+                        };
+                    });
+                    setDepartmentSummaries(enrichedReports);
                 }
             } else {
                 const [payrollRes, empRes] = await Promise.all([
@@ -74,7 +104,7 @@ export default function PayrollPage() {
                         departmentId: empMap[p.employeeId]?.departmentId
                     }));
 
-                    if (isCeoOrDirector && viewingDepartment) {
+                    if ((isCeo || user?.role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN') && viewingDepartment) {
                         enrichedPayrolls = enrichedPayrolls.filter(p => p.departmentId === viewingDepartment.id);
                     }
 
@@ -88,23 +118,78 @@ export default function PayrollPage() {
         }
     };
 
-    // Re-fetch when viewingDepartment changes
     useEffect(() => {
         fetchPayrolls();
     }, [viewingDepartment]);
 
-    const handleApproveDepartment = async (departmentId) => {
-        if (!window.confirm("Bạn có chắc muốn duyệt báo cáo bảng lương của phòng ban? Toàn bộ phiếu lương sẽ được gửi lên Tổng giám đốc.")) return;
+    const handleApproveAllManager = async () => {
+        if (!window.confirm("Bạn có chắc muốn duyệt lương tất cả nhân viên trong phòng ban?")) return;
         try {
-            // Note: Currently backend approves the director's own department. If departmentId is needed in future, pass it here.
-            const res = await api.post(`/api/payroll/department/approve?month=${month}&year=${year}`);
+            const res = await api.post(`/api/payroll/manager/approve-all?month=${month}&year=${year}`);
             if (res.data?.success) {
-                toast.show("Thành công", "Đã duyệt báo cáo bảng lương phòng ban", "success");
-                setViewingDepartment(null);
+                toast.show("Thành công", "Đã duyệt tất cả lương", "success");
                 fetchPayrolls();
             }
         } catch (error) {
-            toast.show("Lỗi", error.response?.data?.message || "Không thể duyệt", "error");
+            toast.show("Lỗi", error.response?.data?.message || "Lỗi xử lý", "error");
+        }
+    };
+    
+    const handleSubmitManagerReport = async (force = false) => {
+        if (!force && !window.confirm(`Bạn có chắc muốn gửi báo cáo lên Giám đốc phòng ban?`)) return;
+        try {
+            const res = await api.post(`/api/payroll/manager/submit-report?month=${month}&year=${year}&force=${force}`);
+            if (res.data?.success) {
+                toast.show("Thành công", "Đã gửi báo cáo lương lên Giám đốc phòng ban", "success");
+                fetchPayrolls();
+            }
+        } catch (error) {
+            if (error.response?.status === 409) {
+                if (window.confirm(error.response.data.message)) {
+                    handleSubmitManagerReport(true);
+                }
+            } else {
+                toast.show("Lỗi", error.response?.data?.message || "Lỗi xử lý", "error");
+            }
+        }
+    };
+
+    const handleApproveDirectorReport = async (id) => {
+        if (!window.confirm("Bạn có chắc muốn duyệt báo cáo này?")) return;
+        try {
+            const res = await api.post(`/api/payroll/director/approve-report/${id}`);
+            if (res.data?.success) {
+                toast.show("Thành công", "Đã duyệt báo cáo", "success");
+                fetchPayrolls();
+            }
+        } catch (error) {
+            toast.show("Lỗi", error.response?.data?.message || "Lỗi xử lý", "error");
+        }
+    };
+    
+    const handleSubmitDirectorReport = async () => {
+        if (!window.confirm("Bạn có chắc muốn gửi báo cáo tổng hợp lên Tổng Giám đốc?")) return;
+        try {
+            const res = await api.post(`/api/payroll/director/submit-report?month=${month}&year=${year}`);
+            if (res.data?.success) {
+                toast.show("Thành công", "Đã gửi báo cáo tổng hợp", "success");
+                fetchPayrolls();
+            }
+        } catch (error) {
+            toast.show("Lỗi", error.response?.data?.message || "Lỗi xử lý", "error");
+        }
+    };
+
+    const handleApproveCeoReport = async (id) => {
+        if (!window.confirm("Bạn có chắc muốn duyệt báo cáo này của phòng ban?")) return;
+        try {
+            const res = await api.post(`/api/payroll/ceo/approve-report/${id}`);
+            if (res.data?.success) {
+                toast.show("Thành công", "Đã duyệt báo cáo", "success");
+                fetchPayrolls();
+            }
+        } catch (error) {
+            toast.show("Lỗi", error.response?.data?.message || "Lỗi xử lý", "error");
         }
     };
 
@@ -165,10 +250,7 @@ export default function PayrollPage() {
             return;
         }
         try {
-            const res = await api.post(`/api/payroll/department/reject`, { 
-                departmentId: viewingDepartment.id, 
-                month, 
-                year, 
+            const res = await api.post(`/api/payroll/ceo/reject-report/${viewingDepartment.id}`, { 
                 reason: rejectDepartmentReason 
             });
             if (res.data?.success) {
@@ -308,9 +390,19 @@ export default function PayrollPage() {
                                     <Calculator size={16} /> Tính lương tháng {month}
                                 </Button>
                             )}
-                            {user?.role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN' && (
-                                <Button variant="primary" className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-600/20" onClick={() => handleApproveDepartment()}>
-                                    <CheckCircle size={16} /> Duyệt tất cả báo cáo
+                            {user?.role?.toUpperCase() === 'TRUONG_PHONG' && (
+                                <>
+                                    <Button variant="outline" className="flex items-center gap-2 text-emerald-600 border-emerald-200 hover:bg-emerald-50" onClick={handleApproveAllManager}>
+                                        <CheckCircle size={16} /> Duyệt tất cả nhân viên
+                                    </Button>
+                                    <Button variant="primary" className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700" onClick={() => handleSubmitManagerReport()}>
+                                        <CheckCircle size={16} /> Tạo báo cáo gửi Giám đốc
+                                    </Button>
+                                </>
+                            )}
+                            {user?.role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN' && !viewingDepartment && (
+                                <Button variant="primary" className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700" onClick={handleSubmitDirectorReport}>
+                                    <CheckCircle size={16} /> Gửi báo cáo lên Tổng Giám đốc
                                 </Button>
                             )}
                             <Button variant="outline" className="flex items-center gap-2 text-green-700 border-green-200 hover:bg-green-50">
@@ -342,7 +434,7 @@ export default function PayrollPage() {
                                 {isCeo
                                     ? `Báo cáo bảng lương toàn công ty tháng ${month}/${year}` 
                                     : user?.role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN' && !viewingDepartment
-                                        ? `Báo cáo bảng lương phòng ban tháng ${month}/${year}`
+                                        ? `Báo cáo bảng lương tháng ${month}/${year}`
                                         : `Bảng lương chi tiết tháng ${month}/${year}`
                                 }
                             </h2>
@@ -355,10 +447,14 @@ export default function PayrollPage() {
                             </div>
                         ) : (
                             (isCeo || user?.role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN') && !viewingDepartment ? (
-                                <DepartmentPayrollSummaryTable 
-                                    summaries={departmentSummaries}
+                                <PayrollReportTable 
+                                    reports={departmentSummaries}
                                     role={user?.role}
-                                    onApprove={(id) => handleApproveDepartment(id)}
+                                    onApprove={(id) => isCeo ? handleApproveCeoReport(id) : handleApproveDirectorReport(id)}
+                                    onReject={(id, name) => {
+                                        setViewingDepartment({ id, name });
+                                        setIsRejectDepartmentModalOpen(true);
+                                    }}
                                     onViewDetail={(id, name) => setViewingDepartment({ id, name })}
                                 />
                             ) : (
@@ -443,16 +539,6 @@ export default function PayrollPage() {
                                 </div>
                                 <div className="px-6 py-4 border-t border-gray-100 bg-white flex justify-end gap-3">
                                     <Button variant="outline" onClick={() => setViewingDepartment(null)} className="px-6">Đóng</Button>
-                                    {(isCeo || user?.role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN') && (
-                                        <Button variant="primary" onClick={() => setIsRejectDepartmentModalOpen(true)} className="bg-red-600 hover:bg-red-700 focus:ring-4 focus:ring-red-600/20 border-transparent px-6 flex items-center gap-2">
-                                            <AlertTriangle size={16} /> Từ chối báo cáo
-                                        </Button>
-                                    )}
-                                    {user?.role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN' && (
-                                        <Button variant="primary" onClick={() => handleApproveDepartment(viewingDepartment.id)} className="bg-emerald-600 hover:bg-emerald-700 focus:ring-4 focus:ring-emerald-600/20 border-transparent px-6 flex items-center gap-2">
-                                            <CheckCircle size={16} /> Duyệt báo cáo
-                                        </Button>
-                                    )}
                                 </div>
                             </div>
                         </div>

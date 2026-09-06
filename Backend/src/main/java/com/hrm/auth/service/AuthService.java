@@ -3,6 +3,7 @@ package com.hrm.auth.service;
 import com.hrm.auth.dto.LoginRequest;
 import com.hrm.auth.dto.LoginResponse;
 import com.hrm.common.entity.User;
+import com.hrm.common.repository.DepartmentRepository;
 import com.hrm.common.repository.UserRepository;
 import com.hrm.exception.AppException;
 import com.hrm.security.JwtUtil;
@@ -23,6 +24,7 @@ import org.springframework.stereotype.Service;
 public class AuthService {
 
     private final UserRepository userRepository;
+    private final DepartmentRepository departmentRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
 
@@ -49,12 +51,20 @@ public class AuthService {
 
         log.info("Login success: userId={}, role={}", user.getId(), user.getRole());
 
+        String tenPhong = null;
+        if (user.getDepartmentId() != null) {
+            tenPhong = departmentRepository.findById(user.getDepartmentId())
+                    .map(dept -> dept.getTenPhong())
+                    .orElse(null);
+        }
+
         return LoginResponse.builder()
                 .token(token)
                 .userId(user.getId())
                 .hoTen(user.getHoTen())
                 .role(user.getRole())
                 .departmentId(user.getDepartmentId())
+                .tenPhong(tenPhong)
                 .teamId(user.getTeamId())
                 .build();
     }

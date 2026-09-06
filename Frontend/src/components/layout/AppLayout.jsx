@@ -85,6 +85,7 @@ function NavButton({ icon: Icon, label, onClick }) {
 function SidebarContent({ role, onClose }) {
   const adminNav = [
     { to: '/admin/dashboard', icon: LayoutDashboard, label: 'Tổng quan hệ thống', end: true },
+    { to: '/admin/departments', icon: Building2, label: 'Quản lý phòng ban' },
     { to: '/admin/users', icon: Users, label: 'Quản lý tài khoản' },
     { to: '/admin/settings', icon: Settings, label: 'Cấu hình hệ thống' },
   ];
@@ -295,7 +296,7 @@ export function AppLayout() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-5 animate-fade-in">
+        <main className="flex-1 overflow-y-auto p-5">
           <Outlet />
         </main>
       </div>

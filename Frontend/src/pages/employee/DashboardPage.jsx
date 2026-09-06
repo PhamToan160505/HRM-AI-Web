@@ -4,6 +4,7 @@ import { CardHeader } from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import api from '../../services/api';
 import { useToast } from '../../components/common/Toast';
+import { useAuth } from '../../context/AuthContext';
 
 /**
  * Dashboard Nhân viên.
@@ -13,6 +14,7 @@ export default function EmployeeDashboardPage() {
   const [profile, setProfile] = useState({});
   const [todayAttendance, setTodayAttendance] = useState(null);
   const toast = useToast();
+  const { user } = useAuth();
 
   useEffect(() => {
     // Tạm lấy profile để hiển thị
@@ -36,7 +38,7 @@ export default function EmployeeDashboardPage() {
     <div className="space-y-5">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-lg font-bold text-text">Tổng quan — Nhân Viên</h1>
+          <h1 className="text-lg font-bold text-text">Tổng quan — Nhân viên {user?.tenPhong ? (user.tenPhong.toLowerCase().startsWith('phòng ') ? user.tenPhong.substring(6) : user.tenPhong) : ''}</h1>
           <p className="text-xs text-muted mt-0.5">Hồ sơ và thông tin cá nhân</p>
         </div>
       </div>

@@ -16,12 +16,125 @@ public class JobPostingService {
 
     private final JobPostingRepository jobPostingRepository;
     private final com.hrm.recruitment.repository.ApplicationRepository applicationRepository;
+    private final com.hrm.recruitment.repository.JobRequisitionRepository jobRequisitionRepository;
+    private final com.hrm.common.repository.DepartmentRepository departmentRepository;
 
     private static final Pattern NONLATIN = Pattern.compile("[^\\w-]");
     private static final Pattern WHITESPACE = Pattern.compile("[\\s]");
 
-    public List<JobPosting> getAllJobs() {
-        return jobPostingRepository.findAll();
+    public boolean isSpecialRole(com.hrm.security.CustomUserDetails user) {
+        if (user.getRole() == com.hrm.common.entity.Role.CEO || user.getRole() == com.hrm.common.entity.Role.ADMIN) {
+            return true;
+        }
+        if (user.getRole() == com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN || user.getRole() == com.hrm.common.entity.Role.TRUONG_PHONG) {
+            if (user.getDepartmentId() != null) {
+                return departmentRepository.findById(user.getDepartmentId())
+                        .map(dept -> "Nhân sự".equalsIgnoreCase(dept.getTenPhong()) || "Nhân Su".equalsIgnoreCase(dept.getTenPhong()) || "Phòng Nhân sự".equalsIgnoreCase(dept.getTenPhong()))
+                        .orElse(false);
+            }
+        }
+        return false;
+    }
+
+    private boolean isRequester(JobPosting job, Long userId) {
+        if (job.getJobRequisitionId() != null) {
+            return jobRequisitionRepository.findById(job.getJobRequisitionId())
+                    .map(req -> req.getRequesterId().equals(userId))
+                    .orElse(false);
+        }
+        return false;
+    }
+
+    public boolean hasAccessToJob(Long jobId, com.hrm.security.CustomUserDetails user) {
+        if (isSpecialRole(user)) return true;
+        return jobPostingRepository.findById(jobId)
+                .map(job -> isRequester(job, user.getUserId()))
+                .orElse(false);
+    }
+
+    public List<JobPosting> getAllJobs(com.hrm.security.CustomUserDetails currentUser) {
+        List<JobPosting> jobs = jobPostingRepository.findAll();
+        if (isSpecialRole(currentUser)) {
+            return jobs;
+        }
+        return jobs.stream().filter(job -> "OPEN".equals(job.getStatus()) || isRequester(job, currentUser.getUserId())).toList();
+    }
+
+    public List<java.util.Map<String, Object>> getJobStats(com.hrm.security.CustomUserDetails currentUser) {
+        List<JobPosting> jobs = jobPostingRepository.findAll();
+        if (!isSpecialRole(currentUser)) {
+            jobs = jobs.stream().filter(job -> "OPEN".equals(job.getStatus()) || isRequester(job, currentUser.getUserId())).toList();
+        }
+        List<java.util.Map<String, Object>> statsList = new java.util.ArrayList<>();
+        
+        for (JobPosting job : jobs) {
+            long total = applicationRepository.countByJobPostingId(job.getId());
+            long newApps = applicationRepository.countByJobPostingIdAndApprovalStatus(job.getId(), com.hrm.recruitment.entity.ApplicationStatus.NEW);
+            long pendingHr = applicationRepository.countByJobPostingIdAndApprovalStatus(job.getId(), com.hrm.recruitment.entity.ApplicationStatus.PENDING_HR_CV_REVIEW);
+            long pendingTech = applicationRepository.countByJobPostingIdAndApprovalStatus(job.getId(), com.hrm.recruitment.entity.ApplicationStatus.PENDING_TECH_CV_REVIEW);
+            long approved = applicationRepository.countByJobPostingIdAndApprovalStatus(job.getId(), com.hrm.recruitment.entity.ApplicationStatus.OFFER_APPROVED);
+            long rejected = applicationRepository.countByJobPostingIdAndApprovalStatus(job.getId(), com.hrm.recruitment.entity.ApplicationStatus.REJECTED);
+            
+            java.util.Map<String, Object> stat = new java.util.HashMap<>();
+            String departmentName = job.getDepartmentId() != null ? 
+                    departmentRepository.findById(job.getDepartmentId())
+                        .map(com.hrm.common.entity.Department::getTenPhong)
+                        .orElse("Phòng ban") 
+                    : "Phòng ban";
+                    
+            stat.put("jobPosting", job);
+            stat.put("departmentName", departmentName);
+            stat.put("totalApps", total);
+            stat.put("newApps", newApps);
+            stat.put("pendingHrApps", pendingHr);
+            stat.put("pendingTechApps", pendingTech);
+            stat.put("approvedApps", approved);
+            stat.put("rejectedApps", rejected);
+            statsList.add(stat);
+        }
+        return statsList;
+    }
+
+    public org.springframework.data.domain.Page<java.util.Map<String, Object>> getJobStatsPaginated(Long departmentId, String capBac, int page, int size, boolean restrictToRequester, com.hrm.security.CustomUserDetails currentUser) {
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page, size, org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt"));
+        
+        Long requesterId = isSpecialRole(currentUser) ? null : currentUser.getUserId();
+        
+        org.springframework.data.domain.Page<JobPosting> jobPage;
+        if (restrictToRequester && requesterId != null) {
+            jobPage = jobPostingRepository.findWithFiltersStrictRequester(departmentId, capBac, requesterId, pageable);
+        } else {
+            jobPage = jobPostingRepository.findWithFilters(departmentId, capBac, requesterId, pageable);
+        }
+        
+        List<java.util.Map<String, Object>> statsList = new java.util.ArrayList<>();
+        for (JobPosting job : jobPage.getContent()) {
+            long total = applicationRepository.countByJobPostingId(job.getId());
+            long newApps = applicationRepository.countByJobPostingIdAndApprovalStatus(job.getId(), com.hrm.recruitment.entity.ApplicationStatus.NEW);
+            long pendingHr = applicationRepository.countByJobPostingIdAndApprovalStatus(job.getId(), com.hrm.recruitment.entity.ApplicationStatus.PENDING_HR_CV_REVIEW);
+            long pendingTech = applicationRepository.countByJobPostingIdAndApprovalStatus(job.getId(), com.hrm.recruitment.entity.ApplicationStatus.PENDING_TECH_CV_REVIEW);
+            long approved = applicationRepository.countByJobPostingIdAndApprovalStatus(job.getId(), com.hrm.recruitment.entity.ApplicationStatus.OFFER_APPROVED);
+            long rejected = applicationRepository.countByJobPostingIdAndApprovalStatus(job.getId(), com.hrm.recruitment.entity.ApplicationStatus.REJECTED);
+            
+            java.util.Map<String, Object> stat = new java.util.HashMap<>();
+            String departmentName = job.getDepartmentId() != null ? 
+                    departmentRepository.findById(job.getDepartmentId())
+                        .map(com.hrm.common.entity.Department::getTenPhong)
+                        .orElse("Phòng ban") 
+                    : "Phòng ban";
+                    
+            stat.put("jobPosting", job);
+            stat.put("departmentName", departmentName);
+            stat.put("totalApps", total);
+            stat.put("newApps", newApps);
+            stat.put("pendingHrApps", pendingHr);
+            stat.put("pendingTechApps", pendingTech);
+            stat.put("approvedApps", approved);
+            stat.put("rejectedApps", rejected);
+            statsList.add(stat);
+        }
+        
+        return new org.springframework.data.domain.PageImpl<>(statsList, pageable, jobPage.getTotalElements());
     }
 
     public JobPosting getJobById(Long id) {
@@ -72,18 +185,29 @@ public class JobPostingService {
                 .requirements(request.requirements())
                 .soLuongTuyen(request.soLuongTuyen())
                 .diaDiem(request.diaDiem())
-                .hinhThucLamViec(com.hrm.recruitment.entity.HinhThucLamViec.valueOf(request.hinhThucLamViec()))
+                .hinhThucLamViec(request.hinhThucLamViec())
                 .ngayBatDau(request.ngayBatDau())
                 .hanNopHoSo(request.hanNopHoSo())
                 .mucLuong(request.mucLuong())
                 .coThoaThuan(request.coThoaThuan())
                 .quyenLoi(request.quyenLoi())
-                .capBac(request.capBac() != null && !request.capBac().trim().isEmpty() ? com.hrm.recruitment.entity.CapBac.valueOf(request.capBac()) : null)
+                .capBac(request.capBac())
+                .targetRole(request.targetRole())
+                .departmentId(request.departmentId())
+                .jobRequisitionId(request.jobRequisitionId())
                 .status("OPEN")
                 .slug(slug)
                 .build();
-                
-        return jobPostingRepository.save(job);
+        JobPosting savedJob = jobPostingRepository.save(job);
+        
+        if (request.jobRequisitionId() != null) {
+            jobRequisitionRepository.findById(request.jobRequisitionId()).ifPresent(req -> {
+                req.setStatus(com.hrm.recruitment.entity.JobRequisitionStatus.POSTED);
+                jobRequisitionRepository.save(req);
+            });
+        }
+        
+        return savedJob;
     }
 
     public JobPosting updateJob(Long id, com.hrm.recruitment.controller.RecruitmentController.JobPostingRequest request) {
@@ -107,13 +231,24 @@ public class JobPostingService {
         job.setRequirements(request.requirements());
         job.setSoLuongTuyen(request.soLuongTuyen());
         job.setDiaDiem(request.diaDiem());
-        job.setHinhThucLamViec(com.hrm.recruitment.entity.HinhThucLamViec.valueOf(request.hinhThucLamViec()));
+        job.setHinhThucLamViec(request.hinhThucLamViec());
         job.setNgayBatDau(request.ngayBatDau());
         job.setHanNopHoSo(request.hanNopHoSo());
         job.setMucLuong(request.mucLuong());
         job.setCoThoaThuan(request.coThoaThuan());
         job.setQuyenLoi(request.quyenLoi());
-        job.setCapBac(request.capBac() != null && !request.capBac().trim().isEmpty() ? com.hrm.recruitment.entity.CapBac.valueOf(request.capBac()) : null);
+        if (request.capBac() != null && !request.capBac().trim().isEmpty()) {
+            job.setCapBac(request.capBac());
+        }
+        if (request.targetRole() != null) {
+            job.setTargetRole(request.targetRole());
+        }
+        if (request.departmentId() != null) {
+            job.setDepartmentId(request.departmentId());
+        }
+        if (request.jobRequisitionId() != null) {
+            job.setJobRequisitionId(request.jobRequisitionId());
+        }
         
         return jobPostingRepository.save(job);
     }

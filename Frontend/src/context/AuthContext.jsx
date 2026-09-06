@@ -35,7 +35,7 @@ export function AuthProvider({ children }) {
    * @param {Object} loginResponse — { token, userId, hoTen, role, departmentId }
    */
   const login = useCallback((loginResponse) => {
-    const { token, userId, hoTen, role, departmentId, teamId } = loginResponse;
+    const { token, userId, hoTen, role, departmentId, tenPhong, teamId } = loginResponse;
 
     // Chuẩn hóa role về lowercase để dùng trong so sánh/route guard
     const normalizedRole = role?.toLowerCase();
@@ -45,6 +45,7 @@ export function AuthProvider({ children }) {
       hoTen,
       role: normalizedRole,
       departmentId,
+      tenPhong,
       teamId,
     };
 
@@ -69,6 +70,7 @@ export function AuthProvider({ children }) {
     // Helpers
     role: user?.role ?? null,
     departmentId: user?.departmentId ?? null,
+    tenPhong: user?.tenPhong ?? null,
     teamId: user?.teamId ?? null,
     userId: user?.userId ?? null,
     hoTen: user?.hoTen ?? null,

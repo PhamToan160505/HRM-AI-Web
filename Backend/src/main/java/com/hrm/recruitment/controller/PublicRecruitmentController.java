@@ -26,6 +26,8 @@ public class PublicRecruitmentController {
 
     private final JobPostingService jobPostingService;
     private final ApplicationService applicationService;
+    private final com.hrm.ai.service.CvParserService cvParserService;
+    private final com.hrm.ai.service.CvExtractionService cvExtractionService;
 
     // Rate Limiter: 10 requests / 1 phút mỗi IP
     private final Map<String, Bucket> cache = new ConcurrentHashMap<>();
@@ -52,12 +54,31 @@ public class PublicRecruitmentController {
             throw new IllegalArgumentException("Đã hết hạn nộp hồ sơ");
         }
         
-        long currentAppCount = applicationService.getApplicationsByJobPosting(job.getId()).size();
-        if (currentAppCount >= job.getSoLuongTuyen()) {
-            throw new IllegalArgumentException("Đợt tuyển dụng này đã nhận đủ giới hạn số lượng hồ sơ");
-        }
+
 
         return ResponseEntity.ok(ApiResponse.ok(job, "Lấy thông tin thành công"));
+    }
+
+    @PostMapping("/{slug}/extract-cv")
+    public ResponseEntity<ApiResponse<String>> extractCvData(
+            @PathVariable String slug,
+            @RequestParam("cvFile") MultipartFile cvFile
+    ) {
+        JobPosting job = jobPostingService.getJobBySlug(slug);
+        try {
+            byte[] bytes = cvFile.getBytes();
+            String rawText = cvParserService.parseCvFile(bytes, cvFile.getOriginalFilename());
+            if (rawText == null || rawText.trim().isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(ApiResponse.error("Không thể đọc được văn bản từ CV này."));
+            }
+            // Gọi AI bóc tách
+            String extractedJson = cvExtractionService.extractCvData(null, job.getTitle(), rawText);
+            return ResponseEntity.ok(ApiResponse.ok(extractedJson, "Trích xuất thành công"));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Lỗi trích xuất CV: " + e.getMessage()));
+        }
     }
 
     @PostMapping("/{slug}")
