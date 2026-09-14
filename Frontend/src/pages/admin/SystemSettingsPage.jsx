@@ -54,7 +54,8 @@ export default function SystemSettingsPage() {
   const predefinedSettings = [
     { key: 'LATE_PENALTY_AMOUNT', label: 'Số tiền phạt đi muộn (VNĐ)', description: 'Mức tiền phạt mặc định khi nhân viên đi làm muộn', type: 'number' },
     { key: 'STANDARD_WORK_HOURS', label: 'Số giờ làm việc chuẩn/ngày', description: 'Số giờ làm việc tiêu chuẩn trong 1 ngày', type: 'number' },
-    { key: 'MAX_LEAVE_DAYS', label: 'Số ngày phép tối đa', description: 'Tổng số ngày nghỉ phép tối đa trong năm', type: 'number' }
+    { key: 'MAX_LEAVE_DAYS', label: 'Số ngày phép tối đa', description: 'Tổng số ngày nghỉ phép tối đa trong năm', type: 'number' },
+    { key: 'chatbot_sensitive_keywords', label: 'Từ khóa nhạy cảm Chatbot AI', description: 'Các từ khóa cấm Chatbot tự động lưu bộ nhớ đệm (cách nhau bằng dấu phẩy)', type: 'text' }
   ];
 
   return (

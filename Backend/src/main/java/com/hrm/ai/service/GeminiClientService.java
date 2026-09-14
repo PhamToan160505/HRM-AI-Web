@@ -2,6 +2,7 @@ package com.hrm.ai.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -133,13 +134,88 @@ public class GeminiClientService {
                 JsonNode content = root.get("candidates").get(0).get("content");
                 if (content != null && content.has("parts") && content.get("parts").isArray()
                         && content.get("parts").size() > 0) {
-                    return content.get("parts").get(0).get("text").asText("").trim();
+                    for (JsonNode part : content.get("parts")) {
+                        if (part.has("text")) {
+                            return part.get("text").asText("").trim();
+                        }
+                    }
+                    return ""; // Không có text part (ví dụ: chỉ có functionCall)
                 }
             }
         } catch (Exception e) {
             log.warn("[Gemini] Không parse được response JSON, trả nguyên chuỗi: {}", e.getMessage());
         }
         return rawResponse.trim();
+    }
+
+    /**
+     * Tương tác nhiều lượt (multi-turn) với Gemini, hỗ trợ System Prompt và Function Calling.
+     */
+    public Mono<String> callGeminiChat(String systemPrompt, List<com.hrm.ai.entity.ChatMessage> history, JsonNode tools) {
+        String url = "/models/" + model + ":generateContent?key=" + apiKey;
+        
+        ObjectNode requestBodyNode = objectMapper.createObjectNode();
+
+        // System Instruction
+        if (systemPrompt != null && !systemPrompt.isEmpty()) {
+            ObjectNode sysInstNode = requestBodyNode.putObject("system_instruction");
+            sysInstNode.putArray("parts").addObject().put("text", systemPrompt);
+        }
+
+        // Contents (History) - Đảm bảo tính luân phiên của role (user -> model -> user)
+        var contentsArray = requestBodyNode.putArray("contents");
+        String lastRole = null;
+        ObjectNode lastMsgNode = null;
+        
+        for (var msg : history) {
+            String role = msg.getRole().equals("assistant") || msg.getRole().equals("model") ? "model" : "user";
+            
+            if (role.equals(lastRole) && lastMsgNode != null) {
+                // Nếu cùng role với tin nhắn trước đó, gộp nội dung lại
+                lastMsgNode.withArray("parts").addObject().put("text", "\n\n" + msg.getContent());
+            } else {
+                // Nếu khác role, tạo node mới
+                ObjectNode msgNode = contentsArray.addObject();
+                msgNode.put("role", role);
+                msgNode.putArray("parts").addObject().put("text", msg.getContent());
+                
+                lastRole = role;
+                lastMsgNode = msgNode;
+            }
+        }
+
+        // Tools (Function Calling)
+        if (tools != null && tools.isArray() && tools.size() > 0) {
+            requestBodyNode.set("tools", tools);
+        }
+
+        String requestBody;
+        try {
+            requestBody = objectMapper.writeValueAsString(requestBodyNode);
+        } catch (Exception e) {
+            return Mono.error(new RuntimeException("Lỗi serialize JSON cho Gemini chat: " + e.getMessage()));
+        }
+
+        log.info("[Gemini Chat] Gọi model={}, historySize={}, có tools={}", model, history.size(), tools != null);
+
+        return webClient.post()
+                .uri(url)
+                .bodyValue(requestBody)
+                .retrieve()
+                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
+                        response -> response.bodyToMono(String.class).flatMap(body -> {
+                            log.error("[Gemini Chat] HTTP {} error: {}", response.statusCode(), body);
+                            return Mono.error(new RuntimeException(
+                                    "Gemini Chat lỗi HTTP " + response.statusCode() + ": " + body));
+                        }))
+                .bodyToMono(String.class)
+                .timeout(Duration.ofSeconds(60))
+                .retryWhen(reactor.util.retry.Retry.backoff(2, Duration.ofSeconds(5))
+                        .doBeforeRetry(sig -> log.warn("[Gemini Chat] API bận/lỗi, đang thử lại lần {}/3...", sig.totalRetriesInARow() + 1)))
+                .onErrorResume(e -> {
+                    log.error("[Gemini Chat] Lỗi: {}", e.getMessage());
+                    return Mono.error(new RuntimeException("Lỗi khi gọi Gemini API Chat: " + e.getMessage()));
+                });
     }
 
     private String escapeJson(String input) {
@@ -151,5 +227,49 @@ public class GeminiClientService {
                     .replace("\n", "\\n")
                     .replace("\r", "\\r")
                     .replace("\t", "\\t");
+    }
+
+    /**
+     * Gọi Gemini Embedding API để lấy vector ngữ nghĩa (Semantic Embedding)
+     * Model sử dụng mặc định: gemini-embedding-2
+     */
+    public String getEmbedding(String text) {
+        String url = "/models/gemini-embedding-2:embedContent?key=" + apiKey;
+
+        String requestBody = """
+            {
+              "model": "models/gemini-embedding-2",
+              "content": {
+                "parts": [{"text": "%s"}]
+              }
+            }
+            """.formatted(escapeJson(text));
+
+        log.debug("[Gemini] Gọi Embedding model, textLen={}", text.length());
+
+        try {
+            String rawResponse = webClient.post()
+                    .uri(url)
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
+                            response -> response.bodyToMono(String.class).flatMap(body -> {
+                                log.error("[Gemini Embedding] HTTP {} error: {}", response.statusCode(), body);
+                                return Mono.error(new RuntimeException(
+                                        "Gemini Embedding lỗi HTTP " + response.statusCode() + ": " + body));
+                            }))
+                    .bodyToMono(String.class)
+                    .timeout(Duration.ofSeconds(30))
+                    .retryWhen(Retry.backoff(3, Duration.ofSeconds(2)))
+                    .block();
+
+            JsonNode root = objectMapper.readTree(rawResponse);
+            if (root.has("embedding") && root.get("embedding").has("values")) {
+                return root.get("embedding").get("values").toString(); // Trả về chuỗi JSON "[0.12, -0.34, ...]"
+            }
+        } catch (Exception e) {
+            log.error("[Gemini Embedding] Lỗi lấy hoặc parse vector embedding: ", e);
+        }
+        return null;
     }
 }

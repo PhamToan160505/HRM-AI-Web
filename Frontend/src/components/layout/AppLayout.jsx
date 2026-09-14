@@ -25,6 +25,7 @@ import EmployeeProfileSummary from '../employee/EmployeeProfileSummary';
 import CccdScannerModal from '../employee/CccdScannerModal';
 import api from '../../services/api';
 import { useToast } from '../common/Toast';
+import ChatWidget from '../chat/ChatWidget';
 
 const roleLabels = {
   ceo: 'Tổng Giám Đốc',
@@ -300,6 +301,7 @@ export function AppLayout() {
           <Outlet />
         </main>
       </div>
+      <ChatWidget />
     </div>
   );
 }
