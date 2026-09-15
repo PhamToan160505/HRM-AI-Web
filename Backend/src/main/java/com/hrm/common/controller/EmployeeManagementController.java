@@ -23,6 +23,7 @@ public class EmployeeManagementController {
     private final UserRepository userRepository;
     private final CloudinaryService cloudinaryService;
     private final com.hrm.common.payroll.repository.SalaryHistoryRepository salaryHistoryRepository;
+    private final com.hrm.employee.service.EmployeeHistoryService employeeHistoryService;
 
     @GetMapping
     @PreAuthorize("hasAnyRole('TRUONG_PHONG', 'GIAM_DOC_PHONG_BAN', 'CEO')")
@@ -106,8 +107,10 @@ public class EmployeeManagementController {
             Object depId = request.get("departmentId");
             if (depId != null) {
                 user.setDepartmentId(Long.valueOf(depId.toString()));
+                employeeHistoryService.logHistory(user.getId(), "TRANSFERRED", null, "Phòng ban ID: " + user.getDepartmentId(), "Chuyển phòng ban");
             } else {
                 user.setDepartmentId(null);
+                employeeHistoryService.logHistory(user.getId(), "TRANSFERRED", null, "Không có", "Xóa khỏi phòng ban");
             }
         }
         
@@ -120,7 +123,11 @@ public class EmployeeManagementController {
             if (cvString != null && cvString.length() > 100) {
                 throw new RuntimeException("400: Chức vụ không được vượt quá 100 ký tự");
             }
+            String oldChucVu = user.getChucVu();
             user.setChucVu(cvString);
+            if (oldChucVu == null || !oldChucVu.equals(cvString)) {
+                employeeHistoryService.logHistory(user.getId(), "PROMOTED", oldChucVu, cvString, "Thay đổi chức vụ");
+            }
         }
         
         Double oldBaseSalary = user.getBaseSalary();
@@ -166,6 +173,10 @@ public class EmployeeManagementController {
                     .changeDate(java.time.LocalDateTime.now())
                     .build();
             salaryHistoryRepository.save(history);
+            
+            String oldSal = String.format("Lương CB: %.0f, Phụ cấp: %.0f", oldBaseSalary != null ? oldBaseSalary : 0, oldAllowance != null ? oldAllowance : 0);
+            String newSal = String.format("Lương CB: %.0f, Phụ cấp: %.0f", savedUser.getBaseSalary() != null ? savedUser.getBaseSalary() : 0, savedUser.getAllowance() != null ? savedUser.getAllowance() : 0);
+            employeeHistoryService.logHistory(savedUser.getId(), "SALARY_CHANGED", oldSal, newSal, reason);
         }
 
         return ResponseEntity.ok(ApiResponse.ok(savedUser, "Cập nhật thành công"));

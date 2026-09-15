@@ -47,8 +47,8 @@ public class AccountCreationService {
             throw new AppException(HttpStatus.BAD_REQUEST, "Email " + request.getEmail() + " đã tồn tại trong hệ thống");
         }
 
-        // 1. Sinh mã nhân viên (8 số, format 23 + departmentCode + 000X)
-        String maNhanVien = generateMaNhanVien(request.getDepartmentId());
+        // 1. Sinh mã nhân viên (8 số, format prefix + random)
+        String maNhanVien = generateMaNhanVien(Role.NHAN_VIEN, request.getDepartmentId());
 
         // 2. Sinh mật khẩu ngẫu nhiên (8 ký tự)
         String rawPassword = generateRandomPassword(8);
@@ -87,22 +87,24 @@ public class AccountCreationService {
         log.info("Đã từ chối yêu cầu tạo tài khoản {}", requestId);
     }
 
-    private String generateMaNhanVien(Long departmentId) {
-        String companyCode = "23";
-        String deptCode = String.format("%02d", departmentId != null ? departmentId : 99);
-        String prefix = companyCode + deptCode;
-        
-        String maxMaNhanVien = userRepository.findMaxMaNhanVienByPrefix(prefix);
-        if (maxMaNhanVien == null || maxMaNhanVien.length() < 8) {
-            return prefix + "0001";
+    private String generateMaNhanVien(com.hrm.common.entity.Role role, Long departmentId) {
+        String prefix;
+        if (role == com.hrm.common.entity.Role.ADMIN || role == com.hrm.common.entity.Role.CEO) {
+            prefix = "99";
+        } else if (role == com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN) {
+            prefix = "88";
+        } else {
+            prefix = String.format("%02d", departmentId != null ? departmentId : 0);
         }
         
-        try {
-            int currentSequence = Integer.parseInt(maxMaNhanVien.substring(4));
-            return prefix + String.format("%04d", currentSequence + 1);
-        } catch (NumberFormatException e) {
-            return prefix + "0001";
-        }
+        String newMaNhanVien;
+        java.util.Random random = new java.util.Random();
+        do {
+            int randomNum = 100000 + random.nextInt(900000);
+            newMaNhanVien = prefix + String.valueOf(randomNum);
+        } while (userRepository.findByMaNhanVien(newMaNhanVien).isPresent());
+        
+        return newMaNhanVien;
     }
 
     private String generateRandomPassword(int length) {

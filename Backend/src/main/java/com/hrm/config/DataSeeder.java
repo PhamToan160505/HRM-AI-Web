@@ -40,6 +40,7 @@ public class DataSeeder implements CommandLineRunner {
         seedDepartments();
         seedUsers();
         migrateMaNhanVien();
+        updateDemoMaNhanVien();
     }
 
     private void migrateApplicationsTable() {
@@ -198,24 +199,37 @@ public class DataSeeder implements CommandLineRunner {
     private void migrateMaNhanVien() {
         java.util.List<User> users = userRepository.findAll();
         for (User user : users) {
-            if (user.getMaNhanVien() == null || user.getMaNhanVien().length() != 8 || user.getMaNhanVien().startsWith("1000")) {
-                String companyCode = "23";
-                String deptCode = String.format("%02d", user.getDepartmentId() != null ? user.getDepartmentId() : 99);
-                String prefix = companyCode + deptCode;
-                
-                String maxMaNhanVien = userRepository.findMaxMaNhanVienByPrefix(prefix);
-                int nextSeq = 1;
-                if (maxMaNhanVien != null && maxMaNhanVien.length() == 8) {
-                    try {
-                        nextSeq = Integer.parseInt(maxMaNhanVien.substring(4)) + 1;
-                    } catch (Exception ignored) {}
+            if (user.getMaNhanVien() == null || user.getMaNhanVien().startsWith("23") || user.getMaNhanVien().length() != 8) {
+                String prefix;
+                if (user.getRole() == com.hrm.common.entity.Role.ADMIN || user.getRole() == com.hrm.common.entity.Role.CEO) {
+                    prefix = "99";
+                } else if (user.getRole() == com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN) {
+                    prefix = "88";
+                } else {
+                    prefix = String.format("%02d", user.getDepartmentId() != null ? user.getDepartmentId() : 0);
                 }
                 
-                String newMa = prefix + String.format("%04d", nextSeq);
-                user.setMaNhanVien(newMa);
+                String newMaNhanVien;
+                java.util.Random random = new java.util.Random();
+                do {
+                    int randomNum = 100000 + random.nextInt(900000);
+                    newMaNhanVien = prefix + String.valueOf(randomNum);
+                } while (userRepository.findByMaNhanVien(newMaNhanVien).isPresent());
+                
+                user.setMaNhanVien(newMaNhanVien);
                 userRepository.save(user);
-                log.info("[Migration] Cập nhật user {} thành mã mới: {}", user.getEmail(), newMa);
+                log.info("[Migration] Cập nhật user {} thành mã mới: {}", user.getEmail(), newMaNhanVien);
             }
         }
+    }
+
+    private void updateDemoMaNhanVien() {
+        userRepository.findByEmail("admin@hrm.vn").ifPresent(u -> { u.setMaNhanVien("99000001"); userRepository.save(u); });
+        userRepository.findByEmail("ceo@hrm.vn").ifPresent(u -> { u.setMaNhanVien("99000002"); userRepository.save(u); });
+        userRepository.findByEmail("giamdocphongban@hrm.vn").ifPresent(u -> { u.setMaNhanVien("88000001"); userRepository.save(u); });
+        userRepository.findByEmail("giamdocphong@hrm.vn").ifPresent(u -> { u.setMaNhanVien("88000002"); userRepository.save(u); });
+        userRepository.findByEmail("truongphong@hrm.vn").ifPresent(u -> { u.setMaNhanVien("01000001"); userRepository.save(u); });
+        userRepository.findByEmail("nhanvien@hrm.vn").ifPresent(u -> { u.setMaNhanVien("01000002"); userRepository.save(u); });
+        log.info("[Seed] Đã cập nhật mã nhân viên tĩnh cho các tài khoản demo.");
     }
 }

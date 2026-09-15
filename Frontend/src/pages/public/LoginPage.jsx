@@ -150,7 +150,7 @@ export default function LoginPage() {
                 id="login-manhanvien"
                 label="Mã nhân viên"
                 type="text"
-                placeholder="Ví dụ: 100001"
+                placeholder="Ví dụ: 99000001"
                 value={maNhanVien}
                 onChange={(e) => setMaNhanVien(e.target.value)}
                 error={validationErrors.maNhanVien}
@@ -191,11 +191,11 @@ export default function LoginPage() {
               </p>
               <div className="space-y-1">
                 {[
-                  { label: 'Admin (Quản trị)', maNhanVien: '23990001' },
-                  { label: 'Tổng Giám đốc', maNhanVien: '23990002' },
-                  { label: 'Giám đốc phòng ban', maNhanVien: '23010001' },
-                  { label: 'Trưởng phòng', maNhanVien: '23010002' },
-                  { label: 'Nhân viên', maNhanVien: '23010003' },
+                  { label: 'Admin (Quản trị)', maNhanVien: '99000001' },
+                  { label: 'Tổng Giám đốc', maNhanVien: '99000002' },
+                  { label: 'Giám đốc phòng ban', maNhanVien: '88000001' },
+                  { label: 'Trưởng phòng', maNhanVien: '01000001' },
+                  { label: 'Nhân viên', maNhanVien: '01000002' },
                 ].map(({ label, maNhanVien: demoMaNhanVien }) => (
                   <button
                     key={demoMaNhanVien}

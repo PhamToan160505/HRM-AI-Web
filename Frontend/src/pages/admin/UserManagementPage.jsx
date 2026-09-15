@@ -1,9 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, KeyRound, Shield, Ban, CheckCircle2, UserPlus, Check, X } from 'lucide-react';
+import { Plus, Edit2, KeyRound, Shield, Ban, CheckCircle2, UserPlus, Check, X, Eye } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import api from '../../services/api';
 import { useToast } from '../../components/common/Toast';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
+import EmployeeProfileSummary from '../../components/employee/EmployeeProfileSummary';
+import { motion } from 'framer-motion';
+
+const ForcePortal = ({ children }) => {
+  const [mountNode, setMountNode] = useState(null);
+  useEffect(() => {
+    const node = document.createElement('div');
+    node.className = 'force-portal-wrapper';
+    document.body.appendChild(node);
+    setMountNode(node);
+    return () => {
+      if (document.body.contains(node)) {
+        document.body.removeChild(node);
+      }
+    };
+  }, []);
+  if (!mountNode) return null;
+  return createPortal(children, mountNode);
+};
 
 export default function UserManagementPage() {
   const [users, setUsers] = useState([]);
@@ -14,7 +34,9 @@ export default function UserManagementPage() {
   const toast = useToast();
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isResetPasswordModalOpen, setIsResetPasswordModalOpen] = useState(false);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
 
   // Form states
@@ -66,6 +88,26 @@ export default function UserManagementPage() {
     } catch (error) {
       console.error(error);
       toast.error(error.response?.data?.message || 'Lỗi khi tạo tài khoản');
+    }
+  };
+
+  const handleEditUser = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await api.put(`/api/admin/users/${selectedUser.id}`, {
+        hoTen: formData.hoTen,
+        role: formData.role,
+        departmentId: formData.departmentId ? parseInt(formData.departmentId) : null,
+        chucVu: formData.chucVu,
+        active: selectedUser.active
+      });
+      if (res.data.success) {
+        toast.success('Cập nhật tài khoản thành công');
+        setIsEditModalOpen(false);
+        fetchData();
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Lỗi khi cập nhật tài khoản');
     }
   };
 
@@ -233,6 +275,30 @@ export default function UserManagementPage() {
                       </td>
                       <td className="p-4 text-right space-x-2">
                         <button 
+                          onClick={() => { setSelectedUser(user); setIsDetailModalOpen(true); }}
+                          className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="Xem hồ sơ"
+                        >
+                          <Eye size={18} />
+                        </button>
+                        <button 
+                          onClick={() => { 
+                            setSelectedUser(user); 
+                            setFormData({
+                              hoTen: user.hoTen || '',
+                              email: user.email || '',
+                              role: user.role || 'NHAN_VIEN',
+                              departmentId: user.departmentId || '',
+                              chucVu: user.chucVu || ''
+                            });
+                            setIsEditModalOpen(true); 
+                          }}
+                          className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="Sửa thông tin"
+                        >
+                          <Edit2 size={18} />
+                        </button>
+                        <button 
                           onClick={() => { setSelectedUser(user); setIsResetPasswordModalOpen(true); }}
                           className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                           title="Đổi mật khẩu"
@@ -241,8 +307,9 @@ export default function UserManagementPage() {
                         </button>
                         <button 
                           onClick={() => handleToggleActive(user)}
-                          className={`p-2 rounded-lg transition-colors ${user.active ? 'text-slate-400 hover:text-rose-600 hover:bg-rose-50' : 'text-slate-400 hover:text-emerald-600 hover:bg-emerald-50'}`}
-                          title={user.active ? 'Khóa tài khoản' : 'Mở khóa tài khoản'}
+                          disabled={user.role === 'ADMIN'}
+                          className={`p-2 rounded-lg transition-colors ${user.role === 'ADMIN' ? 'text-slate-300 cursor-not-allowed' : user.active ? 'text-slate-400 hover:text-rose-600 hover:bg-rose-50' : 'text-slate-400 hover:text-emerald-600 hover:bg-emerald-50'}`}
+                          title={user.role === 'ADMIN' ? 'Không thể khóa ADMIN' : user.active ? 'Khóa tài khoản' : 'Mở khóa tài khoản'}
                         >
                           <Shield size={18} />
                         </button>
@@ -334,11 +401,7 @@ export default function UserManagementPage() {
                   <Input required type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} placeholder="email@hrm.vn" />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Mật khẩu *</label>
-                  <Input required type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} placeholder="••••••••" />
-                </div>
+              <div className="grid grid-cols-1 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Chức vụ</label>
                   <Input value={formData.chucVu} onChange={e => setFormData({...formData, chucVu: e.target.value})} placeholder="VD: Lập trình viên" />
@@ -384,6 +447,71 @@ export default function UserManagementPage() {
         </div>
       )}
 
+      {/* Modal Sửa người dùng */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-slide-up">
+            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <h3 className="text-lg font-semibold text-slate-800">Cập nhật tài khoản</h3>
+            </div>
+            <form onSubmit={handleEditUser} className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Họ và tên *</label>
+                  <Input required value={formData.hoTen} onChange={e => setFormData({...formData, hoTen: e.target.value})} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+                  <Input disabled value={formData.email} className="bg-slate-50" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Chức vụ</label>
+                  <Input value={formData.chucVu} onChange={e => setFormData({...formData, chucVu: e.target.value})} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Quyền hạn *</label>
+                  <select 
+                    required
+                    disabled={selectedUser && (selectedUser.role === 'ADMIN' || selectedUser.role === 'CEO')}
+                    value={formData.role} 
+                    onChange={e => setFormData({...formData, role: e.target.value})}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all disabled:bg-slate-100 disabled:text-slate-400"
+                  >
+                    <option value="NHAN_VIEN">Nhân viên</option>
+                    <option value="TRUONG_PHONG">Trưởng phòng</option>
+                    <option value="GIAM_DOC_PHONG_BAN">Giám đốc phòng ban</option>
+                    <option value="CEO">Tổng Giám Đốc</option>
+                    <option value="ADMIN">Admin Quản trị</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Phòng ban</label>
+                  <select 
+                    value={formData.departmentId} 
+                    onChange={e => setFormData({...formData, departmentId: e.target.value})}
+                    disabled={['ADMIN', 'CEO'].includes(formData.role)}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all disabled:bg-slate-100 disabled:text-slate-400"
+                  >
+                    <option value="">-- Không thuộc phòng --</option>
+                    {departments.map(d => (
+                      <option key={d.id} value={d.id}>{d.tenPhong}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="pt-4 flex justify-end gap-3 border-t border-slate-100 mt-6">
+                <Button variant="outline" type="button" onClick={() => setIsEditModalOpen(false)}>Hủy</Button>
+                <Button variant="primary" type="submit">Lưu thay đổi</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Modal Đổi mật khẩu */}
       {isResetPasswordModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
@@ -404,6 +532,33 @@ export default function UserManagementPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Modal Chi tiết nhân viên */}
+      {isDetailModalOpen && selectedUser && (
+        <ForcePortal>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+                <motion.div 
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="bg-white rounded-xl shadow-2xl max-w-4xl w-full my-8 overflow-hidden relative"
+                >
+                    <button 
+                        onClick={() => setIsDetailModalOpen(false)}
+                        className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-full p-2 transition-colors z-10"
+                    >
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                    <div className="max-h-[85vh] overflow-y-auto p-1 pb-6">
+                        <EmployeeProfileSummary 
+                            profile={selectedUser} 
+                        />
+                    </div>
+                </motion.div>
+            </div>
+        </ForcePortal>
       )}
     </div>
   );

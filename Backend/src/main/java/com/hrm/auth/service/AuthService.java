@@ -30,9 +30,11 @@ public class AuthService {
 
     public LoginResponse login(LoginRequest request) {
         // Tìm user theo mã nhân viên
-        User user = userRepository.findByMaNhanVien(request.getMaNhanVien())
-                .orElseThrow(() -> new AppException(HttpStatus.UNAUTHORIZED,
-                        "Mã nhân viên hoặc mật khẩu không đúng"));
+        User user = userRepository.findByMaNhanVien(request.getMaNhanVien()).orElse(null);
+        
+        if (user == null) {
+            throw new AppException(HttpStatus.UNAUTHORIZED, "Tài khoản hoặc mật khẩu không đúng");
+        }
 
         // Kiểm tra tài khoản còn hoạt động
         if (!user.getActive()) {

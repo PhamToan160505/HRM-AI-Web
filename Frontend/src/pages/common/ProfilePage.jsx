@@ -72,6 +72,7 @@ export default function ProfilePage() {
                                 profile={myProfile} 
                                 isEditable={true}
                                 onUpdate={handleUpdateProfileData}
+                                hideAdvancedTabs={true}
                             />
                         </div>
 
