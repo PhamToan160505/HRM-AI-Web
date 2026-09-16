@@ -1,6 +1,6 @@
 # HRM AI - Hệ thống Quản trị Nhân sự & Tuyển dụng Thông minh
 
-![HRM AI Banner](https://via.placeholder.com/1200x300.png?text=HRM+AI+-+Smart+Human+Resource+Management)
+![HRM AI Banner](https://placehold.co/1200x300/0f172a/ffffff?text=HRM+AI+-+Smart+Human+Resource+Management)
 
 **HRM AI** là một hệ thống phần mềm quản trị nhân sự tổng thể chuẩn doanh nghiệp (Enterprise), được tích hợp sâu các công nghệ Trí tuệ nhân tạo (AI) hiện đại. Hệ thống giúp tự động hóa tối đa quy trình nghiệp vụ HR từ khâu tuyển dụng, chấm công, đến liên lạc nội bộ và tính toán lương thưởng.
 
