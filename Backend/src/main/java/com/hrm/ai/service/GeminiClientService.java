@@ -230,6 +230,28 @@ public class GeminiClientService {
     }
 
     /**
+     * Gọi Gemini API với raw JSON body (dùng cho group chat AI).
+     */
+    public String generateContent(String jsonBody) {
+        String url = "/models/" + model + ":generateContent?key=" + apiKey;
+
+        return webClient.post()
+                .uri(url)
+                .bodyValue(jsonBody)
+                .retrieve()
+                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
+                        response -> response.bodyToMono(String.class).flatMap(body -> {
+                            log.error("[Gemini generateContent] HTTP {} error: {}", response.statusCode(), body);
+                            return Mono.error(new RuntimeException(
+                                    "Gemini API lỗi HTTP " + response.statusCode() + ": " + body));
+                        }))
+                .bodyToMono(String.class)
+                .timeout(Duration.ofSeconds(120))
+                .retryWhen(Retry.backoff(2, Duration.ofSeconds(5)))
+                .block();
+    }
+
+    /**
      * Gọi Gemini Embedding API để lấy vector ngữ nghĩa (Semantic Embedding)
      * Model sử dụng mặc định: gemini-embedding-2
      */

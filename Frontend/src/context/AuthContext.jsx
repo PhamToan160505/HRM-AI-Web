@@ -74,6 +74,7 @@ export function AuthProvider({ children }) {
     teamId: user?.teamId ?? null,
     userId: user?.userId ?? null,
     hoTen: user?.hoTen ?? null,
+    token: localStorage.getItem(TOKEN_KEY) || null,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

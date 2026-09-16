@@ -6,7 +6,7 @@ services:
     container_name: hrm_mysql
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-123456}
       MYSQL_DATABASE: ${DB_NAME:-hrm_db}
     ports:
       - "3308:3306"
@@ -24,5 +24,16 @@ services:
     depends_on:
       - mysql
 
+  # redis: Database in-memory hỗ trợ message broker / cache
+  redis:
+    image: redis:alpine
+    container_name: hrm_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
 volumes:
   mysql_data:
+  redis_data:

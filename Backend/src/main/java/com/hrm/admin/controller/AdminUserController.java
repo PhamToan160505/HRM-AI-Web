@@ -10,6 +10,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import com.hrm.common.entity.Role;
 import java.util.List;
 import java.util.Map;
 
@@ -22,8 +26,13 @@ public class AdminUserController {
     private final AdminUserService adminUserService;
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<User>>> getAllUsers() {
-        return ResponseEntity.ok(ApiResponse.ok(adminUserService.getAllUsers(), "Lấy danh sách người dùng thành công"));
+    public ResponseEntity<ApiResponse<Page<User>>> getAllUsers(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "5") int size,
+            @RequestParam(required = false) Role role,
+            @RequestParam(required = false) Long departmentId
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(adminUserService.getAllUsers(page, size, role, departmentId), "Lấy danh sách người dùng thành công"));
     }
 
     @PostMapping

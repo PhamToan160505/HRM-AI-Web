@@ -70,7 +70,12 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                             UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                                     userDetails, null, userDetails.getAuthorities());
                             accessor.setUser(authentication);
+                            System.out.println("STOMP Auth Success for User: " + userDetails.getUserId());
+                        } else {
+                            System.out.println("STOMP Auth Failed: Invalid JWT Token");
                         }
+                    } else {
+                        System.out.println("STOMP Auth Failed: No Authorization header found. Headers: " + accessor.toMap());
                     }
                 }
                 return message;

@@ -45,20 +45,32 @@ export default function UserManagementPage() {
   });
   const [newPassword, setNewPassword] = useState('');
 
+  const [page, setPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [filterRole, setFilterRole] = useState('');
+  const [filterDepartmentId, setFilterDepartmentId] = useState('');
+
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [page, filterRole, filterDepartmentId]);
 
   const fetchData = async () => {
     setIsLoading(true);
     try {
       const ts = new Date().getTime();
+      const params = new URLSearchParams({ page, size: 5, t: ts });
+      if (filterRole) params.append('role', filterRole);
+      if (filterDepartmentId) params.append('departmentId', filterDepartmentId);
+
       const [usersRes, deptsRes, requestsRes] = await Promise.all([
-        api.get(`/api/admin/users?t=${ts}`),
+        api.get(`/api/admin/users?${params.toString()}`),
         api.get(`/api/departments?t=${ts}`),
         api.get(`/api/admin/account-requests?t=${ts}`).catch(() => ({ data: { data: [] } }))
       ]);
-      if (usersRes.data.success) setUsers(usersRes.data.data);
+      if (usersRes.data.success) {
+        setUsers(usersRes.data.data.content || []);
+        setTotalPages(usersRes.data.data.totalPages || 0);
+      }
       if (deptsRes.data.success) setDepartments(deptsRes.data.data);
       if (requestsRes.data?.success) setPendingRequests(requestsRes.data.data);
     } catch (error) {
@@ -228,10 +240,34 @@ export default function UserManagementPage() {
 
       {activeTab === 'USERS' && (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="p-4 border-b border-slate-100 flex justify-end">
-             <Button onClick={() => setIsCreateModalOpen(true)} className="flex items-center gap-2">
-                <Plus size={18} /> Thêm tài khoản thủ công
-             </Button>
+          <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <select
+                value={filterRole}
+                onChange={e => { setFilterRole(e.target.value); setPage(0); }}
+                className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-500 focus:bg-white transition-all w-full sm:w-auto"
+              >
+                <option value="">Tất cả phân quyền</option>
+                <option value="NHAN_VIEN">Nhân viên</option>
+                <option value="TRUONG_PHONG">Trưởng phòng</option>
+                <option value="GIAM_DOC_PHONG_BAN">Giám đốc phòng ban</option>
+                <option value="CEO">Tổng Giám Đốc</option>
+                <option value="ADMIN">Admin</option>
+              </select>
+              <select
+                value={filterDepartmentId}
+                onChange={e => { setFilterDepartmentId(e.target.value); setPage(0); }}
+                className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-500 focus:bg-white transition-all w-full sm:w-auto"
+              >
+                <option value="">Tất cả phòng ban</option>
+                {departments.map(d => (
+                  <option key={d.id} value={d.id}>{d.tenPhong}</option>
+                ))}
+              </select>
+            </div>
+            <Button onClick={() => setIsCreateModalOpen(true)} className="flex items-center gap-2 whitespace-nowrap">
+               <Plus size={18} /> Thêm tài khoản thủ công
+            </Button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
@@ -320,6 +356,32 @@ export default function UserManagementPage() {
               </tbody>
             </table>
           </div>
+          
+          {totalPages > 1 && (
+            <div className="p-4 border-t border-slate-100 flex items-center justify-between">
+              <span className="text-sm text-slate-500">
+                Trang {page + 1} / {totalPages}
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setPage(p => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  className="!py-1.5 !px-3"
+                >
+                  Trước
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                  disabled={page === totalPages - 1}
+                  className="!py-1.5 !px-3"
+                >
+                  Sau
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

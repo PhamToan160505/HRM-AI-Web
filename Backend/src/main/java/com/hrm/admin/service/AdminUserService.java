@@ -4,10 +4,16 @@ import com.hrm.admin.dto.CreateUserRequest;
 import com.hrm.admin.dto.UpdateUserRequest;
 import com.hrm.common.entity.User;
 import com.hrm.common.repository.UserRepository;
+import com.hrm.chat.service.ChatGroupService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import com.hrm.common.entity.Role;
 import java.util.List;
 
 @Service
@@ -19,9 +25,15 @@ public class AdminUserService {
     private final com.hrm.admin.repository.AccountCreationRequestRepository accountCreationRequestRepository;
     private final com.hrm.employee.service.EmployeeHistoryService employeeHistoryService;
     private final com.hrm.email.service.EmailService emailService;
+    private final ChatGroupService chatGroupService;
 
-    public List<User> getAllUsers() {
-        return userRepository.findAll();
+    public Page<User> getAllUsers(int page, int size, Role role, Long departmentId) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        
+        // Cần truy vấn tất cả vai trò nên danh sách roles truyền vào là tất cả các enum Role
+        List<Role> allRoles = List.of(Role.values());
+        
+        return userRepository.findWithFilters(allRoles, departmentId, role, null, pageable);
     }
 
     public User createUser(CreateUserRequest request) {
@@ -48,6 +60,8 @@ public class AdminUserService {
                 .build();
 
         User savedUser = userRepository.save(user);
+        
+        chatGroupService.handleNewUser(savedUser);
 
         emailService.sendAccountInfo(savedUser.getEmail(), savedUser.getHoTen(), savedUser.getMaNhanVien(), rawPassword);
 

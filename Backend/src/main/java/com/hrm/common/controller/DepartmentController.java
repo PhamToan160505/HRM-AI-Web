@@ -3,6 +3,7 @@ package com.hrm.common.controller;
 import com.hrm.common.entity.Department;
 import com.hrm.common.repository.DepartmentRepository;
 import com.hrm.exception.ApiResponse;
+import com.hrm.chat.service.ChatGroupService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -23,6 +24,7 @@ public class DepartmentController {
 
     private final DepartmentRepository departmentRepository;
     private final UserRepository userRepository;
+    private final ChatGroupService chatGroupService;
 
     public record DepartmentRequest(String tenPhong, String moTa) {}
 
@@ -41,7 +43,9 @@ public class DepartmentController {
                 .moTa(request.moTa())
                 .isLock(false)
                 .build();
-        return ResponseEntity.ok(ApiResponse.ok(departmentRepository.save(dept), "Tạo phòng ban thành công"));
+        Department savedDept = departmentRepository.save(dept);
+        chatGroupService.handleNewDepartment(savedDept);
+        return ResponseEntity.ok(ApiResponse.ok(savedDept, "Tạo phòng ban thành công"));
     }
 
     @PutMapping("/{id}")
