@@ -16,6 +16,10 @@ import com.hrm.ai.entity.FaqCache;
 import com.hrm.ai.repository.FaqCacheRepository;
 import com.hrm.common.entity.SystemSetting;
 import com.hrm.common.repository.SystemSettingRepository;
+import com.hrm.chat.repository.ChatGroupRepository;
+import com.hrm.chat.repository.ChatGroupMemberRepository;
+import com.hrm.chat.repository.GroupMessageRepository;
+import com.hrm.chat.entity.ChatGroup;
 import com.hrm.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,6 +40,9 @@ public class ChatbotService {
     private final PayrollReportRepository payrollReportRepository;
     private final SystemSettingRepository systemSettingRepository;
     private final FaqCacheRepository faqCacheRepository;
+    private final ChatGroupRepository chatGroupRepository;
+    private final ChatGroupMemberRepository chatGroupMemberRepository;
+    private final GroupMessageRepository groupMessageRepository;
     private final ObjectMapper objectMapper;
 
     @Transactional(readOnly = true)
@@ -46,6 +53,56 @@ public class ChatbotService {
     @Transactional
     public void clearHistory(Long userId) {
         chatMessageRepository.deleteByUserId(userId);
+    }
+
+    public String handleGroupMessage(Long groupId, Long senderId, String userMessage) {
+        try {
+            User user = userRepository.findById(senderId).orElse(null);
+            if (user == null) {
+                return "Xin lỗi, không tìm thấy thông tin người gửi.";
+            }
+
+            ChatGroup group = chatGroupRepository.findById(groupId).orElse(null);
+            long memberCount = chatGroupMemberRepository.countByGroupId(groupId);
+
+            // Fetch history from groupMessageRepository
+            List<com.hrm.chat.entity.GroupMessage> rawGroupHistory = 
+                    groupMessageRepository.findTop30ByGroupIdOrderByCreatedAtDesc(groupId);
+            java.util.Collections.reverse(rawGroupHistory);
+            
+            List<ChatMessage> history = new java.util.ArrayList<>();
+            java.time.format.DateTimeFormatter timeFormatter = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
+            for (com.hrm.chat.entity.GroupMessage gm : rawGroupHistory) {
+                if (gm.isDeletedBySender() && gm.getSenderId() != null && gm.getSenderId().equals(senderId)) {
+                    continue;
+                }
+
+                String role = gm.isAi() ? "model" : "user";
+                String content = gm.isRecalled() ? "Tin nhắn đã bị thu hồi" : gm.getContent();
+                if (!gm.isAi()) {
+                    String senderNameCache = "Thành viên";
+                    if (gm.getSenderId() != null) {
+                        User sUser = userRepository.findById(gm.getSenderId()).orElse(null);
+                        if (sUser != null) senderNameCache = sUser.getHoTen();
+                    }
+                    String timeStr = gm.getCreatedAt() != null ? gm.getCreatedAt().format(timeFormatter) : "N/A";
+                    content = "[" + timeStr + "] [" + senderNameCache + "]: " + content;
+                }
+                history.add(ChatMessage.builder().role(role).content(content).build());
+            }
+
+            // Thêm tin nhắn hiện tại
+            String currentTimeStr = java.time.LocalDateTime.now().format(timeFormatter);
+            history.add(ChatMessage.builder().role("user").content("[" + currentTimeStr + "] [" + user.getHoTen() + "]: " + userMessage).build());
+
+            String groupSystemPrompt = buildGroupSystemPrompt(user, group, memberCount);
+            JsonNode tools = buildToolsDeclaration();
+
+            return executeMultiTurnGemini(groupSystemPrompt, history, tools, user);
+        } catch (Exception e) {
+            log.error("Group AI Error", e);
+            return "Xin lỗi, đã xảy ra lỗi khi AI xử lý.";
+        }
     }
 
     @Transactional
@@ -172,85 +229,8 @@ public class ChatbotService {
         // 3. Chuẩn bị mảng Tools (Function Calling)
         JsonNode tools = buildToolsDeclaration();
 
-        // 4. Gọi Gemini Lượt 1
-        String rawResponse1;
-        try {
-            rawResponse1 = geminiClientService.callGeminiChat(systemPrompt, history, tools).block();
-        } catch (Exception e) {
-            log.error("Lỗi khi gọi Gemini Lượt 1: ", e);
-            return "Xin lỗi, tôi đang gặp sự cố kết nối tới máy chủ AI (Lỗi: " + e.getMessage() + "). Vui lòng thử lại sau!";
-        }
-        
-        String finalAnswer = "";
-
-        // Kiểm tra xem Gemini có gọi Function hay không
-        try {
-            JsonNode root = objectMapper.readTree(rawResponse1);
-            JsonNode candidates = root.get("candidates");
-            if (candidates != null && candidates.isArray() && candidates.size() > 0) {
-                JsonNode parts = candidates.get(0).get("content").get("parts");
-                
-                boolean hasFunctionCall = false;
-                if (parts != null && parts.isArray() && parts.size() > 0) {
-                    JsonNode functionCallPart = null;
-                    JsonNode textPart = null;
-                    
-                    // Tìm kiếm functionCall hoặc text trong tất cả các parts
-                    for (JsonNode part : parts) {
-                        if (part.has("functionCall")) {
-                            functionCallPart = part;
-                            hasFunctionCall = true;
-                            break;
-                        } else if (part.has("text") && textPart == null) {
-                            textPart = part;
-                        }
-                    }
-
-                    if (hasFunctionCall) {
-                        JsonNode functionCall = functionCallPart.get("functionCall");
-                        String functionName = functionCall.get("name").asText();
-                        JsonNode args = functionCall.get("args");
-                        
-                        log.info("Gemini requested function: {} with args: {}", functionName, args);
-                        
-                        // 5. Thực thi Function cục bộ
-                        JsonNode functionResult = executeFunction(functionName, args, user);
-                        
-                        // 6. Đóng gói kết quả Function Response và tạo History mới cho lượt 2
-                        // Vì callGeminiChat mong đợi danh sách ChatMessage, chúng ta cần mock một chút:
-                        ChatMessage modelToolMsg = ChatMessage.builder()
-                                .role("model")
-                                .content("Đã gọi hàm " + functionName + " để truy vấn.")
-                                .build();
-                        history.add(modelToolMsg);
-                        
-                        // Chuẩn hóa: Gửi một tin nhắn ẩn báo cho model biết kết quả truy vấn
-                        String toolOutputStr = String.format("Hệ thống đã truy vấn Database với hàm '%s'. Kết quả JSON là: %s", 
-                                functionName, functionResult.toString());
-                        
-                        // Thêm tin nhắn mô phỏng này vào history tạm thời
-                        ChatMessage systemToolMsg = ChatMessage.builder()
-                                .role("user") // giả lập user trả lời tool
-                                .content(toolOutputStr)
-                                .build();
-                        history.add(systemToolMsg);
-                        
-                        // Gọi Gemini Lượt 2 để tóm tắt kết quả
-                        String rawResponse2 = geminiClientService.callGeminiChat(systemPrompt, history, null).block();
-                        finalAnswer = geminiClientService.extractTextFromGeminiResponse(rawResponse2);
-                    } else if (textPart != null) {
-                        finalAnswer = textPart.get("text").asText();
-                    }
-                }
-            }
-        } catch (Exception e) {
-            log.error("Lỗi khi parse response từ Gemini: ", e);
-            finalAnswer = "Xin lỗi, tôi gặp sự cố khi xử lý câu trả lời. Chi tiết lỗi: " + e.getMessage();
-        }
-        
-        if (finalAnswer == null || finalAnswer.trim().isEmpty()) {
-            finalAnswer = geminiClientService.extractTextFromGeminiResponse(rawResponse1);
-        }
+        // 4. Gọi Gemini
+        String finalAnswer = executeMultiTurnGemini(systemPrompt, history, tools, user);
 
         // --- BẮT ĐẦU: LƯU CACHE TỰ ĐỘNG ---
         if (!isSensitive && finalAnswer != null && !finalAnswer.isEmpty() && questionEmbedding != null) {
@@ -310,6 +290,37 @@ public class ChatbotService {
         return sb.toString();
     }
 
+    private String buildGroupSystemPrompt(User user, ChatGroup group, long memberCount) {
+        String groupName = group != null ? group.getName() : "Không xác định";
+        StringBuilder sb = new StringBuilder();
+        sb.append("Bạn là AI Assistant hỗ trợ trong nhóm chat công việc. ");
+        sb.append("Tên nhóm: ").append(groupName).append(". Số lượng thành viên: ").append(memberCount).append(" người.\n");
+        sb.append("Lịch sử chat của nhóm đã được cung cấp trong danh sách tin nhắn. Bạn hãy dựa vào ngữ cảnh của nhóm chat để trả lời.\n\n");
+        
+        sb.append("RÀNG BUỘC (QUAN TRỌNG):\n");
+        sb.append("1. BẠN CHỈ TRẢ LỜI CÁC CÂU HỎI LIÊN QUAN ĐẾN CÔNG TY, NHÂN SỰ VÀ NGỮ CẢNH NHÓM CHAT.\n");
+        sb.append("2. TỪ CHỐI TẤT CẢ CÁC CÂU HỎI NGOÀI LỀ (ví dụ: thời tiết, giải trí, kiến thức phổ thông, hoặc các vấn đề không liên quan đến hệ thống quản trị nhân sự). Hãy trả lời ngắn gọn: 'Xin lỗi, tôi chỉ hỗ trợ các nghiệp vụ liên quan đến công ty và nhóm chat này'.\n");
+        
+        sb.append("\nTHÔNG TIN VỀ NGƯỜI ĐANG TRỰC TIẾP HỎI BẠN:\n");
+        sb.append("- Tên: ").append(user.getHoTen()).append("\n");
+        sb.append("- Cấp bậc (Role): ").append(user.getRole().name()).append("\n");
+        
+        if (user.getDepartmentId() != null) {
+            Department dept = departmentRepository.findById(user.getDepartmentId()).orElse(null);
+            if (dept != null) {
+                sb.append("- Phòng ban (Department ID): ").append(user.getDepartmentId())
+                  .append(" (").append(dept.getTenPhong()).append(")\n");
+            }
+        }
+
+        sb.append("\nRÀNG BUỘC QUYỀN HẠN:\n");
+        sb.append("1. Bạn phải từ chối trả lời nếu người dùng hỏi thông tin nội bộ của các phòng ban khác (khác Department ID của họ), NGOẠI TRỪ role là CEO hoặc ADMIN.\n");
+        sb.append("2. Nếu người dùng muốn biết số lượng nhân sự, hãy sử dụng function (tools) để truy vấn.\n");
+        sb.append("3. LƯU Ý VỀ PHÂN CẤP ROLE: CEO > DIRECTOR (Giám đốc) > MANAGER (Trưởng phòng) > EMPLOYEE (Nhân viên). Khi trả lời về số lượng 'nhân viên dưới quyền', CHỈ tính tổng số lượng của các Role thấp hơn Role của người hỏi.\n");
+
+        return sb.toString();
+    }
+
     private JsonNode buildToolsDeclaration() {
         // Build JSON Tools declaration for Gemini
         ObjectMapper mapper = new ObjectMapper();
@@ -357,6 +368,86 @@ public class ChatbotService {
         params3.putObject("properties");
 
         return tools;
+    }
+
+    private String executeMultiTurnGemini(String systemPrompt, List<ChatMessage> history, JsonNode tools, User user) {
+        String rawResponse1;
+        try {
+            rawResponse1 = geminiClientService.callGeminiChat(systemPrompt, history, tools).block();
+        } catch (Exception e) {
+            log.error("Lỗi khi gọi Gemini Lượt 1: ", e);
+            return "Xin lỗi, tôi đang gặp sự cố kết nối tới máy chủ AI (Lỗi: " + e.getMessage() + "). Vui lòng thử lại sau!";
+        }
+        
+        String finalAnswer = "";
+
+        // Kiểm tra xem Gemini có gọi Function hay không
+        try {
+            JsonNode root = objectMapper.readTree(rawResponse1);
+            JsonNode candidates = root.get("candidates");
+            if (candidates != null && candidates.isArray() && candidates.size() > 0) {
+                JsonNode parts = candidates.get(0).get("content").get("parts");
+                
+                boolean hasFunctionCall = false;
+                if (parts != null && parts.isArray() && parts.size() > 0) {
+                    JsonNode functionCallPart = null;
+                    JsonNode textPart = null;
+                    
+                    // Tìm kiếm functionCall hoặc text trong tất cả các parts
+                    for (JsonNode part : parts) {
+                        if (part.has("functionCall")) {
+                            functionCallPart = part;
+                            hasFunctionCall = true;
+                            break;
+                        } else if (part.has("text") && textPart == null) {
+                            textPart = part;
+                        }
+                    }
+
+                    if (hasFunctionCall) {
+                        JsonNode functionCall = functionCallPart.get("functionCall");
+                        String functionName = functionCall.get("name").asText();
+                        JsonNode args = functionCall.get("args");
+                        
+                        log.info("Gemini requested function: {} with args: {}", functionName, args);
+                        
+                        // 5. Thực thi Function cục bộ
+                        JsonNode functionResult = executeFunction(functionName, args, user);
+                        
+                        // 6. Đóng gói kết quả Function Response và tạo History mới cho lượt 2
+                        ChatMessage modelToolMsg = ChatMessage.builder()
+                                .role("model")
+                                .content("Đã gọi hàm " + functionName + " để truy vấn.")
+                                .build();
+                        history.add(modelToolMsg);
+                        
+                        String toolOutputStr = String.format("Hệ thống đã truy vấn Database với hàm '%s'. Kết quả JSON là: %s", 
+                                functionName, functionResult.toString());
+                        
+                        ChatMessage systemToolMsg = ChatMessage.builder()
+                                .role("user") 
+                                .content(toolOutputStr)
+                                .build();
+                        history.add(systemToolMsg);
+                        
+                        // Gọi Gemini Lượt 2 để tóm tắt kết quả
+                        String rawResponse2 = geminiClientService.callGeminiChat(systemPrompt, history, null).block();
+                        finalAnswer = geminiClientService.extractTextFromGeminiResponse(rawResponse2);
+                    } else if (textPart != null) {
+                        finalAnswer = textPart.get("text").asText();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.error("Lỗi khi parse response từ Gemini: ", e);
+            finalAnswer = "Xin lỗi, tôi gặp sự cố khi xử lý câu trả lời. Chi tiết lỗi: " + e.getMessage();
+        }
+        
+        if (finalAnswer == null || finalAnswer.trim().isEmpty()) {
+            finalAnswer = geminiClientService.extractTextFromGeminiResponse(rawResponse1);
+        }
+        
+        return finalAnswer;
     }
 
     /**

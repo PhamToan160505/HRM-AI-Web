@@ -142,4 +142,44 @@ public class EmailService {
             log.error("LỖI khi gửi email thông báo tài khoản cho {}: {}", to, e.getMessage(), e);
         }
     }
+
+    @Async
+    public void sendChatTagNotification(String to, String receiverName, String senderName, String groupName, String messageContent) {
+        log.info("Bắt đầu gửi email thông báo tag cho: {}", to);
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            helper.setTo(to);
+            helper.setSubject("HRM AI - Bạn vừa được nhắc đến trong nhóm " + groupName);
+
+            String htmlContent = """
+                <html>
+                <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
+                    <div style="background-color: #2563eb; color: #ffffff; padding: 20px; text-align: center;">
+                        <h2 style="margin: 0;">Thông báo Tin nhắn mới</h2>
+                    </div>
+                    <div style="padding: 30px;">
+                        <p>Chào <strong>%s</strong>,</p>
+                        <p>Bạn vừa được <strong>%s</strong> nhắc đến trong nhóm thảo luận <strong>%s</strong>.</p>
+                        <div style="background-color: #f1f5f9; padding: 15px; border-left: 4px solid #2563eb; margin: 20px 0;">
+                            <p style="margin: 0; font-style: italic;">"%s"</p>
+                        </div>
+                        <p>Vui lòng truy cập hệ thống để xem chi tiết và phản hồi.</p>
+                        <br/>
+                        <p>Trân trọng,</p>
+                        <p><strong>Hệ thống HRM AI</strong></p>
+                    </div>
+                </body>
+                </html>
+                """.formatted(receiverName, senderName, groupName, messageContent);
+
+            helper.setText(htmlContent, true);
+            mailSender.send(message);
+            log.info("Đã gửi email thông báo tag thành công cho: {}", to);
+
+        } catch (Exception e) {
+            log.error("LỖI khi gửi email thông báo tag cho {}: {}", to, e.getMessage(), e);
+        }
+    }
 }

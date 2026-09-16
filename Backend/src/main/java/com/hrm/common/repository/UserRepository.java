@@ -35,9 +35,11 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Double sumTotalSalaryBudgetByDepartmentId(@org.springframework.data.repository.query.Param("departmentId") Long departmentId);
 
     java.util.List<User> findByDepartmentId(Long departmentId);
+    Page<User> findByDepartmentId(Long departmentId, Pageable pageable);
     java.util.List<User> findByDepartmentIdAndRole(Long departmentId, com.hrm.common.entity.Role role);
     Page<User> findByDepartmentIdAndRoleIn(Long departmentId, java.util.List<com.hrm.common.entity.Role> roles, Pageable pageable);
     java.util.List<User> findByTeamId(Long teamId);
+    Page<User> findByTeamId(Long teamId, Pageable pageable);
 
     @org.springframework.data.jpa.repository.Query("SELECT d.tenPhong, COUNT(u) FROM User u JOIN com.hrm.common.entity.Department d ON u.departmentId = d.id GROUP BY d.tenPhong")
     java.util.List<Object[]> getDepartmentDistributionRaw();

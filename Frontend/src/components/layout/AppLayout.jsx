@@ -12,9 +12,11 @@ import {
   Building2,
   Briefcase,
   UserSquare2,
+
   Calendar,
   Clock,
   Settings,
+  MessageSquare,
   FileText,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -36,7 +38,7 @@ const roleLabels = {
   admin: 'Quản Trị Hệ Thống'
 };
 
-function NavItem({ to, icon: Icon, label, end = false }) {
+function NavItem({ to, icon: Icon, label, end = false, hasUnread = false }) {
   return (
     <NavLink
       to={to}
@@ -62,6 +64,9 @@ function NavItem({ to, icon: Icon, label, end = false }) {
             className={`shrink-0 transition-transform duration-200 ${isActive ? '' : 'group-hover:scale-110'}`}
           />
           <span>{label}</span>
+          {hasUnread && (
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 w-2 h-2 bg-red-500 rounded-full shadow-sm" />
+          )}
         </>
       )}
     </NavLink>
@@ -83,12 +88,13 @@ function NavButton({ icon: Icon, label, onClick }) {
   );
 }
 
-function SidebarContent({ role, onClose }) {
+function SidebarContent({ role, onClose, hasUnreadChat }) {
   const adminNav = [
     { to: '/admin/dashboard', icon: LayoutDashboard, label: 'Tổng quan hệ thống', end: true },
     { to: '/admin/departments', icon: Building2, label: 'Quản lý phòng ban' },
     { to: '/admin/users', icon: Users, label: 'Quản lý tài khoản' },
     { to: '/admin/settings', icon: Settings, label: 'Cấu hình hệ thống' },
+    { to: '/admin/chat', icon: MessageSquare, label: 'Thảo luận', hasUnread: hasUnreadChat },
   ];
   const ceoNav = [
     { to: '/ceo/dashboard', icon: LayoutDashboard, label: 'Tổng quan', end: true },
@@ -97,6 +103,7 @@ function SidebarContent({ role, onClose }) {
     { to: '/ceo/attendance', icon: ClipboardCheck, label: 'Quản lý chấm công' },
     { to: '/ceo/requests', icon: FileText, label: 'Quản lý Đơn từ' },
     { to: '/ceo/payroll', icon: Banknote, label: 'Quản lý bảng lương' },
+    { to: '/ceo/chat', icon: MessageSquare, label: 'Thảo luận', hasUnread: hasUnreadChat },
   ];
   const directorNav = [
     { to: '/director/dashboard', icon: LayoutDashboard, label: 'Tổng quan', end: true },
@@ -107,6 +114,7 @@ function SidebarContent({ role, onClose }) {
     { to: '/director/requests', icon: FileText, label: 'Quản lý Đơn từ' },
     { to: '/director/my-requests', icon: FileText, label: 'Đơn từ của tôi' },
     { to: '/director/payroll', icon: Banknote, label: 'Quản lý bảng lương' },
+    { to: '/director/chat', icon: MessageSquare, label: 'Thảo luận', hasUnread: hasUnreadChat },
   ];
   const managerNav = [
     { to: '/manager/dashboard', icon: LayoutDashboard, label: 'Tổng quan', end: true },
@@ -117,12 +125,14 @@ function SidebarContent({ role, onClose }) {
     { to: '/manager/requests', icon: FileText, label: 'Quản lý Đơn từ' },
     { to: '/manager/my-requests', icon: FileText, label: 'Đơn từ của tôi' },
     { to: '/manager/payroll', icon: Banknote, label: 'Lương' },
+    { to: '/manager/chat', icon: MessageSquare, label: 'Thảo luận', hasUnread: hasUnreadChat },
   ];
   const employeeNav = [
     { to: '/employee/dashboard', icon: LayoutDashboard, label: 'Tổng quan', end: true },
     { to: '/employee/attendance', icon: ClipboardCheck, label: 'Chấm công' },
     { to: '/employee/requests', icon: FileText, label: 'Đơn từ' },
     { to: '/employee/payroll', icon: Banknote, label: 'Phiếu lương' },
+    { to: '/employee/chat', icon: MessageSquare, label: 'Thảo luận', hasUnread: hasUnreadChat },
   ];
 
   const navItems =
@@ -188,16 +198,33 @@ export function AppLayout() {
   const toast = useToast();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [hasUnreadChat, setHasUnreadChat] = useState(false);
   
-
+  useEffect(() => {
+    const fetchUnreadChat = async () => {
+        try {
+            const res = await api.get('/api/chat/groups');
+            if (res.data?.data) {
+                const hasUnread = res.data.data.some(g => g.latestMessageId > 0 && (g.lastReadMessageId == null || g.lastReadMessageId < g.latestMessageId));
+                setHasUnreadChat(hasUnread);
+            }
+        } catch(e) {}
+    };
+    fetchUnreadChat();
+    const interval = setInterval(fetchUnreadChat, 30000);
+    
+    window.addEventListener('chatRead', fetchUnreadChat);
+    return () => {
+        clearInterval(interval);
+        window.removeEventListener('chatRead', fetchUnreadChat);
+    };
+  }, []);
 
   // Close sidebar on route change (mobile)
   useEffect(() => {
     setSidebarOpen(false);
     setUserMenuOpen(false);
   }, [location.pathname]);
-
-
 
   const handleLogout = () => {
     logout();
@@ -208,7 +235,7 @@ export function AppLayout() {
     <div className="flex h-screen overflow-hidden bg-slate-50">
       {/* Desktop sidebar */}
       <aside className="hidden lg:flex flex-col w-56 bg-[#1E3A8A] shrink-0 shadow-xl">
-        <SidebarContent role={role} />
+        <SidebarContent role={role} hasUnreadChat={hasUnreadChat} />
       </aside>
 
       {/* Mobile sidebar overlay */}
@@ -219,14 +246,13 @@ export function AppLayout() {
             onClick={() => setSidebarOpen(false)}
           />
           <aside className="fixed left-0 top-0 bottom-0 w-56 bg-[#1E3A8A] z-50 flex flex-col lg:hidden shadow-2xl animate-slide-in-right">
-            <SidebarContent role={role} onClose={() => setSidebarOpen(false)} />
+            <SidebarContent role={role} onClose={() => setSidebarOpen(false)} hasUnreadChat={hasUnreadChat} />
           </aside>
         </>
       )}
 
       {/* Main area */}
       <div className="flex flex-col flex-1 min-w-0">
-        {/* Header */}
         <header className="h-14 bg-white border-b border-slate-200 flex items-center px-4 gap-3 shrink-0 shadow-sm">
           <button
             onClick={() => setSidebarOpen(true)}

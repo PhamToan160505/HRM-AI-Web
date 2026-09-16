@@ -38,6 +38,7 @@ import EmployeeAttendancePage from './pages/employee/AttendancePage';
 import ManagerAttendancePage from './pages/manager/AttendancePage';
 import HolidayPage from './pages/manager/payroll/HolidayPage';
 import PayrollPage from './pages/manager/payroll/PayrollPage';
+import GroupChatPage from './pages/chat/GroupChatPage';
 import PayrollViewPage from './pages/manager/payroll/PayrollViewPage';
 import ProfilePage from './pages/common/ProfilePage';
 import MyRequestsPage from './pages/employee/MyRequestsPage';
@@ -86,6 +87,7 @@ export default function App() {
             <Route path="users" element={<UserManagementPage />} />
             <Route path="settings" element={<SystemSettingsPage />} />
             <Route path="profile" element={<ProfilePage />} />
+            <Route path="chat" element={<GroupChatPage />} />
           </Route>
 
           {/* ── CEO ──────────────────────────────────── */}
@@ -118,6 +120,7 @@ export default function App() {
             <Route path="holidays" element={<HolidayPage />} />
             <Route path="payroll" element={<PayrollPage />} />
             <Route path="profile" element={<ProfilePage />} />
+            <Route path="chat" element={<GroupChatPage />} />
             <Route path="face-enroll" element={
                 <div className="p-8">
                     <FaceEnrollment />
@@ -155,6 +158,7 @@ export default function App() {
             <Route path="holidays" element={<HolidayPage />} />
             <Route path="payroll" element={<PayrollPage />} />
             <Route path="profile" element={<ProfilePage />} />
+            <Route path="chat" element={<GroupChatPage />} />
             <Route path="face-enroll" element={
                 <div className="p-8">
                     <FaceEnrollment />
@@ -180,6 +184,7 @@ export default function App() {
             <Route path="my-requests" element={<MyRequestsPage />} />
             <Route path="payroll" element={<PayrollPage />} />
             <Route path="profile" element={<ProfilePage />} />
+            <Route path="chat" element={<GroupChatPage />} />
             <Route path="face-enroll" element={
                 <div className="p-8">
                     <FaceEnrollment />
@@ -219,6 +224,7 @@ export default function App() {
             <Route path="requests" element={<MyRequestsPage />} />
             <Route path="payroll" element={<PayrollViewPage />} />
             <Route path="profile" element={<ProfilePage />} />
+            <Route path="chat" element={<GroupChatPage />} />
           </Route>
 
           {/* Catch-all → login */}
