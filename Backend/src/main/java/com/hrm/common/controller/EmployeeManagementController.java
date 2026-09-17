@@ -90,7 +90,11 @@ public class EmployeeManagementController {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found"));
         
-        if (user.getRole() != com.hrm.common.entity.Role.NHAN_VIEN) {
+        if (userDetails.getRole() == com.hrm.common.entity.Role.TRUONG_PHONG && user.getRole() != com.hrm.common.entity.Role.NHAN_VIEN) {
+            throw new RuntimeException("403: Trưởng phòng chỉ có thể phân công cho Nhân viên");
+        }
+        if (userDetails.getRole() == com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN && 
+           (user.getRole() == com.hrm.common.entity.Role.CEO || user.getRole() == com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN || user.getRole() == com.hrm.common.entity.Role.ADMIN)) {
             throw new RuntimeException("403: Không thể phân công cho tài khoản cấp cao hơn hoặc ngang cấp");
         }
         
@@ -101,16 +105,23 @@ public class EmployeeManagementController {
         }
         
         if (request.containsKey("departmentId")) {
-            if (userDetails.getRole() != com.hrm.common.entity.Role.CEO) {
-                throw new RuntimeException("403: Chỉ Tổng giám đốc mới có quyền chuyển phòng ban cho nhân viên");
-            }
-            Object depId = request.get("departmentId");
-            if (depId != null) {
-                user.setDepartmentId(Long.valueOf(depId.toString()));
-                employeeHistoryService.logHistory(user.getId(), "TRANSFERRED", null, "Phòng ban ID: " + user.getDepartmentId(), "Chuyển phòng ban");
-            } else {
-                user.setDepartmentId(null);
-                employeeHistoryService.logHistory(user.getId(), "TRANSFERRED", null, "Không có", "Xóa khỏi phòng ban");
+            Object depIdObj = request.get("departmentId");
+            Long reqDepId = (depIdObj != null && !depIdObj.toString().isEmpty()) ? Long.valueOf(depIdObj.toString()) : null;
+            
+            boolean isChanging = (user.getDepartmentId() == null && reqDepId != null) || 
+                                 (user.getDepartmentId() != null && !user.getDepartmentId().equals(reqDepId));
+                                 
+            if (isChanging) {
+                if (userDetails.getRole() != com.hrm.common.entity.Role.CEO) {
+                    throw new RuntimeException("403: Chỉ Tổng giám đốc mới có quyền chuyển phòng ban cho nhân viên");
+                }
+                if (reqDepId != null) {
+                    user.setDepartmentId(reqDepId);
+                    employeeHistoryService.logHistory(user.getId(), "TRANSFERRED", null, "Phòng ban ID: " + user.getDepartmentId(), "Chuyển phòng ban");
+                } else {
+                    user.setDepartmentId(null);
+                    employeeHistoryService.logHistory(user.getId(), "TRANSFERRED", null, "Không có", "Xóa khỏi phòng ban");
+                }
             }
         }
         

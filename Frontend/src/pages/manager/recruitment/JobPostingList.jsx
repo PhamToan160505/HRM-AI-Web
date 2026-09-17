@@ -17,6 +17,7 @@ export default function JobPostingList() {
 
   // Level 1: Departments
   const [departments, setDepartments] = useState([]);
+  const [allSystemDepartments, setAllSystemDepartments] = useState([]);
   const [deptPage, setDeptPage] = useState(0);
   const deptPageSize = 6;
 
@@ -32,6 +33,17 @@ export default function JobPostingList() {
   const [expandedJobId, setExpandedJobId] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, type: null, jobId: null, title: '', message: '' });
   const [selectedFilterDept, setSelectedFilterDept] = useState('');
+
+  // Fetch all departments for the filter dropdown
+  useEffect(() => {
+    api.get('/api/departments')
+      .then(res => {
+        if (res.data.success) {
+          setAllSystemDepartments(res.data.data);
+        }
+      })
+      .catch(console.error);
+  }, []);
 
   // Fetch Level 1 data
   const fetchDepartments = () => {
@@ -186,8 +198,8 @@ export default function JobPostingList() {
                 className="pl-4 pr-8 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 appearance-none shadow-sm min-w-[200px]"
               >
                 <option value="">Tất cả phòng ban</option>
-                {departments.map(d => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
+                {allSystemDepartments.map(d => (
+                  <option key={d.id} value={d.id}>{d.tenPhong}</option>
                 ))}
               </select>
               <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />

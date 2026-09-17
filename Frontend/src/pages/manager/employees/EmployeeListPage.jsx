@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Users, Search, Filter, MoreVertical, CreditCard, CheckCircle2, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import api from '../../../services/api';
@@ -118,10 +118,20 @@ const EmployeeListPage = () => {
         setAssignForm({ 
             departmentId: emp.departmentId || '', 
             chucVu: emp.chucVu || '',
-            baseSalary: emp.baseSalary || '',
-            allowance: emp.allowance || ''
+            baseSalary: emp.baseSalary ? Number(emp.baseSalary).toLocaleString('vi-VN') : '',
+            allowance: emp.allowance ? Number(emp.allowance).toLocaleString('vi-VN') : ''
         });
         setIsAssignModalOpen(true);
+    };
+
+    const handleCurrencyChange = (field, value) => {
+        const rawValue = value.replace(/\D/g, '');
+        if (rawValue === '') {
+            setAssignForm(prev => ({ ...prev, [field]: '' }));
+            return;
+        }
+        const formattedValue = Number(rawValue).toLocaleString('vi-VN');
+        setAssignForm(prev => ({ ...prev, [field]: formattedValue }));
     };
 
     const handleSaveAssign = async () => {
@@ -129,17 +139,26 @@ const EmployeeListPage = () => {
             toast.show("Lỗi", "Vui lòng nhập chức vụ", "error");
             return;
         }
-        if (assignForm.baseSalary === '' || Number(assignForm.baseSalary) < 0) {
+
+        const rawBaseSalary = assignForm.baseSalary.toString().replace(/\./g, '');
+        const rawAllowance = assignForm.allowance.toString().replace(/\./g, '');
+
+        if (rawBaseSalary === '' || Number(rawBaseSalary) < 0) {
             toast.show("Lỗi", "Lương cơ bản không hợp lệ (phải >= 0)", "error");
             return;
         }
-        if (assignForm.allowance !== '' && Number(assignForm.allowance) < 0) {
+        if (rawAllowance !== '' && Number(rawAllowance) < 0) {
             toast.show("Lỗi", "Phụ cấp không được là số âm", "error");
             return;
         }
 
         try {
-            const res = await api.put(`/api/employees/${selectedEmployee.id}/assignment`, assignForm);
+            const payload = {
+                ...assignForm,
+                baseSalary: rawBaseSalary,
+                allowance: rawAllowance
+            };
+            const res = await api.put(`/api/employees/${selectedEmployee.id}/assignment`, payload);
             if (res.data.success) {
                 fetchEmployees();
                 setIsAssignModalOpen(false);
@@ -381,21 +400,21 @@ const EmployeeListPage = () => {
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Lương cơ bản (VNĐ) <span className="text-red-500">*</span></label>
                                     <input 
-                                        type="number" 
+                                        type="text" 
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
-                                        placeholder="Vd: 15000000"
+                                        placeholder="Vd: 15.000.000"
                                         value={assignForm.baseSalary}
-                                        onChange={e => setAssignForm({...assignForm, baseSalary: e.target.value})}
+                                        onChange={e => handleCurrencyChange('baseSalary', e.target.value)}
                                     />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Phụ cấp (VNĐ)</label>
                                     <input 
-                                        type="number" 
+                                        type="text" 
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
-                                        placeholder="Vd: 500000"
+                                        placeholder="Vd: 500.000"
                                         value={assignForm.allowance}
-                                        onChange={e => setAssignForm({...assignForm, allowance: e.target.value})}
+                                        onChange={e => handleCurrencyChange('allowance', e.target.value)}
                                     />
                                 </div>
                             </div>

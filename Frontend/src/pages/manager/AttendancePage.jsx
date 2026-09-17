@@ -126,6 +126,52 @@ export default function ManagerAttendancePage() {
         return matchStatus;
     });
 
+    const handleExportReport = async () => {
+        try {
+            toast.show("Thông báo", "Đang xuất báo cáo...", "info");
+            
+            let url = `/api/attendance/department/paginated?page=0&size=10000`;
+            if (selectedDepartment) url += `&departmentId=${selectedDepartment.id}`;
+            if (selectedRole) url += `&targetRole=${selectedRole}`;
+            if (filterStatus && filterStatus !== 'ALL') url += `&status=${filterStatus}`;
+            
+            const response = await api.get(url);
+            if (response.data?.success) {
+                const data = response.data.data.content || [];
+                if (data.length === 0) {
+                    toast.show("Cảnh báo", "Không có dữ liệu để xuất", "warning");
+                    return;
+                }
+                
+                let csvContent = "\uFEFF"; // BOM cho UTF-8 Excel
+                csvContent += "Nhân viên,Phòng ban,Chức vụ,Giờ vào,Giờ ra,Trạng thái\n";
+                
+                data.forEach(record => {
+                    const ten = `"${record.hoTen || ''}"`;
+                    const phong = `"${record.departmentName || selectedDepartment?.tenPhong || 'Chưa cập nhật'}"`;
+                    const chucVu = `"${record.chucVu || 'Chưa cập nhật'}"`;
+                    const gioVao = record.timeIn ? record.timeIn.substring(0, 5) : "--:--";
+                    const gioRa = record.timeOut ? record.timeOut.substring(0, 5) : "Chưa check-out";
+                    const trangThai = `"${getStatusText(record.status)}"`;
+                    
+                    csvContent += `${ten},${phong},${chucVu},${gioVao},${gioRa},${trangThai}\n`;
+                });
+                
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement("a");
+                const dateStr = new Date().toISOString().split('T')[0];
+                link.href = URL.createObjectURL(blob);
+                link.setAttribute("download", `Bao_Cao_Cham_Cong_${dateStr}.csv`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        } catch (error) {
+            console.error("Lỗi xuất báo cáo:", error);
+            toast.show("Lỗi", "Không thể xuất báo cáo", "error");
+        }
+    };
+
     return (
         <div className="space-y-6 max-w-7xl mx-auto pb-10">
             {/* Header & Department Selection */}
@@ -148,7 +194,7 @@ export default function ManagerAttendancePage() {
                     </div>
                 </div>
                 <div className="flex gap-3">
-                    <Button variant="outline" className="flex items-center gap-2 bg-white">
+                    <Button variant="outline" className="flex items-center gap-2 bg-white" onClick={handleExportReport}>
                         <Download size={16} />
                         Xuất báo cáo
                     </Button>
