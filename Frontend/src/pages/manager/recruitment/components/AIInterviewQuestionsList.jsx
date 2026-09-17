@@ -7,9 +7,9 @@ export default function AIInterviewQuestionsList({ questions = [] }) {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 space-y-4">
       <div className="flex items-center gap-2 mb-2">
-        <MessageSquareText size={18} className="text-indigo-600" />
+        <MessageSquareText size={18} className="text-blue-600" />
         <h3 className="font-semibold text-slate-800">Câu hỏi phỏng vấn (AI Gợi ý)</h3>
-        <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-bold uppercase tracking-wider ml-auto">Gemini Generated</span>
+        <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-bold uppercase tracking-wider ml-auto">Gemini Generated</span>
       </div>
       
       <div className="space-y-3">

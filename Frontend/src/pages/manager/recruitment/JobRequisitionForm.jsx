@@ -5,12 +5,27 @@ import { useAuth } from '../../../context/AuthContext';
 import { useToast } from '../../../components/common/Toast';
 import api from '../../../services/api';
 
+const CAP_BAC_PLACEHOLDER = '-- Chọn cấp bậc --';
+
+const countWords = (value) => value.trim().split(/\s+/).filter(Boolean).length;
+
+const parseBudget = (value) => {
+  const digits = value.replace(/\D/g, '');
+  return digits ? Number(digits) : 0;
+};
+
+const formatBudget = (value) => {
+  const digits = value.replace(/\D/g, '');
+  return digits ? Number(digits).toLocaleString('vi-VN') : '';
+};
+
 export default function JobRequisitionForm() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { show } = useToast();
   const [loading, setLoading] = useState(false);
   const [departments, setDepartments] = useState([]);
+  const [errors, setErrors] = useState({});
 
   useEffect(() => {
     if (user?.role === 'ceo' || user?.role === 'admin') {
@@ -56,15 +71,83 @@ export default function JobRequisitionForm() {
     budgetMin: '',
     budgetMax: '',
     departmentId: user?.departmentId || null,
-    capBac: '-- Chọn cấp bậc --',
+    capBac: CAP_BAC_PLACEHOLDER,
     capBacKhac: '',
     hinhThucLamViec: 'Toàn thời gian (Full-time)',
     hinhThucLamViecKhac: '',
     description: ''
   });
 
+  const updateField = (field, value) => {
+    setFormData((current) => ({ ...current, [field]: value }));
+    setErrors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  };
+
+  const validateForm = () => {
+    const nextErrors = {};
+
+    if (!formData.title.trim()) {
+      nextErrors.title = 'Vui lòng nhập chức danh cụ thể.';
+    }
+    if (formData.capBac === CAP_BAC_PLACEHOLDER) {
+      nextErrors.capBac = 'Vui lòng chọn cấp bậc.';
+    }
+    if (formData.capBac === 'Khác' && !formData.capBacKhac.trim()) {
+      nextErrors.capBacKhac = 'Vui lòng nhập cấp bậc khác.';
+    }
+    if (formData.hinhThucLamViec === 'Khác' && !formData.hinhThucLamViecKhac.trim()) {
+      nextErrors.hinhThucLamViecKhac = 'Vui lòng nhập hình thức làm việc khác.';
+    }
+    if (!Number.isInteger(Number(formData.soLuong)) || Number(formData.soLuong) <= 0) {
+      nextErrors.soLuong = 'Số lượng phải là số nguyên lớn hơn 0.';
+    }
+    if ((user?.role === 'ceo' || user?.role === 'admin') && !formData.departmentId) {
+      nextErrors.departmentId = 'Vui lòng chọn phòng ban.';
+    }
+    if (!formData.reason.trim()) {
+      nextErrors.reason = 'Vui lòng nhập lý do tuyển.';
+    }
+
+    const descriptionWordCount = countWords(formData.description);
+    if (!formData.description.trim()) {
+      nextErrors.description = 'Vui lòng nhập mô tả công việc (JD).';
+    } else if (descriptionWordCount < 10) {
+      nextErrors.description = `Mô tả công việc phải có ít nhất 10 từ (hiện tại ${descriptionWordCount} từ).`;
+    }
+
+    const hasBudget = Boolean(formData.budgetMin || formData.budgetMax);
+    if (hasBudget) {
+      const budgetMin = parseBudget(formData.budgetMin);
+      const budgetMax = parseBudget(formData.budgetMax);
+
+      if (budgetMin <= 0) {
+        nextErrors.budgetMin = 'Ngân sách tối thiểu phải lớn hơn 0.';
+      }
+      if (budgetMax <= 0) {
+        nextErrors.budgetMax = 'Ngân sách tối đa phải lớn hơn 0.';
+      }
+      if (budgetMin > 0 && budgetMax > 0 && budgetMin > budgetMax) {
+        nextErrors.budgetMax = 'Ngân sách tối đa phải lớn hơn hoặc bằng mức tối thiểu.';
+      }
+    }
+
+    return nextErrors;
+  };
+
   const handleCreateSubmit = async (e) => {
     e.preventDefault();
+    const validationErrors = validateForm();
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
+      return;
+    }
+
+    setErrors({});
     setLoading(true);
     try {
       // Setup payload correctly
@@ -102,7 +185,7 @@ export default function JobRequisitionForm() {
           budgetMax: '',
           description: '',
           departmentId: user?.departmentId || null,
-          capBac: '-- Chọn cấp bậc --',
+          capBac: CAP_BAC_PLACEHOLDER,
           capBacKhac: '',
           hinhThucLamViec: 'Toàn thời gian (Full-time)',
           hinhThucLamViecKhac: ''
@@ -134,7 +217,7 @@ export default function JobRequisitionForm() {
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="p-6">
-          <form onSubmit={handleCreateSubmit} className="space-y-6">
+          <form onSubmit={handleCreateSubmit} noValidate className="space-y-6">
             
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1">
@@ -144,10 +227,13 @@ export default function JobRequisitionForm() {
                 type="text" 
                 required 
                 value={formData.title} 
-                onChange={(e) => setFormData({...formData, title: e.target.value})} 
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors"
+                onChange={(e) => updateField('title', e.target.value)}
+                aria-invalid={Boolean(errors.title)}
+                aria-describedby={errors.title ? 'title-error' : undefined}
+                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${errors.title ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border-slate-300 focus:border-blue-600 focus:ring-blue-500/20'}`}
                 placeholder="VD: Lập trình viên Backend, Trưởng phòng Kinh doanh..."
               />
+              {errors.title && <p id="title-error" className="mt-1.5 text-xs font-medium text-red-600">{errors.title}</p>}
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -157,8 +243,10 @@ export default function JobRequisitionForm() {
                 </label>
                 <select 
                   value={formData.capBac} 
-                  onChange={(e) => setFormData({...formData, capBac: e.target.value})} 
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors"
+                  onChange={(e) => updateField('capBac', e.target.value)}
+                  aria-invalid={Boolean(errors.capBac)}
+                  aria-describedby={errors.capBac ? 'cap-bac-error' : undefined}
+                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${errors.capBac ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border-slate-300 focus:border-blue-600 focus:ring-blue-500/20'}`}
                 >
                   <option value="-- Chọn cấp bậc --">-- Chọn cấp bậc --</option>
                   <option value="Thực tập sinh (Intern)">Thực tập sinh (Intern)</option>
@@ -169,15 +257,21 @@ export default function JobRequisitionForm() {
                   <option value="Giám đốc (Director)">Giám đốc (Director)</option>
                   <option value="Khác">Khác</option>
                 </select>
+                {errors.capBac && <p id="cap-bac-error" className="mt-1.5 text-xs font-medium text-red-600">{errors.capBac}</p>}
                 {formData.capBac === 'Khác' && (
-                  <input 
-                    type="text"
-                    required
-                    value={formData.capBacKhac}
-                    onChange={(e) => setFormData({...formData, capBacKhac: e.target.value})}
-                    placeholder="Nhập cấp bậc khác..."
-                    className="mt-2 w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors"
-                  />
+                  <>
+                    <input
+                      type="text"
+                      required
+                      value={formData.capBacKhac}
+                      onChange={(e) => updateField('capBacKhac', e.target.value)}
+                      aria-invalid={Boolean(errors.capBacKhac)}
+                      aria-describedby={errors.capBacKhac ? 'cap-bac-khac-error' : undefined}
+                      placeholder="Nhập cấp bậc khác..."
+                      className={`mt-2 w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${errors.capBacKhac ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border-slate-300 focus:border-blue-600 focus:ring-blue-500/20'}`}
+                    />
+                    {errors.capBacKhac && <p id="cap-bac-khac-error" className="mt-1.5 text-xs font-medium text-red-600">{errors.capBacKhac}</p>}
+                  </>
                 )}
               </div>
               
@@ -187,7 +281,7 @@ export default function JobRequisitionForm() {
                 </label>
                 <select 
                   value={formData.hinhThucLamViec} 
-                  onChange={(e) => setFormData({...formData, hinhThucLamViec: e.target.value})} 
+                  onChange={(e) => updateField('hinhThucLamViec', e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors"
                 >
                   <option value="Toàn thời gian (Full-time)">Toàn thời gian (Full-time)</option>
@@ -197,14 +291,19 @@ export default function JobRequisitionForm() {
                   <option value="Khác">Khác</option>
                 </select>
                 {formData.hinhThucLamViec === 'Khác' && (
-                  <input 
-                    type="text"
-                    required
-                    value={formData.hinhThucLamViecKhac}
-                    onChange={(e) => setFormData({...formData, hinhThucLamViecKhac: e.target.value})}
-                    placeholder="Nhập hình thức làm việc khác..."
-                    className="mt-2 w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors"
-                  />
+                  <>
+                    <input
+                      type="text"
+                      required
+                      value={formData.hinhThucLamViecKhac}
+                      onChange={(e) => updateField('hinhThucLamViecKhac', e.target.value)}
+                      aria-invalid={Boolean(errors.hinhThucLamViecKhac)}
+                      aria-describedby={errors.hinhThucLamViecKhac ? 'hinh-thuc-khac-error' : undefined}
+                      placeholder="Nhập hình thức làm việc khác..."
+                      className={`mt-2 w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${errors.hinhThucLamViecKhac ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border-slate-300 focus:border-blue-600 focus:ring-blue-500/20'}`}
+                    />
+                    {errors.hinhThucLamViecKhac && <p id="hinh-thuc-khac-error" className="mt-1.5 text-xs font-medium text-red-600">{errors.hinhThucLamViecKhac}</p>}
+                  </>
                 )}
               </div>
             </div>
@@ -232,11 +331,15 @@ export default function JobRequisitionForm() {
                 <input 
                   type="number" 
                   min="1" 
+                  step="1"
                   required 
                   value={formData.soLuong} 
-                  onChange={(e) => setFormData({...formData, soLuong: parseInt(e.target.value)})} 
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors" 
+                  onChange={(e) => updateField('soLuong', e.target.value === '' ? '' : Number(e.target.value))}
+                  aria-invalid={Boolean(errors.soLuong)}
+                  aria-describedby={errors.soLuong ? 'so-luong-error' : undefined}
+                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${errors.soLuong ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border-slate-300 focus:border-blue-600 focus:ring-blue-500/20'}`}
                 />
+                {errors.soLuong && <p id="so-luong-error" className="mt-1.5 text-xs font-medium text-red-600">{errors.soLuong}</p>}
               </div>
             </div>
 
@@ -246,14 +349,17 @@ export default function JobRequisitionForm() {
                 <select 
                   required
                   value={formData.departmentId || ''} 
-                  onChange={(e) => setFormData({...formData, departmentId: e.target.value ? parseInt(e.target.value) : null})} 
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors"
+                  onChange={(e) => updateField('departmentId', e.target.value ? parseInt(e.target.value, 10) : null)}
+                  aria-invalid={Boolean(errors.departmentId)}
+                  aria-describedby={errors.departmentId ? 'department-error' : undefined}
+                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${errors.departmentId ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border-slate-300 focus:border-blue-600 focus:ring-blue-500/20'}`}
                 >
                   <option value="">-- Chọn phòng ban --</option>
                   {departments.map(dept => (
                     <option key={dept.id} value={dept.id}>{dept.tenPhong}</option>
                   ))}
                 </select>
+                {errors.departmentId && <p id="department-error" className="mt-1.5 text-xs font-medium text-red-600">{errors.departmentId}</p>}
               </div>
             )}
 
@@ -265,10 +371,13 @@ export default function JobRequisitionForm() {
                 required 
                 rows={3} 
                 value={formData.reason} 
-                onChange={(e) => setFormData({...formData, reason: e.target.value})} 
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors"
+                onChange={(e) => updateField('reason', e.target.value)}
+                aria-invalid={Boolean(errors.reason)}
+                aria-describedby={errors.reason ? 'reason-error' : undefined}
+                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${errors.reason ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border-slate-300 focus:border-blue-600 focus:ring-blue-500/20'}`}
                 placeholder="Nêu rõ lý do cần bổ sung nhân sự..."
               />
+              {errors.reason && <p id="reason-error" className="mt-1.5 text-xs font-medium text-red-600">{errors.reason}</p>}
             </div>
 
             <div>
@@ -279,10 +388,24 @@ export default function JobRequisitionForm() {
                 required 
                 rows={5} 
                 value={formData.description} 
-                onChange={(e) => setFormData({...formData, description: e.target.value})} 
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors"
-                placeholder="Mô tả chi tiết các công việc cần làm..."
+                onChange={(e) => updateField('description', e.target.value)}
+                aria-invalid={Boolean(errors.description)}
+                aria-describedby={errors.description ? 'description-error' : 'description-hint'}
+                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${errors.description ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border-slate-300 focus:border-blue-600 focus:ring-blue-500/20'}`}
+                placeholder="Mô tả chi tiết nhiệm vụ, trách nhiệm và kết quả mong đợi..."
               />
+              <div className="mt-1.5 flex items-start justify-between gap-4">
+                <div>
+                  {errors.description ? (
+                    <p id="description-error" className="text-xs font-medium text-red-600">{errors.description}</p>
+                  ) : (
+                    <p id="description-hint" className="text-xs text-slate-400">Nội dung tối thiểu 10 từ để AI có đủ dữ liệu phân tích.</p>
+                  )}
+                </div>
+                <span className={`shrink-0 text-xs ${formData.description && countWords(formData.description) < 10 ? 'text-amber-600' : 'text-slate-400'}`}>
+                  {countWords(formData.description)}/10 từ
+                </span>
+              </div>
             </div>
             
             <div>
@@ -302,35 +425,36 @@ export default function JobRequisitionForm() {
               <label className="block text-sm font-semibold text-slate-700 mb-1">
                 Ngân sách dự kiến <span className="text-slate-400 font-normal">(Tùy chọn)</span>
               </label>
-              <div className="flex items-center gap-4">
-                <input 
-                  type="text" 
-                  value={formData.budgetMin} 
-                  onChange={(e) => {
-                    const val = e.target.value.replace(/\./g, '');
-                    const formatted = val.replace(/\d+/g, (match) => {
-                      return parseInt(match, 10).toLocaleString('vi-VN');
-                    });
-                    setFormData({...formData, budgetMin: formatted});
-                  }} 
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors" 
-                  placeholder="Từ (VD: 15.000.000)"
-                />
-                <span className="text-slate-500 font-medium">-</span>
-                <input 
-                  type="text" 
-                  value={formData.budgetMax} 
-                  onChange={(e) => {
-                    const val = e.target.value.replace(/\./g, '');
-                    const formatted = val.replace(/\d+/g, (match) => {
-                      return parseInt(match, 10).toLocaleString('vi-VN');
-                    });
-                    setFormData({...formData, budgetMax: formatted});
-                  }} 
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors" 
-                  placeholder="Đến (VD: 20.000.000)"
-                />
+              <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-4">
+                <div>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={formData.budgetMin}
+                    onChange={(e) => updateField('budgetMin', formatBudget(e.target.value))}
+                    aria-invalid={Boolean(errors.budgetMin)}
+                    aria-describedby={errors.budgetMin ? 'budget-min-error' : undefined}
+                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${errors.budgetMin ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border-slate-300 focus:border-blue-600 focus:ring-blue-500/20'}`}
+                    placeholder="Từ (VD: 15.000.000)"
+                  />
+                  {errors.budgetMin && <p id="budget-min-error" className="mt-1.5 text-xs font-medium text-red-600">{errors.budgetMin}</p>}
+                </div>
+                <span className="pt-2 text-slate-500 font-medium">-</span>
+                <div>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={formData.budgetMax}
+                    onChange={(e) => updateField('budgetMax', formatBudget(e.target.value))}
+                    aria-invalid={Boolean(errors.budgetMax)}
+                    aria-describedby={errors.budgetMax ? 'budget-max-error' : undefined}
+                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${errors.budgetMax ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border-slate-300 focus:border-blue-600 focus:ring-blue-500/20'}`}
+                    placeholder="Đến (VD: 20.000.000)"
+                  />
+                  {errors.budgetMax && <p id="budget-max-error" className="mt-1.5 text-xs font-medium text-red-600">{errors.budgetMax}</p>}
+                </div>
               </div>
+              <p className="mt-1.5 text-xs text-slate-400">Chỉ nhập số dương; hệ thống sẽ tự định dạng theo VNĐ.</p>
             </div>
 
             <div className="pt-4 border-t border-slate-100 flex justify-end gap-3">

@@ -98,6 +98,8 @@ public class JobRequisitionService {
         User requester = userRepository.findById(requesterId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy người yêu cầu"));
 
+        validateRequisitionContent(request);
+
         // Validate thẩm quyền
         // Tuyển NHAN_VIEN -> Trưởng phòng hoặc cao hơn
         // Tuyển TRUONG_PHONG -> Giám đốc phòng ban hoặc cao hơn
@@ -134,6 +136,46 @@ public class JobRequisitionService {
                 .build();
 
         return jobRequisitionRepository.save(req);
+    }
+
+    private void validateRequisitionContent(RequisitionRequest request) {
+        if (request.soLuong() == null || request.soLuong() <= 0) {
+            throw new RuntimeException("Số lượng tuyển phải lớn hơn 0");
+        }
+
+        String description = request.description();
+        long descriptionWordCount = description == null || description.isBlank()
+                ? 0
+                : java.util.Arrays.stream(description.trim().split("\\s+"))
+                        .filter(word -> !word.isBlank())
+                        .count();
+        if (descriptionWordCount < 10) {
+            throw new RuntimeException("Mô tả công việc (JD) phải có ít nhất 10 từ");
+        }
+
+        String budget = request.budget();
+        if (budget == null || budget.isBlank()) {
+            return;
+        }
+
+        try {
+            String normalizedBudget = budget.replace("VNĐ", "").replace(".", "").trim();
+            String[] range = normalizedBudget.split("\\s*-\\s*");
+            if (range.length != 2) {
+                throw new NumberFormatException("Invalid budget range");
+            }
+
+            long budgetMin = Long.parseLong(range[0]);
+            long budgetMax = Long.parseLong(range[1]);
+            if (budgetMin <= 0 || budgetMax <= 0) {
+                throw new RuntimeException("Ngân sách dự kiến phải là số lớn hơn 0");
+            }
+            if (budgetMin > budgetMax) {
+                throw new RuntimeException("Ngân sách tối đa phải lớn hơn hoặc bằng ngân sách tối thiểu");
+            }
+        } catch (NumberFormatException exception) {
+            throw new RuntimeException("Ngân sách dự kiến không hợp lệ");
+        }
     }
 
     public JobRequisition approveRequisition(Long id, Long approverId) {

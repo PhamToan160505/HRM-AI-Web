@@ -24,6 +24,7 @@ const Input = forwardRef(function Input(
     disabled = false,
     required = false,
     className = '',
+    startIcon,
     id: externalId,
     ...rest
   },
@@ -41,6 +42,7 @@ const Input = forwardRef(function Input(
     'bg-bg border rounded-md',
     'text-text placeholder:text-muted',
     'transition-colors duration-150',
+    startIcon ? 'pl-10' : '',
     isPassword ? 'pr-10' : '',
     error
       ? 'border-danger focus:border-danger focus:ring-danger/30 focus:ring-2 focus:ring-offset-0'
@@ -66,6 +68,15 @@ const Input = forwardRef(function Input(
       )}
 
       <div className="relative">
+        {startIcon && (
+          <span
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+            aria-hidden="true"
+          >
+            {startIcon}
+          </span>
+        )}
+
         <input
           ref={ref}
           id={inputId}

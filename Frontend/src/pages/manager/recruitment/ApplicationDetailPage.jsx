@@ -259,7 +259,7 @@ export default function ApplicationDetailPage() {
 
           <button
             onClick={() => setShowAiDrawer(true)}
-            className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-5 py-2.5 rounded-xl font-semibold transition-all shadow-md shadow-blue-200 hover:shadow-lg hover:-translate-y-0.5 ml-2"
+            className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-5 py-2.5 rounded-xl font-semibold transition-all shadow-md shadow-blue-200 hover:shadow-lg hover:-translate-y-0.5 ml-2"
           >
             <Sparkles size={18} /> Chẩn đoán AI
           </button>
@@ -404,7 +404,7 @@ export default function ApplicationDetailPage() {
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" onClick={() => setShowAiDrawer(false)}></div>
           
           <div className="relative w-full max-w-md bg-slate-50 h-full shadow-2xl flex flex-col animate-slide-in-right">
-            <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 p-6 flex justify-between items-center text-white shadow-md relative overflow-hidden">
+            <div className="bg-gradient-to-r from-blue-600 via-blue-600 to-blue-700 p-6 flex justify-between items-center text-white shadow-md relative overflow-hidden">
               <div className="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 rounded-full bg-white opacity-10 blur-2xl"></div>
               <div className="absolute bottom-0 left-0 -ml-8 -mb-8 w-24 h-24 rounded-full bg-white opacity-10 blur-xl"></div>
               
@@ -414,12 +414,12 @@ export default function ApplicationDetailPage() {
                 </div>
                 <div>
                   <h2 className="text-xl font-bold tracking-wide">Chẩn đoán AI</h2>
-                  <p className="text-indigo-100 text-xs mt-0.5">Phân tích CV tự động</p>
+                  <p className="text-blue-100 text-xs mt-0.5">Phân tích CV tự động</p>
                 </div>
               </div>
               <button 
                 onClick={() => setShowAiDrawer(false)} 
-                className="p-2 text-indigo-100 hover:text-white hover:bg-white/20 rounded-full transition-colors relative z-10"
+                className="p-2 text-blue-100 hover:text-white hover:bg-white/20 rounded-full transition-colors relative z-10"
               >
                 <X size={20} />
               </button>
@@ -428,8 +428,8 @@ export default function ApplicationDetailPage() {
             <div className="flex-1 overflow-y-auto p-6 space-y-6 relative">
               {!application.extractedData && application.approvalStatus === 'PENDING' ? (
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 flex flex-col items-center text-center gap-4">
-                  <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center">
-                    <Sparkles size={32} className="text-indigo-500" />
+                  <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center">
+                    <Sparkles size={32} className="text-blue-500" />
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-slate-800">Hồ sơ chưa được đánh giá</h3>
@@ -440,7 +440,7 @@ export default function ApplicationDetailPage() {
                   <button
                     onClick={handleRunAi}
                     disabled={runningAi}
-                    className="mt-2 flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white px-6 py-2.5 rounded-lg font-semibold transition-colors shadow-md"
+                    className="mt-2 flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-6 py-2.5 rounded-lg font-semibold transition-colors shadow-md"
                   >
                     {runningAi ? (
                       <><Loader2 size={18} className="animate-spin" /> Đang phân tích...</>
@@ -455,7 +455,7 @@ export default function ApplicationDetailPage() {
                     <button
                       onClick={handleRunAi}
                       disabled={runningAi}
-                      className="flex items-center justify-center gap-2 w-full bg-white border border-indigo-200 hover:bg-indigo-50 text-indigo-700 disabled:text-slate-400 disabled:bg-slate-100 px-4 py-2.5 rounded-lg font-semibold transition-colors shadow-sm"
+                      className="flex items-center justify-center gap-2 w-full bg-white border border-blue-200 hover:bg-blue-50 text-blue-700 disabled:text-slate-400 disabled:bg-slate-100 px-4 py-2.5 rounded-lg font-semibold transition-colors shadow-sm"
                     >
                       {runningAi ? (
                         <><Loader2 size={16} className="animate-spin" /> Đang chạy lại...</>
