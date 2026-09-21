@@ -1,42 +1,56 @@
 import React from 'react';
 
 /**
- * Card component — wrapper box với shadow, border, padding chuẩn.
- * Dùng cho login form, section nội dung, thẻ tóm tắt.
- *
+ * Card component — High-End Double-Bezel Architecture
+ * 
  * Props:
  *   children
- *   className: extend nếu cần padding/size tùy chỉnh
- *   noPadding: boolean — bỏ padding mặc định (dùng khi card chứa table/list full-width)
+ *   className: applied to outer shell (for widths, margins, grids)
+ *   innerClassName: applied to inner core (for flex, paddings)
+ *   noPadding: boolean — bỏ padding mặc định
  */
-export function Card({ children, className = '', noPadding = false, ...props }) {
+export function Card({ children, className = '', innerClassName = '', noPadding = false, ...props }) {
   return (
     <div
       className={[
-        'bg-surface border border-border rounded-lg',
-        'shadow-[var(--shadow-card)]',
-        noPadding ? '' : 'p-5',
+        'bg-black/5 ring-1 ring-black/5 p-1.5',
+        'rounded-[2rem]', // Outer radius
         className,
       ].filter(Boolean).join(' ')}
       {...props}
     >
-      {children}
+      <div 
+        className={[
+          'bg-surface shadow-[var(--shadow-card)] h-full w-full',
+          'rounded-[calc(2rem-0.375rem)]', // Inner radius
+          'transition-smooth',
+          noPadding ? '' : 'p-6 md:p-8',
+          innerClassName
+        ].filter(Boolean).join(' ')}
+      >
+        {children}
+      </div>
     </div>
   );
 }
 
 /**
- * CardHeader — tiêu đề card với optional action slot bên phải.
+ * CardHeader — tiêu đề card
  */
-export function CardHeader({ title, subtitle, action, className = '' }) {
+export function CardHeader({ title, subtitle, eyebrow, action, className = '' }) {
   return (
-    <div className={['flex items-start justify-between gap-3 mb-4', className].join(' ')}>
+    <div className={['flex items-start justify-between gap-4 mb-6', className].join(' ')}>
       <div>
+        {eyebrow && (
+          <span className="inline-block px-3 py-1 mb-3 text-[10px] uppercase tracking-[0.2em] font-bold bg-primary/10 text-primary rounded-full">
+            {eyebrow}
+          </span>
+        )}
         {title && (
-          <h2 className="text-sm font-semibold text-text leading-snug">{title}</h2>
+          <h2 className="text-lg md:text-xl font-bold text-text tracking-tight">{title}</h2>
         )}
         {subtitle && (
-          <p className="text-xs text-muted mt-0.5">{subtitle}</p>
+          <p className="text-sm text-text-secondary mt-1 max-w-[65ch]">{subtitle}</p>
         )}
       </div>
       {action && <div className="shrink-0">{action}</div>}

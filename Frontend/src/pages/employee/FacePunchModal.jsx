@@ -1,29 +1,117 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as faceapi from '@vladmandic/face-api';
-import { Camera, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { Camera, CheckCircle, AlertCircle, Loader2, MapPin, RefreshCw } from 'lucide-react';
 import api from '../../services/api';
-import Button from '../../components/common/Button';
+
+let faceModelsPromise = null;
+
+const loadFaceModels = () => {
+    if (!faceModelsPromise) {
+        faceModelsPromise = Promise.all([
+            faceapi.nets.ssdMobilenetv1.loadFromUri('/models'),
+            faceapi.nets.faceLandmark68Net.loadFromUri('/models'),
+            faceapi.nets.faceRecognitionNet.loadFromUri('/models'),
+            faceapi.nets.faceExpressionNet.loadFromUri('/models')
+        ]).catch((error) => {
+            faceModelsPromise = null;
+            throw error;
+        });
+    }
+    return faceModelsPromise;
+};
+
+const getLocationErrorMessage = (error) => {
+    if (error?.code === 1) return 'Chưa được cấp quyền vị trí. Hãy cho phép Location trong trình duyệt.';
+    if (error?.code === 2) return 'Thiết bị chưa xác định được vị trí hiện tại.';
+    if (error?.code === 3) return 'Lấy vị trí quá thời gian. Bạn có thể thử lại.';
+    return 'Không thể lấy vị trí hiện tại.';
+};
+
+const resolveCurrentLocation = async () => {
+    if (!navigator.geolocation) {
+        return {
+            locationName: 'Không thể lấy vị trí',
+            status: 'error',
+            message: 'Trình duyệt này không hỗ trợ định vị.'
+        };
+    }
+
+    let position;
+    try {
+        position = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+                enableHighAccuracy: true,
+                timeout: 8000,
+                maximumAge: 60000
+            });
+        });
+    } catch (error) {
+        return {
+            locationName: 'Không thể lấy vị trí',
+            status: 'error',
+            message: getLocationErrorMessage(error)
+        };
+    }
+
+    const lat = position.coords.latitude;
+    const lon = position.coords.longitude;
+    const coordinates = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+    try {
+        const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=vi`,
+            { signal: controller.signal }
+        );
+        if (!response.ok) throw new Error(`Reverse geocoding failed: ${response.status}`);
+
+        const data = await response.json();
+        return {
+            locationName: data.display_name || coordinates,
+            status: 'success',
+            message: 'Đã lấy được vị trí.'
+        };
+    } catch {
+        return {
+            locationName: coordinates,
+            status: 'warning',
+            message: 'Đã lấy tọa độ; không thể tải tên địa chỉ.'
+        };
+    } finally {
+        clearTimeout(timeoutId);
+    }
+};
 
 const FacePunchModal = ({ onSuccess, onCancel }) => {
     const videoRef = useRef(null);
     const [isModelsLoaded, setIsModelsLoaded] = useState(false);
-    const [stream, setStream] = useState(null);
     const [error, setError] = useState(null);
     const [loading, setLoading] = useState(false);
     const [successMessage, setSuccessMessage] = useState(null);
     const [countdown, setCountdown] = useState(null);
+    const [locationState, setLocationState] = useState({
+        status: 'loading',
+        message: 'Đang lấy vị trí...'
+    });
     const isPunching = useRef(false);
+    const locationPromiseRef = useRef(null);
+
+    const startLocationLookup = useCallback(() => {
+        setLocationState({ status: 'loading', message: 'Đang lấy vị trí...' });
+        const locationPromise = resolveCurrentLocation();
+        locationPromiseRef.current = locationPromise;
+        locationPromise.then(({ status, message }) => {
+            setLocationState({ status, message });
+        });
+        return locationPromise;
+    }, []);
 
     // 1. Load models
     useEffect(() => {
         const loadModels = async () => {
             try {
-                await Promise.all([
-                    faceapi.nets.ssdMobilenetv1.loadFromUri('/models'),
-                    faceapi.nets.faceLandmark68Net.loadFromUri('/models'),
-                    faceapi.nets.faceRecognitionNet.loadFromUri('/models'),
-                    faceapi.nets.faceExpressionNet.loadFromUri('/models')
-                ]);
+                await loadFaceModels();
                 setIsModelsLoaded(true);
             } catch (err) {
                 console.error("Lỗi tải AI models:", err);
@@ -32,6 +120,11 @@ const FacePunchModal = ({ onSuccess, onCancel }) => {
         };
         loadModels();
     }, []);
+
+    // Lấy vị trí ngay khi mở modal để không phải chờ sau khi nhận diện khuôn mặt.
+    useEffect(() => {
+        startLocationLookup();
+    }, [startLocationLookup]);
 
     // 2. Start webcam when models are loaded
     useEffect(() => {
@@ -44,7 +137,6 @@ const FacePunchModal = ({ onSuccess, onCancel }) => {
                 if (videoRef.current) {
                     videoRef.current.srcObject = activeStream;
                 }
-                setStream(activeStream);
             } catch (err) {
                 console.error("Camera error:", err);
                 setError("Không thể truy cập Camera. Vui lòng cấp quyền.");
@@ -102,25 +194,10 @@ const FacePunchModal = ({ onSuccess, onCancel }) => {
             const descriptorArray = Array.from(detection.descriptor);
             const vectorJson = JSON.stringify(descriptorArray);
 
-            // Fetch location
-            let locationName = "Không thể lấy vị trí";
-            try {
-                const position = await new Promise((resolve, reject) => {
-                    navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
-                });
-                const lat = position.coords.latitude;
-                const lon = position.coords.longitude;
-                // Simple reverse geocoding via Nominatim
-                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`);
-                if (res.ok) {
-                    const data = await res.json();
-                    locationName = data.display_name || `${lat}, ${lon}`;
-                } else {
-                    locationName = `${lat}, ${lon}`;
-                }
-            } catch (err) {
-                console.warn("Geolocation failed:", err);
-            }
+            // GPS đã được khởi chạy song song ngay khi mở modal. Nếu dịch vụ đổi
+            // tọa độ thành địa chỉ lỗi, locationName vẫn giữ tọa độ gốc.
+            const locationResult = await (locationPromiseRef.current || startLocationLookup());
+            const locationName = locationResult.locationName;
 
             const response = await api.post('/api/attendance/punch', {
                 embeddingVector: vectorJson,
@@ -128,7 +205,11 @@ const FacePunchModal = ({ onSuccess, onCancel }) => {
             });
 
             if (response.data.success) {
-                setSuccessMessage(`Chấm công thành công! Vị trí: ${locationName.split(',')[0]}`);
+                setSuccessMessage(
+                    locationResult.status === 'error'
+                        ? 'Chấm công thành công! Chưa ghi nhận được vị trí.'
+                        : 'Chấm công thành công! Đã ghi nhận vị trí.'
+                );
                 setCountdown(3);
                 
                 let timeLeft = 3;
@@ -214,6 +295,32 @@ const FacePunchModal = ({ onSuccess, onCancel }) => {
                                 </div>
                             </div>
                         </>
+                    )}
+                </div>
+
+                <div className={`w-full p-2.5 text-xs rounded-lg mb-3 flex items-center gap-2 border text-left ${
+                    locationState.status === 'success'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                        : locationState.status === 'warning'
+                            ? 'bg-amber-50 text-amber-700 border-amber-100'
+                            : locationState.status === 'error'
+                                ? 'bg-red-50 text-red-600 border-red-100'
+                                : 'bg-blue-50 text-blue-700 border-blue-100'
+                }`}>
+                    {locationState.status === 'loading' ? (
+                        <Loader2 size={14} className="shrink-0 animate-spin" />
+                    ) : (
+                        <MapPin size={14} className="shrink-0" />
+                    )}
+                    <span className="flex-1">{locationState.message}</span>
+                    {locationState.status === 'error' && (
+                        <button
+                            type="button"
+                            onClick={startLocationLookup}
+                            className="shrink-0 inline-flex items-center gap-1 font-semibold hover:text-red-800"
+                        >
+                            <RefreshCw size={12} /> Thử lại
+                        </button>
                     )}
                 </div>
 

@@ -45,20 +45,16 @@ function NavItem({ to, icon: Icon, label, end = false, hasUnread = false }) {
       end={end}
       className={({ isActive }) =>
         [
-          'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium',
-          'transition-all duration-200 select-none group relative overflow-hidden',
+          'flex items-center gap-3 px-4 py-3 rounded-full text-sm font-semibold',
+          'transition-smooth select-none group relative overflow-hidden',
           isActive
-            ? 'bg-blue-600 text-white shadow-sm'
-            : 'text-blue-200 hover:bg-white/10 hover:text-white',
+            ? 'bg-white/15 text-white shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]'
+            : 'text-blue-100/70 hover:bg-white/10 hover:text-white',
         ].join(' ')
       }
     >
       {({ isActive }) => (
         <>
-          {/* Active left border */}
-          {isActive && (
-            <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-white rounded-r-full" />
-          )}
           <Icon
             size={16}
             className={`shrink-0 transition-transform duration-200 ${isActive ? '' : 'group-hover:scale-110'}`}
@@ -77,7 +73,7 @@ function NavButton({ icon: Icon, label, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 select-none group relative overflow-hidden text-blue-200 hover:bg-white/10 hover:text-white text-left"
+      className="w-full flex items-center gap-3 px-4 py-3 rounded-full text-sm font-semibold transition-smooth select-none group relative overflow-hidden text-blue-100/70 hover:bg-white/10 hover:text-white text-left"
     >
       <Icon
         size={16}
@@ -143,35 +139,35 @@ function SidebarContent({ role, onClose, hasUnreadChat }) {
     : employeeNav;
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-gradient-to-b from-[#1E3A8A] to-[#102A67]">
       {/* Logo */}
-      <div className="flex items-center justify-between px-4 py-4 border-b border-white/10">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center shadow-md">
-            <Building2 size={16} className="text-white" />
+      <div className="flex items-center justify-between px-6 py-8">
+        <div className="flex items-center gap-3.5">
+          <div className="w-10 h-10 bg-white/10 rounded-2xl flex items-center justify-center shadow-lg backdrop-blur-sm border border-white/20">
+            <Building2 size={20} className="text-white" />
           </div>
           <div>
-            <p className="text-white font-bold text-sm leading-tight tracking-wide">HRM AI</p>
-            <p className="text-blue-300 text-[10px] mt-0.5 tracking-widest uppercase">Quản trị nhân sự</p>
+            <p className="text-white font-bold text-[15px] leading-tight tracking-tight">HRM AI</p>
+            <p className="text-blue-200/80 text-[10px] mt-0.5 tracking-[0.15em] uppercase font-medium">Quản trị nhân sự</p>
           </div>
         </div>
         {onClose && (
           <button
             onClick={onClose}
-            className="text-blue-300 hover:text-white transition-colors lg:hidden p-1 rounded"
+            className="text-blue-200/80 hover:text-white transition-smooth lg:hidden p-1.5 rounded-full hover:bg-white/10"
           >
-            <X size={18} />
+            <X size={20} />
           </button>
         )}
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto custom-scrollbar">
+      <nav className="flex-1 px-4 py-2 space-y-1 overflow-y-auto custom-scrollbar">
         {navItems.map((item, idx) => (
           <NavItem key={idx} {...item} />
         ))}
         
-        <div className="my-4 border-t border-white/10 pt-4" />
+        <div className="my-6" />
         
         <NavItem 
             to="profile"
@@ -181,9 +177,9 @@ function SidebarContent({ role, onClose, hasUnreadChat }) {
       </nav>
 
       {/* Role badge */}
-      <div className="px-4 py-3 border-t border-white/10 flex items-center gap-2">
-        <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-        <span className="text-[10px] font-medium text-blue-300 uppercase tracking-wider">
+      <div className="px-6 py-5 flex items-center gap-2 mt-auto">
+        <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.5)] animate-pulse" />
+        <span className="text-[11px] font-bold text-blue-200/80 uppercase tracking-[0.1em]">
           {roleLabels[role] || 'Người dùng'}
         </span>
       </div>
@@ -232,9 +228,9 @@ export function AppLayout() {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50">
+    <div className="flex h-screen overflow-hidden bg-[#F4F7FC]">
       {/* Desktop sidebar */}
-      <aside className="hidden lg:flex flex-col w-56 bg-[#1E3A8A] shrink-0 shadow-xl">
+      <aside className="hidden lg:flex flex-col w-64 shrink-0 shadow-2xl overflow-hidden relative z-20">
         <SidebarContent role={role} hasUnreadChat={hasUnreadChat} />
       </aside>
 
@@ -242,10 +238,10 @@ export function AppLayout() {
       {sidebarOpen && (
         <>
           <div
-            className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm animate-fade-in"
+            className="fixed inset-0 bg-slate-900/40 z-40 lg:hidden backdrop-blur-sm animate-fade-in"
             onClick={() => setSidebarOpen(false)}
           />
-          <aside className="fixed left-0 top-0 bottom-0 w-56 bg-[#1E3A8A] z-50 flex flex-col lg:hidden shadow-2xl animate-slide-in-right">
+          <aside className="fixed left-0 top-0 bottom-0 w-64 shadow-2xl overflow-hidden z-50 flex flex-col lg:hidden animate-slide-in-right bg-gradient-to-b from-[#1E3A8A] to-[#102A67]">
             <SidebarContent role={role} onClose={() => setSidebarOpen(false)} hasUnreadChat={hasUnreadChat} />
           </aside>
         </>
@@ -253,10 +249,10 @@ export function AppLayout() {
 
       {/* Main area */}
       <div className="flex flex-col flex-1 min-w-0">
-        <header className="h-14 bg-white border-b border-slate-200 flex items-center px-4 gap-3 shrink-0 shadow-sm">
+        <header className="h-16 bg-white/80 backdrop-blur-xl border-b border-slate-200/60 shadow-[0_2px_10px_rgba(0,0,0,0.02)] flex items-center px-6 gap-4 shrink-0 z-10">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="lg:hidden text-slate-500 hover:text-slate-800 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+            className="lg:hidden text-slate-500 hover:text-slate-800 p-2 rounded-full hover:bg-slate-100 transition-smooth"
             aria-label="Mở menu"
           >
             <Menu size={18} />
@@ -323,7 +319,7 @@ export function AppLayout() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-5">
+        <main className="flex-1 overflow-y-auto p-6 md:p-8 lg:p-12 animate-fade-in-up">
           <Outlet />
         </main>
       </div>

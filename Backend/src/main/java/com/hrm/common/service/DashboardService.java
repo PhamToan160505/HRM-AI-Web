@@ -3,6 +3,7 @@ package com.hrm.common.service;
 import com.hrm.attendance.repository.AttendanceRepository;
 import com.hrm.common.repository.UserRepository;
 import com.hrm.recruitment.repository.ApplicationRepository;
+import com.hrm.recruitment.entity.ApplicationStatus;
 import com.hrm.recruitment.repository.JobPostingRepository;
 import com.hrm.common.repository.DepartmentRepository;
 import com.hrm.common.payroll.repository.PayrollRepository;
@@ -46,7 +47,9 @@ public class DashboardService {
         long totalOpenJobs = jobPostingRepository.countByStatus("OPEN");
         stats.put("openJobs", totalOpenJobs);
         
-        long pendingDirectorApps = applicationRepository.countByApprovalStatus("PENDING_DIRECTOR");
+        long pendingDirectorApps =
+            applicationRepository.countByApprovalStatus(ApplicationStatus.PENDING_CEO_EVALUATION)
+            + applicationRepository.countByApprovalStatus(ApplicationStatus.PENDING_OFFER_APPROVAL);
         stats.put("pendingApplications", pendingDirectorApps);
         
         long pendingPayrolls = payrollRepository.countByStatus("DRAFT");
@@ -139,7 +142,10 @@ public class DashboardService {
         long totalOpenJobs = jobPostingRepository.countByStatusAndDepartmentId("OPEN", deptId);
         stats.put("openJobs", totalOpenJobs);
         
-        long pendingDirectorApps = applicationRepository.countByApprovalStatusAndJobPosting_DepartmentId("PENDING_DIRECTOR", deptId);
+        long pendingDirectorApps = applicationRepository.countByApprovalStatusAndJobPosting_DepartmentId(
+            ApplicationStatus.PENDING_TECH_CV_REVIEW,
+            deptId
+        );
         stats.put("pendingApplications", pendingDirectorApps);
         
         // Count pending payrolls for this department
@@ -156,13 +162,12 @@ public class DashboardService {
         long todayNotCheckedIn = totalEmployees - todayPresent;
         if (todayNotCheckedIn < 0) todayNotCheckedIn = 0;
         
-        // we can fetch late from DB as well.
-        long todayLate = 0; // Or write query. Let's just say present/late/absent
+        long todayLate = attendanceRepository.countByDepartmentIdAndDateAndStatus(deptId, LocalDate.now(), "LATE");
         long totalPresentOnly = todayPresent - todayLate;
         
         Map<String, Long> todayAttendance = new HashMap<>();
-        todayAttendance.put("present", todayPresent);
-        todayAttendance.put("late", 0L); // placeholder
+        todayAttendance.put("present", totalPresentOnly);
+        todayAttendance.put("late", todayLate);
         todayAttendance.put("absent", todayNotCheckedIn);
         stats.put("todayAttendance", todayAttendance);
         
@@ -210,7 +215,7 @@ public class DashboardService {
     public Map<String, Object> getManagerStats(com.hrm.security.CustomUserDetails userDetails) {
         Map<String, Object> stats = new HashMap<>();
         
-        long pendingApplications = applicationRepository.countByApprovalStatus("PENDING");
+        long pendingApplications = applicationRepository.countByApprovalStatus(ApplicationStatus.PENDING_TECH_CV_REVIEW);
         stats.put("pendingApplications", pendingApplications);
         
         long pendingAttendances = 0;

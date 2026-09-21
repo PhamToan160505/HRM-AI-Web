@@ -29,6 +29,7 @@ export default function UserManagementPage() {
   const [users, setUsers] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
+  const [configRoles, setConfigRoles] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('USERS'); // 'USERS' or 'REQUESTS'
   const toast = useToast();
@@ -62,16 +63,18 @@ export default function UserManagementPage() {
       if (filterRole) params.append('role', filterRole);
       if (filterDepartmentId) params.append('departmentId', filterDepartmentId);
 
-      const [usersRes, deptsRes, requestsRes] = await Promise.all([
+      const [usersRes, deptsRes, requestsRes, rolesRes] = await Promise.all([
         api.get(`/api/admin/users?${params.toString()}`),
         api.get(`/api/departments?t=${ts}`),
-        api.get(`/api/admin/account-requests?t=${ts}`).catch(() => ({ data: { data: [] } }))
+        api.get(`/api/admin/account-requests?t=${ts}`).catch(() => ({ data: { data: [] } })),
+        api.get('/api/config/roles').catch(() => ({ data: { data: [] } }))
       ]);
-      if (usersRes.data.success) {
-        setUsers(usersRes.data.data.content || []);
-        setTotalPages(usersRes.data.data.totalPages || 0);
-      }
-      if (deptsRes.data.success) setDepartments(deptsRes.data.data);
+
+      setUsers(usersRes.data?.data?.content || []);
+      setTotalPages(usersRes.data?.data?.totalPages || 1);
+      setDepartments(deptsRes.data?.data || []);
+      setPendingRequests(requestsRes.data?.data || []);
+      if (rolesRes.data?.success) setConfigRoles(rolesRes.data.data);
       if (requestsRes.data?.success) setPendingRequests(requestsRes.data.data);
     } catch (error) {
       toast.error('Lỗi khi tải dữ liệu: ' + error.message);
@@ -208,7 +211,14 @@ export default function UserManagementPage() {
       TRUONG_PHONG: 'bg-blue-100 text-blue-700',
       NHAN_VIEN: 'bg-slate-100 text-slate-700'
     };
-    return <span className={`px-2 py-1 rounded-md text-xs font-medium ${badges[role] || 'bg-slate-100 text-slate-700'}`}>{role}</span>;
+    const roleNames = {
+      ADMIN: 'Admin Quản trị',
+      CEO: 'Tổng Giám Đốc',
+      GIAM_DOC_PHONG_BAN: 'Giám đốc phòng ban',
+      TRUONG_PHONG: 'Trưởng phòng',
+      NHAN_VIEN: 'Nhân viên'
+    };
+    return <span className={`px-2 py-1 rounded-md text-xs font-medium ${badges[role] || 'bg-slate-100 text-slate-700'}`}>{roleNames[role] || role}</span>;
   };
 
   return (
@@ -248,11 +258,9 @@ export default function UserManagementPage() {
                 className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-500 focus:bg-white transition-all w-full sm:w-auto"
               >
                 <option value="">Tất cả phân quyền</option>
-                <option value="NHAN_VIEN">Nhân viên</option>
-                <option value="TRUONG_PHONG">Trưởng phòng</option>
-                <option value="GIAM_DOC_PHONG_BAN">Giám đốc phòng ban</option>
-                <option value="CEO">Tổng Giám Đốc</option>
-                <option value="ADMIN">Admin</option>
+                {configRoles.map(r => (
+                  <option key={r.id} value={r.id}>{r.name}</option>
+                ))}
               </select>
               <select
                 value={filterDepartmentId}
@@ -478,11 +486,9 @@ export default function UserManagementPage() {
                     onChange={e => setFormData({...formData, role: e.target.value})}
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
                   >
-                    <option value="NHAN_VIEN">Nhân viên</option>
-                    <option value="TRUONG_PHONG">Trưởng phòng</option>
-                    <option value="GIAM_DOC_PHONG_BAN">Giám đốc phòng ban</option>
-                    <option value="CEO">Tổng Giám Đốc</option>
-                    <option value="ADMIN">Admin Quản trị</option>
+                    {configRoles.map(r => (
+                      <option key={r.id} value={r.id}>{r.name}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -541,11 +547,9 @@ export default function UserManagementPage() {
                     onChange={e => setFormData({...formData, role: e.target.value})}
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all disabled:bg-slate-100 disabled:text-slate-400"
                   >
-                    <option value="NHAN_VIEN">Nhân viên</option>
-                    <option value="TRUONG_PHONG">Trưởng phòng</option>
-                    <option value="GIAM_DOC_PHONG_BAN">Giám đốc phòng ban</option>
-                    <option value="CEO">Tổng Giám Đốc</option>
-                    <option value="ADMIN">Admin Quản trị</option>
+                    {configRoles.map(r => (
+                      <option key={r.id} value={r.id}>{r.name}</option>
+                    ))}
                   </select>
                 </div>
               </div>

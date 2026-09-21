@@ -3,6 +3,7 @@ import { X, Calendar, FileText, CheckCircle2 } from 'lucide-react';
 import Button from '../common/Button';
 import { requestService } from '../../services/request.service';
 import { useToast } from '../common/Toast';
+import api from '../../services/api';
 
 export default function CreateRequestModal({ isOpen, onClose, onSuccess }) {
   const [formData, setFormData] = useState({
@@ -15,12 +16,19 @@ export default function CreateRequestModal({ isOpen, onClose, onSuccess }) {
   const toast = useToast();
 
   const [leaveQuota, setLeaveQuota] = useState(null);
+  const [configRequestTypes, setConfigRequestTypes] = useState([]);
 
   React.useEffect(() => {
     if (isOpen) {
       requestService.getLeaveQuota()
         .then(quota => setLeaveQuota(quota))
         .catch(err => console.error('Failed to load leave quota', err));
+        
+      api.get('/api/config/request-types')
+        .then(res => {
+          if (res.data?.success) setConfigRequestTypes(res.data.data);
+        })
+        .catch(err => console.error('Failed to load request types config', err));
     }
   }, [isOpen]);
 
@@ -138,12 +146,11 @@ export default function CreateRequestModal({ isOpen, onClose, onSuccess }) {
               onChange={handleChange}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors bg-white text-slate-700"
             >
-              <option value="NORMAL_LEAVE">
-                Nghỉ phép {leaveQuota !== null ? `- Còn ${leaveQuota} ngày phép có lương` : ''}
-              </option>
-              <option value="HALF_DAY_LEAVE">Nghỉ nửa ngày</option>
-              <option value="SPECIAL_WFH_LEAVE">Làm việc từ xa (WFH)</option>
-              <option value="OVERTIME">Làm thêm giờ (Overtime)</option>
+              {configRequestTypes.map(t => (
+                <option key={t.id} value={t.id}>
+                  {t.name} {t.id === 'NORMAL_LEAVE' && leaveQuota !== null ? `- Còn ${leaveQuota} ngày phép có lương` : ''}
+                </option>
+              ))}
             </select>
           </div>
 

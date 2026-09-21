@@ -68,8 +68,20 @@ export default function EmployeeProfileSummary({ profile, isEditable = false, on
       );
   };
 
-  return (
-    <Card className="overflow-hidden">
+    const formatRole = (role) => {
+        if (!role) return 'Chưa có chức vụ';
+        const roleMap = {
+            'GIAM_DOC': 'Giám đốc',
+            'GIAM_DOC_PHONG_BAN': 'Giám đốc khối',
+            'TRUONG_PHONG': 'Trưởng phòng',
+            'NHAN_VIEN': 'Nhân viên',
+            'ADMIN': 'Quản trị viên'
+        };
+        return roleMap[role] || role;
+    };
+
+    return (
+    <Card className="w-full" innerClassName="overflow-hidden p-0">
       {/* Header */}
       <div className="flex flex-col md:flex-row items-start md:items-center gap-6 p-6 border-b border-slate-100 bg-white">
         <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-3xl font-bold shadow-md shrink-0">
@@ -79,7 +91,7 @@ export default function EmployeeProfileSummary({ profile, isEditable = false, on
           <h2 className="text-2xl font-bold text-gray-900">{profile.hoTen || 'Chưa cập nhật tên'}</h2>
           <div className="flex items-center gap-3 mt-2 text-sm font-medium">
             <span className="flex items-center gap-1.5 text-blue-700 bg-blue-50 px-2.5 py-1 rounded-md border border-blue-100">
-              <Briefcase size={14} /> {profile.chucVu || 'Chưa có chức vụ'}
+              <Briefcase size={14} /> {profile.chucVu || formatRole(profile.role)}
             </span>
             <span className="flex items-center gap-1.5 text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-100">
               <Building2 size={14} /> {profile.role === 'GIAM_DOC' ? 'Toàn công ty' : (profile.departmentId ? 'Phòng ' + profile.departmentId : 'Chưa phân')}
@@ -131,16 +143,16 @@ export default function EmployeeProfileSummary({ profile, isEditable = false, on
                       <div className="pt-4 mt-4 border-t border-gray-100 flex justify-end gap-3">
                           {isEditing ? (
                               <>
-                                  <Button variant="outline" onClick={() => setIsEditing(false)} className="flex items-center gap-2">
-                                      <X size={16} /> Hủy
+                                  <Button variant="outline" onClick={() => setIsEditing(false)} leadingIcon={<X size={16} />}>
+                                      Hủy
                                   </Button>
-                                  <Button variant="primary" onClick={handleSave} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
-                                      <Save size={16} /> Lưu thay đổi
+                                  <Button variant="primary" onClick={handleSave} className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm" leadingIcon={<Save size={16} />}>
+                                      Lưu thay đổi
                                   </Button>
                               </>
                           ) : (
-                              <Button variant="outline" onClick={handleStartEdit} className="flex items-center gap-2">
-                                  <Edit2 size={16} /> Chỉnh sửa hồ sơ
+                              <Button variant="outline" onClick={handleStartEdit} leadingIcon={<Edit2 size={16} />}>
+                                  Chỉnh sửa hồ sơ
                               </Button>
                           )}
                       </div>

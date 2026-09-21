@@ -144,13 +144,14 @@ public class JobRequisitionService {
         }
 
         String description = request.description();
-        long descriptionWordCount = description == null || description.isBlank()
+        long descriptionCharacterCount = description == null || description.isBlank()
                 ? 0
-                : java.util.Arrays.stream(description.trim().split("\\s+"))
-                        .filter(word -> !word.isBlank())
+                : java.text.Normalizer.normalize(description, java.text.Normalizer.Form.NFC)
+                        .codePoints()
+                        .filter(character -> !Character.isWhitespace(character))
                         .count();
-        if (descriptionWordCount < 10) {
-            throw new RuntimeException("Mô tả công việc (JD) phải có ít nhất 10 từ");
+        if (descriptionCharacterCount < 10) {
+            throw new RuntimeException("Mô tả công việc (JD) phải có ít nhất 10 ký tự");
         }
 
         String budget = request.budget();

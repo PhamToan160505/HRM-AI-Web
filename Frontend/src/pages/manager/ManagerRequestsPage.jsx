@@ -4,6 +4,7 @@ import Button from '../../components/common/Button';
 import { Clock, CheckCircle2, XCircle, FileText, Check, X, Eye, Search, Filter } from 'lucide-react';
 import { useToast } from '../../components/common/Toast';
 import { useAuth } from '../../context/AuthContext';
+import api from '../../services/api';
 
 export default function ManagerRequestsPage() {
   const { role } = useAuth();
@@ -17,6 +18,10 @@ export default function ManagerRequestsPage() {
   const [showRejectInput, setShowRejectInput] = useState(false);
   const [showForwardInput, setShowForwardInput] = useState(false);
 
+  // Config from API
+  const [configRoles, setConfigRoles] = useState([]);
+  const [configRequestTypes, setConfigRequestTypes] = useState([]);
+
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [filterRole, setFilterRole] = useState('ALL');
@@ -24,20 +29,26 @@ export default function ManagerRequestsPage() {
 
   const toast = useToast();
 
-  const loadRequests = async () => {
+  const loadRequestsAndConfig = async () => {
     try {
       setLoading(true);
-      const data = await requestService.getRequestsForManager();
-      setRequests(data);
+      const [requestsData, rolesRes, reqTypesRes] = await Promise.all([
+        requestService.getRequestsForManager(),
+        api.get('/api/config/roles').catch(() => ({ data: { data: [] } })),
+        api.get('/api/config/request-types').catch(() => ({ data: { data: [] } }))
+      ]);
+      setRequests(requestsData);
+      if (rolesRes.data?.success) setConfigRoles(rolesRes.data.data);
+      if (reqTypesRes.data?.success) setConfigRequestTypes(reqTypesRes.data.data);
     } catch (error) {
-      toast.show('Lỗi', 'Lỗi khi tải danh sách đơn từ', 'error');
+      toast.show('Lỗi', 'Lỗi khi tải dữ liệu', 'error');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadRequests();
+    loadRequestsAndConfig();
   }, []);
 
   const handleApprove = async (id) => {
@@ -159,8 +170,9 @@ export default function ManagerRequestsPage() {
             className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="ALL">Tất cả chức vụ</option>
-            <option value="NHAN_VIEN">Nhân viên</option>
-            <option value="TRUONG_PHONG">Trưởng phòng</option>
+            {configRoles.map(r => (
+              <option key={r.id} value={r.id}>{r.name}</option>
+            ))}
           </select>
         </div>
         <div className="flex items-center gap-2">
@@ -171,11 +183,9 @@ export default function ManagerRequestsPage() {
             className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="ALL">Tất cả loại đơn</option>
-            <option value="NORMAL_LEAVE">Nghỉ phép thường</option>
-            <option value="HALF_DAY_LEAVE">Nghỉ nửa ngày</option>
-            <option value="SPECIAL_WFH_LEAVE">Làm việc từ xa (WFH)</option>
-            <option value="UNPAID_LEAVE">Nghỉ không lương</option>
-            <option value="OVERTIME">Làm thêm giờ</option>
+            {configRequestTypes.map(t => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
           </select>
         </div>
       </div>

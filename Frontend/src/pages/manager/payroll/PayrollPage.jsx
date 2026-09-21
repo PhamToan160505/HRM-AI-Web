@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Download, Calculator, AlertTriangle, CheckCircle, Settings, Users, X } from 'lucide-react';
 import { Card } from '../../../components/common/Card';
 import Button from '../../../components/common/Button';
+import ConfirmModal from '../../../components/common/ConfirmModal';
 import api from '../../../services/api';
 import { useToast } from '../../../components/common/Toast';
 import { useAuth } from '../../../context/AuthContext';
@@ -9,6 +10,9 @@ import PayrollTable from '../../../components/payroll/PayrollTable';
 import PayrollReportTable from '../../../components/payroll/PayrollReportTable';
 
 export default function PayrollPage() {
+    const { user } = useAuth();
+    const toast = useToast();
+    const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, message: '', onConfirm: null, title: 'Xác nhận' });
     const [payrolls, setPayrolls] = useState([]);
     const [departmentSummaries, setDepartmentSummaries] = useState([]);
     const [viewingDepartment, setViewingDepartment] = useState(null); // { id, name }
@@ -36,8 +40,6 @@ export default function PayrollPage() {
     const [salaryHistory, setSalaryHistory] = useState([]);
     const [loadingHistory, setLoadingHistory] = useState(false);
     
-    const toast = useToast();
-    const { user } = useAuth();
     
     const isCeo = user?.role?.toUpperCase() === 'CEO';
     const isCeoOrDirector = isCeo || user?.role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN';
@@ -80,7 +82,13 @@ export default function PayrollPage() {
                             ...r,
                             departmentName: deptMap[r.departmentId] || `Phòng ${r.departmentId}`,
                             senderName: sender ? sender.hoTen : `User ${r.createdBy}`,
-                            senderRole: sender ? (sender.role === 'TRUONG_PHONG' ? 'Trưởng phòng' : sender.role === 'GIAM_DOC_PHONG_BAN' ? 'Giám đốc' : sender.role) : ''
+                            senderRole: sender ? (
+                                sender.role === 'TRUONG_PHONG' ? 'Trưởng phòng' : 
+                                sender.role === 'GIAM_DOC_PHONG_BAN' ? 'Giám đốc phòng ban' : 
+                                sender.role === 'CEO' ? 'Tổng Giám Đốc' : 
+                                sender.role === 'ADMIN' ? 'Admin Quản trị' : 
+                                sender.role === 'NHAN_VIEN' ? 'Nhân viên' : sender.role
+                            ) : ''
                         };
                     });
                     setDepartmentSummaries(enrichedReports);
@@ -123,20 +131,25 @@ export default function PayrollPage() {
     }, [viewingDepartment]);
 
     const handleApproveAllManager = async () => {
-        if (!window.confirm("Bạn có chắc muốn duyệt lương tất cả nhân viên trong phòng ban?")) return;
-        try {
-            const res = await api.post(`/api/payroll/manager/approve-all?month=${month}&year=${year}`);
-            if (res.data?.success) {
-                toast.show("Thành công", "Đã duyệt tất cả lương", "success");
-                fetchPayrolls();
+        setConfirmDialog({
+            isOpen: true,
+            title: "Xác nhận duyệt",
+            message: "Bạn có chắc muốn duyệt lương tất cả nhân viên trong phòng ban?",
+            onConfirm: async () => {
+                try {
+                    const res = await api.post(`/api/payroll/manager/approve-all?month=${month}&year=${year}`);
+                    if (res.data?.success) {
+                        toast.show("Thành công", "Đã duyệt tất cả lương", "success");
+                        fetchPayrolls();
+                    }
+                } catch (error) {
+                    toast.show("Lỗi", error.response?.data?.message || "Lỗi xử lý", "error");
+                }
             }
-        } catch (error) {
-            toast.show("Lỗi", error.response?.data?.message || "Lỗi xử lý", "error");
-        }
+        });
     };
     
-    const handleSubmitManagerReport = async (force = false) => {
-        if (!force && !window.confirm(`Bạn có chắc muốn gửi báo cáo lên Giám đốc phòng ban?`)) return;
+    const executeSubmitManagerReport = async (force) => {
         try {
             const res = await api.post(`/api/payroll/manager/submit-report?month=${month}&year=${year}&force=${force}`);
             if (res.data?.success) {
@@ -145,52 +158,86 @@ export default function PayrollPage() {
             }
         } catch (error) {
             if (error.response?.status === 409) {
-                if (window.confirm(error.response.data.message)) {
-                    handleSubmitManagerReport(true);
-                }
+                setConfirmDialog({
+                    isOpen: true,
+                    title: "Cảnh báo ngoại lệ",
+                    message: error.response.data.message,
+                    onConfirm: () => executeSubmitManagerReport(true)
+                });
             } else {
                 toast.show("Lỗi", error.response?.data?.message || "Lỗi xử lý", "error");
             }
         }
     };
 
-    const handleApproveDirectorReport = async (id) => {
-        if (!window.confirm("Bạn có chắc muốn duyệt báo cáo này?")) return;
-        try {
-            const res = await api.post(`/api/payroll/director/approve-report/${id}`);
-            if (res.data?.success) {
-                toast.show("Thành công", "Đã duyệt báo cáo", "success");
-                fetchPayrolls();
-            }
-        } catch (error) {
-            toast.show("Lỗi", error.response?.data?.message || "Lỗi xử lý", "error");
+    const handleSubmitManagerReport = async (force = false) => {
+        if (!force) {
+            setConfirmDialog({
+                isOpen: true,
+                title: "Gửi báo cáo",
+                message: "Bạn có chắc muốn gửi báo cáo lên Giám đốc phòng ban?",
+                onConfirm: () => executeSubmitManagerReport(false)
+            });
+            return;
         }
+        executeSubmitManagerReport(force);
+    };
+
+    const handleApproveDirectorReport = async (id) => {
+        setConfirmDialog({
+            isOpen: true,
+            title: "Xác nhận duyệt",
+            message: "Bạn có chắc muốn duyệt báo cáo này?",
+            onConfirm: async () => {
+                try {
+                    const res = await api.post(`/api/payroll/director/approve-report/${id}`);
+                    if (res.data?.success) {
+                        toast.show("Thành công", "Đã duyệt báo cáo", "success");
+                        fetchPayrolls();
+                    }
+                } catch (error) {
+                    toast.show("Lỗi", error.response?.data?.message || "Lỗi xử lý", "error");
+                }
+            }
+        });
     };
     
     const handleSubmitDirectorReport = async () => {
-        if (!window.confirm("Bạn có chắc muốn gửi báo cáo tổng hợp lên Tổng Giám đốc?")) return;
-        try {
-            const res = await api.post(`/api/payroll/director/submit-report?month=${month}&year=${year}`);
-            if (res.data?.success) {
-                toast.show("Thành công", "Đã gửi báo cáo tổng hợp", "success");
-                fetchPayrolls();
+        setConfirmDialog({
+            isOpen: true,
+            title: "Gửi báo cáo",
+            message: "Bạn có chắc muốn gửi báo cáo tổng hợp lên Tổng Giám đốc?",
+            onConfirm: async () => {
+                try {
+                    const res = await api.post(`/api/payroll/director/submit-report?month=${month}&year=${year}`);
+                    if (res.data?.success) {
+                        toast.show("Thành công", "Đã gửi báo cáo tổng hợp", "success");
+                        fetchPayrolls();
+                    }
+                } catch (error) {
+                    toast.show("Lỗi", error.response?.data?.message || "Lỗi xử lý", "error");
+                }
             }
-        } catch (error) {
-            toast.show("Lỗi", error.response?.data?.message || "Lỗi xử lý", "error");
-        }
+        });
     };
 
     const handleApproveCeoReport = async (id) => {
-        if (!window.confirm("Bạn có chắc muốn duyệt báo cáo này của phòng ban?")) return;
-        try {
-            const res = await api.post(`/api/payroll/ceo/approve-report/${id}`);
-            if (res.data?.success) {
-                toast.show("Thành công", "Đã duyệt báo cáo", "success");
-                fetchPayrolls();
+        setConfirmDialog({
+            isOpen: true,
+            title: "Xác nhận duyệt",
+            message: "Bạn có chắc muốn duyệt báo cáo này của phòng ban?",
+            onConfirm: async () => {
+                try {
+                    const res = await api.post(`/api/payroll/ceo/approve-report/${id}`);
+                    if (res.data?.success) {
+                        toast.show("Thành công", "Đã duyệt báo cáo", "success");
+                        fetchPayrolls();
+                    }
+                } catch (error) {
+                    toast.show("Lỗi", error.response?.data?.message || "Lỗi xử lý", "error");
+                }
             }
-        } catch (error) {
-            toast.show("Lỗi", error.response?.data?.message || "Lỗi xử lý", "error");
-        }
+        });
     };
 
     const handleGenerate = async () => {
@@ -214,16 +261,22 @@ export default function PayrollPage() {
     };
 
     const handleApprove = async (id) => {
-        if (!window.confirm("Bạn có chắc muốn duyệt phiếu lương này? Phiếu lương đã duyệt sẽ không thể sửa đổi.")) return;
-        try {
-            const res = await api.post(`/api/payroll/${id}/approve`);
-            if (res.data?.success) {
-                toast.show("Thành công", "Đã duyệt lương", "success");
-                fetchPayrolls();
+        setConfirmDialog({
+            isOpen: true,
+            title: "Duyệt phiếu lương",
+            message: "Bạn có chắc muốn duyệt phiếu lương này? Phiếu lương đã duyệt sẽ không thể sửa đổi.",
+            onConfirm: async () => {
+                try {
+                    const res = await api.post(`/api/payroll/${id}/approve`);
+                    if (res.data?.success) {
+                        toast.show("Thành công", "Đã duyệt lương", "success");
+                        fetchPayrolls();
+                    }
+                } catch (error) {
+                    toast.show("Lỗi", error.response?.data?.message || "Không thể duyệt", "error");
+                }
             }
-        } catch (error) {
-            toast.show("Lỗi", error.response?.data?.message || "Không thể duyệt", "error");
-        }
+        });
     };
 
     const handleRejectSubmit = async () => {
@@ -386,27 +439,27 @@ export default function PayrollPage() {
                         
                         <div className="flex items-center gap-3">
                             {(user?.role?.toUpperCase() === 'TRUONG_PHONG' || user?.role?.toUpperCase() === 'GIAM_DOC') && (
-                                <Button variant="primary" className="flex items-center gap-2" onClick={handleGenerate} loading={generating}>
-                                    <Calculator size={16} /> Tính lương tháng {month}
+                                <Button variant="primary" leadingIcon={<Calculator size={16} />} onClick={handleGenerate} loading={generating}>
+                                    Tính lương tháng {month}
                                 </Button>
                             )}
                             {user?.role?.toUpperCase() === 'TRUONG_PHONG' && (
                                 <>
-                                    <Button variant="outline" className="flex items-center gap-2 text-emerald-600 border-emerald-200 hover:bg-emerald-50" onClick={handleApproveAllManager}>
-                                        <CheckCircle size={16} /> Duyệt tất cả nhân viên
+                                    <Button variant="outline" className="text-emerald-600 border-emerald-200 hover:bg-emerald-50" leadingIcon={<CheckCircle size={16} />} onClick={handleApproveAllManager}>
+                                        Duyệt tất cả nhân viên
                                     </Button>
-                                    <Button variant="primary" className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700" onClick={() => handleSubmitManagerReport()}>
-                                        <CheckCircle size={16} /> Tạo báo cáo gửi Giám đốc
+                                    <Button variant="primary" className="bg-blue-600 hover:bg-blue-700" leadingIcon={<CheckCircle size={16} />} onClick={() => handleSubmitManagerReport()}>
+                                        Tạo báo cáo gửi Giám đốc
                                     </Button>
                                 </>
                             )}
                             {user?.role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN' && !viewingDepartment && (
-                                <Button variant="primary" className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700" onClick={handleSubmitDirectorReport}>
-                                    <CheckCircle size={16} /> Gửi báo cáo lên Tổng Giám đốc
+                                <Button variant="primary" className="bg-blue-600 hover:bg-blue-700" leadingIcon={<CheckCircle size={16} />} onClick={handleSubmitDirectorReport}>
+                                    Gửi báo cáo lên Tổng Giám đốc
                                 </Button>
                             )}
-                            <Button variant="outline" className="flex items-center gap-2 text-green-700 border-green-200 hover:bg-green-50">
-                                <Download size={16} /> Xuất Excel
+                            <Button variant="outline" className="text-green-700 border-green-200 hover:bg-green-50" leadingIcon={<Download size={16} />}>
+                                Xuất Excel
                             </Button>
                         </div>
                     </div>
@@ -778,6 +831,15 @@ export default function PayrollPage() {
                     </div>
                 </div>
             )}
+
+            <ConfirmModal 
+                isOpen={confirmDialog.isOpen}
+                onClose={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+                onConfirm={confirmDialog.onConfirm}
+                title={confirmDialog.title}
+                message={confirmDialog.message}
+                type="warning"
+            />
         </div>
     );
 }

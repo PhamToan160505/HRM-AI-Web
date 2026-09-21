@@ -164,7 +164,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <Card className="rounded-3xl border-white/80 bg-white/95 p-7 shadow-[0_24px_70px_-28px_rgba(15,23,42,0.28)] backdrop-blur-sm sm:p-9">
+          <Card className="w-full backdrop-blur-sm" innerClassName="bg-white/95 p-8 sm:p-10">
             <div className="mb-7">
               <h2 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-[28px]">
                 Chào mừng trở lại
@@ -221,16 +221,9 @@ export default function LoginPage() {
                 fullWidth
                 loading={loading}
                 size="lg"
-                className="h-12 rounded-xl border-0 bg-gradient-to-r from-blue-700 to-blue-600 text-sm font-semibold shadow-lg shadow-blue-600/20 hover:from-blue-800 hover:to-blue-700"
+                trailingIcon={<ArrowRight size={18} />}
               >
-                {loading ? (
-                  'Đang đăng nhập...'
-                ) : (
-                  <>
-                    Đăng nhập
-                    <ArrowRight size={16} />
-                  </>
-                )}
+                {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
               </Button>
             </form>
 

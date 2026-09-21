@@ -29,6 +29,12 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
     @org.springframework.data.jpa.repository.Query("SELECT COUNT(a) FROM Attendance a JOIN com.hrm.common.entity.User u ON a.employeeId = u.id WHERE u.departmentId = :departmentId AND a.date = :date AND a.status IN ('PRESENT', 'LATE')")
     long countByDepartmentIdAndDateAndPresentOrLate(@org.springframework.data.repository.query.Param("departmentId") Long departmentId, @org.springframework.data.repository.query.Param("date") LocalDate date);
 
+    @org.springframework.data.jpa.repository.Query("SELECT COUNT(a) FROM Attendance a JOIN com.hrm.common.entity.User u ON a.employeeId = u.id WHERE u.departmentId = :departmentId AND a.date = :date AND a.status = :status")
+    long countByDepartmentIdAndDateAndStatus(
+            @org.springframework.data.repository.query.Param("departmentId") Long departmentId,
+            @org.springframework.data.repository.query.Param("date") LocalDate date,
+            @org.springframework.data.repository.query.Param("status") String status);
+
     @org.springframework.data.jpa.repository.Query("SELECT COUNT(a) FROM Attendance a JOIN com.hrm.common.entity.User u ON a.employeeId = u.id WHERE u.teamId = :teamId AND a.date = :date AND a.status IN ('PRESENT', 'LATE')")
     long countByTeamIdAndDateAndPresentOrLate(@org.springframework.data.repository.query.Param("teamId") Long teamId, @org.springframework.data.repository.query.Param("date") LocalDate date);
 }

@@ -21,18 +21,17 @@ function PayrollReportTable({ reports, onViewDetail, onApprove, onReject, role }
     };
 
     return (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="overflow-x-auto">
+        <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left whitespace-nowrap">
-                    <thead className="text-xs text-gray-500 uppercase bg-gray-50/50 border-b border-gray-100">
+                    <thead className="text-sm text-gray-600 bg-gray-50/50 border-b border-gray-100">
                         <tr>
                             <th className="px-6 py-4 font-semibold">Tên phòng ban</th>
                             <th className="px-6 py-4 font-semibold">Người gửi</th>
                             <th className="px-6 py-4 font-semibold">Cấp báo cáo</th>
-                            <th className="px-6 py-4 font-semibold">Tổng nhân sự</th>
-                            <th className="px-6 py-4 font-semibold">Tổng quỹ lương (Gross)</th>
-                            <th className="px-6 py-4 font-semibold">Trạng thái</th>
-                            <th className="px-6 py-4 font-semibold text-right">Thao tác</th>
+                            <th className="px-6 py-4 font-semibold text-center">Tổng nhân sự</th>
+                            <th className="px-6 py-4 font-semibold text-right">Tổng quỹ lương (Gross)</th>
+                            <th className="px-6 py-4 font-semibold text-center">Trạng thái</th>
+                            <th className="px-6 py-4 font-semibold text-center">Thao tác</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -53,48 +52,46 @@ function PayrollReportTable({ reports, onViewDetail, onApprove, onReject, role }
                                     <td className="px-6 py-4 text-slate-600">
                                         {s.reportLevel === 'MANAGER_LEVEL' ? 'Báo cáo Trưởng phòng' : 'Báo cáo Giám đốc'}
                                     </td>
-                                    <td className="px-6 py-4 text-slate-600">{s.totalEmployees}</td>
-                                    <td className="px-6 py-4 text-slate-600 font-medium">
+                                    <td className="px-6 py-4 text-slate-600 text-center">{s.totalEmployees}</td>
+                                    <td className="px-6 py-4 text-slate-600 font-medium text-right">
                                         {(s.totalGrossSalary || 0).toLocaleString('vi-VN')} ₫
                                     </td>
-                                    <td className="px-6 py-4">
+                                    <td className="px-6 py-4 text-center">
                                         {getStatusBadge(s.status)}
                                     </td>
-                                    <td className="px-6 py-4 text-right space-x-2">
-                                        {(role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN' && s.status === 'PENDING_DIRECTOR') && onApprove && (
-                                            <Button 
-                                                variant="outline" 
-                                                className="text-xs px-2 py-1 text-emerald-600 hover:bg-emerald-50 border-emerald-200" 
-                                                onClick={() => onApprove(s.id)}
-                                            >
-                                                Duyệt
-                                            </Button>
-                                        )}
-                                        {(role?.toUpperCase() === 'CEO' && s.status === 'PENDING_CEO') && onApprove && (
-                                            <>
-                                                <Button 
-                                                    variant="outline" 
-                                                    className="text-xs px-2 py-1 text-emerald-600 hover:bg-emerald-50 border-emerald-200" 
+                                    <td className="px-6 py-4 text-center">
+                                        <div className="flex items-center justify-center gap-2">
+                                            {(role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN' && s.status === 'PENDING_DIRECTOR') && onApprove && (
+                                                <button 
+                                                    className="px-3 py-1.5 text-xs font-medium rounded-md bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors" 
                                                     onClick={() => onApprove(s.id)}
                                                 >
                                                     Duyệt
-                                                </Button>
-                                                <Button 
-                                                    variant="outline" 
-                                                    className="text-xs px-2 py-1 text-rose-600 hover:bg-rose-50 border-rose-200" 
-                                                    onClick={() => onReject(s.id, s.departmentName)}
-                                                >
-                                                    Từ chối
-                                                </Button>
-                                            </>
-                                        )}
-                                        <Button 
-                                            variant="outline" 
-                                            className="text-xs px-2 py-1 text-blue-600 hover:bg-blue-50 border-blue-200" 
-                                            onClick={() => onViewDetail(s.departmentId, s.departmentName || `Phòng ${s.departmentId}`)}
-                                        >
-                                            Xem chi tiết
-                                        </Button>
+                                                </button>
+                                            )}
+                                            {(role?.toUpperCase() === 'CEO' && s.status === 'PENDING_CEO') && onApprove && (
+                                                <>
+                                                    <button 
+                                                        className="px-3 py-1.5 text-xs font-medium rounded-md bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors" 
+                                                        onClick={() => onApprove(s.id)}
+                                                    >
+                                                        Duyệt
+                                                    </button>
+                                                    <button 
+                                                        className="px-3 py-1.5 text-xs font-medium rounded-md bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors" 
+                                                        onClick={() => onReject(s.id, s.departmentName)}
+                                                    >
+                                                        Từ chối
+                                                    </button>
+                                                </>
+                                            )}
+                                            <button 
+                                                className="px-3 py-1.5 text-xs font-medium rounded-md bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors" 
+                                                onClick={() => onViewDetail(s.departmentId, s.departmentName || `Phòng ${s.departmentId}`)}
+                                            >
+                                                Xem chi tiết
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))
@@ -102,7 +99,6 @@ function PayrollReportTable({ reports, onViewDetail, onApprove, onReject, role }
                     </tbody>
                 </table>
             </div>
-        </div>
     );
 }
 

@@ -420,7 +420,16 @@ export default function ChatWindow({ group }) {
                                     {isMe ? 'Bạn' : (
                                         <span className="font-medium text-slate-700">
                                             {msg.senderName} 
-                                            {msg.senderRole && <span className="font-normal text-slate-500"> ({msg.senderRole})</span>}
+                                            {msg.senderRole && (() => {
+                                                const roleNames = {
+                                                    ADMIN: 'Admin Quản trị',
+                                                    CEO: 'Tổng Giám Đốc',
+                                                    GIAM_DOC_PHONG_BAN: 'Giám đốc phòng ban',
+                                                    TRUONG_PHONG: 'Trưởng phòng',
+                                                    NHAN_VIEN: 'Nhân viên'
+                                                };
+                                                return <span className="font-normal text-slate-500"> ({roleNames[msg.senderRole] || msg.senderRole})</span>;
+                                            })()}
                                         </span>
                                     )}
                                     <span className="text-slate-400 font-light mx-1">{formatTime(msg.createdAt)}</span>
@@ -582,7 +591,16 @@ export default function ChatWindow({ group }) {
                                             </div>
                                             <div className="min-w-0">
                                                 <p className="text-sm font-semibold text-slate-800 truncate">{member.hoTen}</p>
-                                                <p className="text-xs text-slate-500 truncate">{member.role}</p>
+                                                {(() => {
+                                                    const roleNames = {
+                                                        ADMIN: 'Admin Quản trị',
+                                                        CEO: 'Tổng Giám Đốc',
+                                                        GIAM_DOC_PHONG_BAN: 'Giám đốc phòng ban',
+                                                        TRUONG_PHONG: 'Trưởng phòng',
+                                                        NHAN_VIEN: 'Nhân viên'
+                                                    };
+                                                    return <p className="text-xs text-slate-500 truncate">{roleNames[member.role] || member.role}</p>;
+                                                })()}
                                             </div>
                                         </div>
                                     ))}

@@ -1,6 +1,7 @@
 package com.hrm.recruitment.repository;
 
 import com.hrm.recruitment.entity.Application;
+import com.hrm.recruitment.entity.ApplicationStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -15,14 +16,14 @@ public interface ApplicationRepository extends JpaRepository<Application, Long>,
     List<Application> findByJobPostingId(Long jobPostingId);
     List<Application> findByCreatedAtAfter(LocalDateTime date);
     
-    long countByApprovalStatusNotAndApprovalStatusNot(String status1, String status2);
-    long countByApprovalStatus(String status);
+    long countByApprovalStatusNotAndApprovalStatusNot(ApplicationStatus status1, ApplicationStatus status2);
+    long countByApprovalStatus(ApplicationStatus status);
     
     java.util.List<Application> findTop5ByOrderByCreatedAtDesc();
     
     boolean existsByEmailAndJobPostingIdAndCreatedAtAfter(String email, Long jobPostingId, LocalDateTime time);
     long countByJobPostingId(Long jobPostingId);
     long countByJobPostingIdAndApprovalStatus(Long jobPostingId, com.hrm.recruitment.entity.ApplicationStatus status);
-    long countByApprovalStatusAndJobPosting_DepartmentId(String status, Long departmentId);
+    long countByApprovalStatusAndJobPosting_DepartmentId(ApplicationStatus status, Long departmentId);
     java.util.List<Application> findTop5ByJobPosting_DepartmentIdOrderByCreatedAtDesc(Long departmentId);
 }

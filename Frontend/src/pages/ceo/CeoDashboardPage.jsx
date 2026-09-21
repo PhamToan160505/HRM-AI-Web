@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { AlertCircle, ChevronRight, Star } from 'lucide-react';
+import { AlertCircle, ChevronRight, Star, TrendingUp, Users, Briefcase, Activity } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
-import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 
 export default function CeoDashboardPage() {
   const navigate = useNavigate();
@@ -38,23 +38,24 @@ export default function CeoDashboardPage() {
   const barChartData = Array.from({length: 8}).map((_, i) => ({ value: Math.random() * 20 + 5 }));
 
   const attendanceData = [
-    { name: 'Có mặt', value: stats.todayAttendance.present || 1, color: '#3b82f6' }, // Blue
+    { name: 'Có mặt', value: stats.todayAttendance.present || 1, color: '#10b981' }, // Emerald
     { name: 'Đi muộn', value: stats.todayAttendance.late || 0, color: '#f59e0b' }, // Amber
     { name: 'Vắng', value: stats.todayAttendance.absent || 0, color: '#ef4444' }, // Red
   ];
 
-  const COLORS = ['#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#fcd34d', '#fbbf24'];
+  const COLORS = ['#6366f1', '#8b5cf6', '#d946ef', '#ec4899', '#f43f5e', '#f97316', '#fbbf24', '#10b981', '#0ea5e9'];
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-10">
       <div className="flex justify-between items-center mb-6">
         <div>
-            <h1 className="text-2xl font-bold text-slate-800">Bảng điều khiển CEO</h1>
+            <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">Bảng điều khiển CEO</h1>
+            <p className="text-slate-500 mt-1">Tổng quan hoạt động và nhân sự công ty</p>
         </div>
       </div>
 
       {isMissingInfo && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3 shadow-sm mb-6">
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3 shadow-sm mb-6 animate-pulse">
               <AlertCircle className="text-red-600 shrink-0 mt-0.5" size={20} />
               <div>
                   <h3 className="text-red-800 font-semibold text-sm">Hồ sơ cá nhân chưa hoàn thiện</h3>
@@ -68,44 +69,56 @@ export default function CeoDashboardPage() {
       {/* Row 1: Top Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Card 1 */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col justify-between">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Tổng nhân viên</p>
-            <h2 className="text-4xl font-extrabold text-slate-800">{stats.totalEmployees}</h2>
+        <div className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-shadow border border-slate-100 p-6 flex flex-col justify-between relative overflow-hidden group">
+            <div className="absolute -right-6 -top-6 bg-blue-50 rounded-full p-8 group-hover:scale-110 transition-transform duration-300">
+                <Users className="text-blue-500 w-8 h-8 opacity-50" />
+            </div>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 relative z-10">Tổng nhân viên</p>
+            <h2 className="text-4xl font-extrabold text-slate-800 relative z-10">{stats.totalEmployees}</h2>
         </div>
 
         {/* Card 2 - New */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col justify-between">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Tổng quỹ lương</p>
-            <h2 className="text-2xl font-extrabold text-slate-800">
+        <div className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-shadow border border-slate-100 p-6 flex flex-col justify-between relative overflow-hidden group">
+            <div className="absolute -right-6 -top-6 bg-emerald-50 rounded-full p-8 group-hover:scale-110 transition-transform duration-300">
+                <TrendingUp className="text-emerald-500 w-8 h-8 opacity-50" />
+            </div>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 relative z-10">Tổng quỹ lương</p>
+            <h2 className="text-2xl font-extrabold text-slate-800 relative z-10">
                 {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(stats.totalSalaryBudget || 0)}
             </h2>
         </div>
 
         {/* Card 3 */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col justify-between">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Tuyển dụng đang mở</p>
-            <h2 className="text-4xl font-extrabold text-slate-800">{stats.openJobs}</h2>
+        <div className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-shadow border border-slate-100 p-6 flex flex-col justify-between relative overflow-hidden group">
+             <div className="absolute -right-6 -top-6 bg-purple-50 rounded-full p-8 group-hover:scale-110 transition-transform duration-300">
+                <Briefcase className="text-purple-500 w-8 h-8 opacity-50" />
+            </div>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 relative z-10">Tuyển dụng đang mở</p>
+            <h2 className="text-4xl font-extrabold text-slate-800 relative z-10">{stats.openJobs}</h2>
         </div>
 
         {/* Card 4 */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex justify-between items-center">
-            <div className="flex-1">
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Chấm công</p>
+        <div className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-shadow border border-slate-100 p-6 flex justify-between items-center relative overflow-hidden group">
+             <div className="absolute -right-6 -top-6 bg-amber-50 rounded-full p-8 group-hover:scale-110 transition-transform duration-300">
+                <Activity className="text-amber-500 w-8 h-8 opacity-50" />
+            </div>
+            <div className="flex-1 relative z-10">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Chấm công hôm nay</p>
                 <div className="space-y-1">
-                    <p className="text-sm"><span className="font-bold text-slate-800">{stats.todayAttendance.present}</span> có mặt</p>
-                    <p className="text-sm"><span className="font-bold text-slate-800">{stats.todayAttendance.late}</span> đi muộn</p>
-                    <p className="text-sm"><span className="font-bold text-slate-800">{stats.todayAttendance.absent}</span> vắng</p>
+                    <p className="text-sm flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-emerald-500"></span><span className="font-bold text-slate-800">{stats.todayAttendance.present}</span> có mặt</p>
+                    <p className="text-sm flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-amber-500"></span><span className="font-bold text-slate-800">{stats.todayAttendance.late}</span> đi muộn</p>
+                    <p className="text-sm flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-red-500"></span><span className="font-bold text-slate-800">{stats.todayAttendance.absent}</span> vắng</p>
                 </div>
             </div>
-            <div className="w-16 h-16">
+            <div className="w-20 h-20 relative z-10">
                 <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                         <Pie
                             data={attendanceData}
                             cx="50%"
                             cy="50%"
-                            innerRadius={20}
-                            outerRadius={30}
+                            innerRadius={25}
+                            outerRadius={35}
                             paddingAngle={5}
                             dataKey="value"
                             stroke="none"
@@ -114,7 +127,7 @@ export default function CeoDashboardPage() {
                                 <Cell key={`cell-${index}`} fill={entry.color} />
                             ))}
                         </Pie>
-                        <Tooltip />
+                        <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
                     </PieChart>
                 </ResponsiveContainer>
             </div>
@@ -122,28 +135,38 @@ export default function CeoDashboardPage() {
       </div>
 
       {/* Row 2: Middle Section */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Department Distribution */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-6">Phân bổ phòng ban</p>
-              <div className="h-64">
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 lg:col-span-2 hover:shadow-md transition-shadow">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-6">Phân bổ nhân sự theo phòng ban</p>
+              <div className="h-72">
                   <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                           <Pie
-                              data={stats.departmentDistribution.length > 0 ? stats.departmentDistribution : [{name: 'No data', value: 1}]}
+                              data={stats.departmentDistribution.length > 0 ? stats.departmentDistribution : [{name: 'Chưa có dữ liệu', value: 1}]}
                               cx="50%"
                               cy="50%"
-                              innerRadius={60}
-                              outerRadius={100}
-                              paddingAngle={2}
+                              innerRadius={70}
+                              outerRadius={110}
+                              paddingAngle={3}
                               dataKey="value"
-                              label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                              stroke="none"
                           >
                               {stats.departmentDistribution.map((entry, index) => (
                                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                               ))}
                           </Pie>
-                          <Tooltip />
+                          <Tooltip 
+                            formatter={(value, name) => [`${value} nhân sự`, name]}
+                            contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} 
+                          />
+                          <Legend 
+                            layout="vertical" 
+                            verticalAlign="middle" 
+                            align="right" 
+                            wrapperStyle={{ fontSize: '13px', fontFamily: 'Inter, sans-serif', paddingLeft: '20px' }} 
+                            iconType="circle"
+                          />
                       </PieChart>
                   </ResponsiveContainer>
               </div>

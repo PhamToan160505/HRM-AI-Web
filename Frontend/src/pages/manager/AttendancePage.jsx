@@ -194,8 +194,7 @@ export default function ManagerAttendancePage() {
                     </div>
                 </div>
                 <div className="flex gap-3">
-                    <Button variant="outline" className="flex items-center gap-2 bg-white" onClick={handleExportReport}>
-                        <Download size={16} />
+                    <Button variant="outline" className="bg-white" leadingIcon={<Download size={16} />} onClick={handleExportReport}>
                         Xuất báo cáo
                     </Button>
                 </div>
@@ -207,7 +206,12 @@ export default function ManagerAttendancePage() {
                     {departments.map((dept) => (
                         <div 
                             key={dept.departmentId || dept.id}
-                            onClick={() => { setSelectedDepartment({ id: dept.departmentId, tenPhong: dept.departmentName }); setPage(0); }}
+                            onClick={() => { 
+                                setRecords([]); 
+                                setLoading(true); 
+                                setSelectedDepartment({ id: dept.departmentId || dept.id, tenPhong: dept.departmentName || dept.tenPhong }); 
+                                setPage(0); 
+                            }}
                             className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md hover:border-blue-200 transition-all cursor-pointer group"
                         >
                             <div className="flex items-center gap-4 mb-4">

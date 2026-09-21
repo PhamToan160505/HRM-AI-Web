@@ -91,9 +91,14 @@ const EmployeeListPage = () => {
     };
 
     const maskCccd = (cccd) => {
-        if (!cccd) return "Chưa cập nhật";
+        if (!cccd) return <span className="italic text-gray-400">Chưa cập nhật</span>;
         if (cccd.length <= 4) return cccd;
-        return "*".repeat(cccd.length - 4) + cccd.slice(-4);
+        return (
+            <span className="flex items-center">
+                <span className="translate-y-[3px] inline-block leading-none mr-[1px]">{"*".repeat(cccd.length - 4)}</span>
+                <span>{cccd.slice(-4)}</span>
+            </span>
+        );
     };
 
     const handleViewDetails = async (emp) => {

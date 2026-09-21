@@ -7,7 +7,9 @@ import api from '../../../services/api';
 
 const CAP_BAC_PLACEHOLDER = '-- Chọn cấp bậc --';
 
-const countWords = (value) => value.trim().split(/\s+/).filter(Boolean).length;
+const countCharacters = (value) => Array.from(
+  value.normalize('NFC').replace(/\s/g, '')
+).length;
 
 const parseBudget = (value) => {
   const digits = value.replace(/\D/g, '');
@@ -113,11 +115,11 @@ export default function JobRequisitionForm() {
       nextErrors.reason = 'Vui lòng nhập lý do tuyển.';
     }
 
-    const descriptionWordCount = countWords(formData.description);
+    const descriptionCharacterCount = countCharacters(formData.description);
     if (!formData.description.trim()) {
       nextErrors.description = 'Vui lòng nhập mô tả công việc (JD).';
-    } else if (descriptionWordCount < 10) {
-      nextErrors.description = `Mô tả công việc phải có ít nhất 10 từ (hiện tại ${descriptionWordCount} từ).`;
+    } else if (descriptionCharacterCount < 10) {
+      nextErrors.description = `Mô tả công việc phải có ít nhất 10 ký tự (hiện tại ${descriptionCharacterCount} ký tự).`;
     }
 
     const hasBudget = Boolean(formData.budgetMin || formData.budgetMax);
@@ -399,11 +401,11 @@ export default function JobRequisitionForm() {
                   {errors.description ? (
                     <p id="description-error" className="text-xs font-medium text-red-600">{errors.description}</p>
                   ) : (
-                    <p id="description-hint" className="text-xs text-slate-400">Nội dung tối thiểu 10 từ để AI có đủ dữ liệu phân tích.</p>
+                    <p id="description-hint" className="text-xs text-slate-400">Nội dung tối thiểu 10 ký tự để AI có dữ liệu phân tích.</p>
                   )}
                 </div>
-                <span className={`shrink-0 text-xs ${formData.description && countWords(formData.description) < 10 ? 'text-amber-600' : 'text-slate-400'}`}>
-                  {countWords(formData.description)}/10 từ
+                <span className={`shrink-0 text-xs ${formData.description && countCharacters(formData.description) < 10 ? 'text-amber-600' : 'text-slate-400'}`}>
+                  {countCharacters(formData.description)}/10 ký tự
                 </span>
               </div>
             </div>

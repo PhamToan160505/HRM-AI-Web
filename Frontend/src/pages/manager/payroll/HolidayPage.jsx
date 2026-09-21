@@ -85,7 +85,7 @@ export default function HolidayPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="p-6 md:col-span-1">
+                <Card className="md:col-span-1" innerClassName="p-6">
                     <h3 className="text-lg font-bold text-gray-800 mb-4">Thêm ngày lễ</h3>
                     <form onSubmit={handleCreate} className="space-y-4">
                         <Input

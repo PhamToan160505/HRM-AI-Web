@@ -34,7 +34,7 @@ export default function PayrollTable({ payrolls, onApprove, onReject, role }) {
                         <th className="px-6 py-4 font-semibold text-red-600">Thuế TNCN</th>
                         <th className="px-6 py-4 font-semibold text-blue-600 text-right">Thực nhận</th>
                         <th className="px-6 py-4 font-semibold">Trạng thái</th>
-                        {(role?.toUpperCase() === 'TRUONG_PHONG' || role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN' || role?.toUpperCase() === 'CEO') && <th className="px-6 py-4 font-semibold text-right">Thao tác</th>}
+                        {(role?.toUpperCase() === 'TRUONG_PHONG' || role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN' || role?.toUpperCase() === 'CEO') && <th className="px-6 py-4 font-semibold text-center">Thao tác</th>}
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -67,13 +67,25 @@ export default function PayrollTable({ payrolls, onApprove, onReject, role }) {
                                     )}
                                 </td>
                                 {(role?.toUpperCase() === 'TRUONG_PHONG' || role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN' || role?.toUpperCase() === 'CEO') && (
-                                    <td className="px-6 py-4 text-right space-x-2">
-                                        {p.status === 'DRAFT' && (
-                                            <>
-                                                <Button variant="outline" className="text-xs px-2 py-1 text-emerald-600 hover:bg-emerald-50 border-emerald-200" onClick={() => onApprove(p.id)}>Duyệt</Button>
-                                                <Button variant="outline" className="text-xs px-2 py-1 text-red-600 hover:bg-red-50 border-red-200" onClick={() => onReject(p)}>Từ chối</Button>
-                                            </>
-                                        )}
+                                    <td className="px-6 py-4 text-center">
+                                        <div className="flex items-center justify-center gap-2">
+                                            {p.status === 'DRAFT' && (
+                                                <>
+                                                    <button 
+                                                        className="px-3 py-1.5 text-xs font-medium rounded-md bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors" 
+                                                        onClick={() => onApprove(p.id)}
+                                                    >
+                                                        Duyệt
+                                                    </button>
+                                                    <button 
+                                                        className="px-3 py-1.5 text-xs font-medium rounded-md bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors" 
+                                                        onClick={() => onReject(p)}
+                                                    >
+                                                        Từ chối
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
                                     </td>
                                 )}
                             </tr>

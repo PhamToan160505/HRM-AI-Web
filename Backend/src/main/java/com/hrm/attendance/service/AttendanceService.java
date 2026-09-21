@@ -61,12 +61,9 @@ public class AttendanceService {
             
             Attendance attendance;
             if (todayRecordOpt.isPresent()) {
-                // Nếu có nhiều hơn 1, lấy cái đầu tiên (nên fix triệt để DB)
+                // Giữ nguyên lần quét đầu tiên là giờ vào; mọi lần quét sau
+                // đều cập nhật giờ ra để timeOut luôn là lần chấm công cuối ngày.
                 attendance = todayRecordOpt.get();
-                // Check-out
-                if (attendance.getTimeOut() != null) {
-                    throw new RuntimeException("Bạn đã check-out hôm nay rồi.");
-                }
                 attendance.setTimeOut(now);
                 attendance.setLocationOut(location);
                 
@@ -169,7 +166,8 @@ public class AttendanceService {
         } else {
             employeesPage = userRepository.findWithFilters(java.util.List.of(
                 com.hrm.common.entity.Role.NHAN_VIEN,
-                com.hrm.common.entity.Role.TRUONG_PHONG
+                com.hrm.common.entity.Role.TRUONG_PHONG,
+                com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN
             ), departmentId, filterRole, searchTerm, pageable);
         }
 

@@ -43,23 +43,32 @@ export default function EmployeeAttendancePage() {
         fetchHistoryAndRequests();
     }, []);
 
+    const parseSafeDate = (dateVal) => {
+        if (!dateVal) return "Không xác định";
+        if (Array.isArray(dateVal)) {
+            return new Date(dateVal[0], dateVal[1] - 1, dateVal[2], dateVal[3] || 0, dateVal[4] || 0).toLocaleDateString('vi-VN');
+        }
+        const d = new Date(dateVal);
+        return isNaN(d.getTime()) ? "Không xác định" : d.toLocaleDateString('vi-VN');
+    };
+
     const handleEnrollClick = async () => {
         try {
             const res = await api.get('/api/employees/me/face-status');
             if (res.data?.data?.hasEnrolled) {
-                setConfirmEnrollment(new Date(res.data.data.enrolledAt).toLocaleDateString('vi-VN'));
+                setConfirmEnrollment(parseSafeDate(res.data.data.enrolledAt));
             } else {
-                navigate('/employee/face-enroll');
+                navigate('../face-enroll');
             }
         } catch (error) {
             console.error("Error checking face status", error);
-            navigate('/employee/face-enroll');
+            navigate('../face-enroll');
         }
     };
 
     const proceedToEnroll = () => {
         setConfirmEnrollment(null);
-        navigate('/employee/face-enroll');
+        navigate('../face-enroll');
     };
 
     const formatTime = (timeStr) => {
@@ -69,10 +78,10 @@ export default function EmployeeAttendancePage() {
 
     const getStatusBadge = (status) => {
         switch (status) {
-            case 'PRESENT': return <span className="px-1 py-0.5 bg-emerald-100 text-emerald-700 rounded text-[9px] font-semibold leading-none">Đúng giờ</span>;
-            case 'LATE': return <span className="px-1 py-0.5 bg-amber-100 text-amber-700 rounded text-[9px] font-semibold leading-none">Đi trễ</span>;
-            case 'ABSENT': return <span className="px-1 py-0.5 bg-red-100 text-red-700 rounded text-[9px] font-semibold leading-none">Vắng mặt</span>;
-            default: return <span className="px-1 py-0.5 bg-gray-100 text-gray-700 rounded text-[9px] font-semibold leading-none">{status}</span>;
+            case 'PRESENT': return <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-600 border border-emerald-100/50 rounded-md text-[10px] font-bold leading-none">Đúng giờ</span>;
+            case 'LATE': return <span className="px-1.5 py-0.5 bg-amber-50 text-amber-600 border border-amber-100/50 rounded-md text-[10px] font-bold leading-none">Đi trễ</span>;
+            case 'ABSENT': return <span className="px-1.5 py-0.5 bg-rose-50 text-rose-600 border border-rose-100/50 rounded-md text-[10px] font-bold leading-none">Vắng mặt</span>;
+            default: return <span className="px-1.5 py-0.5 bg-slate-50 text-slate-600 border border-slate-100/50 rounded-md text-[10px] font-bold leading-none">{status}</span>;
         }
     };
 
@@ -81,9 +90,9 @@ export default function EmployeeAttendancePage() {
         const [hours, minutes] = timeOut.split(':').map(Number);
         const totalMinutes = hours * 60 + minutes;
         if (totalMinutes < 1005) { // 16:45
-            return <span className="px-1 py-0.5 bg-red-100 text-red-700 rounded text-[9px] font-semibold leading-none">Về sớm</span>;
+            return <span className="px-1.5 py-0.5 bg-rose-50 text-rose-600 border border-rose-100/50 rounded-md text-[10px] font-bold leading-none">Về sớm</span>;
         }
-        return <span className="px-1 py-0.5 bg-emerald-100 text-emerald-700 rounded text-[9px] font-semibold leading-none">Đúng giờ</span>;
+        return <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-600 border border-emerald-100/50 rounded-md text-[10px] font-bold leading-none">Đúng giờ</span>;
     };
 
     // Calendar & Filtering logic
@@ -179,12 +188,12 @@ export default function EmployeeAttendancePage() {
 
     const getRequestBadgeInfo = (type) => {
         switch (type) {
-            case 'NORMAL_LEAVE': return { text: 'Nghỉ phép', icon: '🌴', bg: 'bg-violet-100', textC: 'text-violet-700', border: 'border-violet-200' };
-            case 'HALF_DAY_LEAVE': return { text: 'Nghỉ nửa ngày', icon: '☀️', bg: 'bg-amber-100', textC: 'text-amber-700', border: 'border-amber-200' };
-            case 'SPECIAL_WFH_LEAVE': return { text: 'WFH', icon: '💻', bg: 'bg-blue-100', textC: 'text-blue-700', border: 'border-blue-200' };
-            case 'UNPAID_LEAVE': return { text: 'Nghỉ K.Lương', icon: '⛔', bg: 'bg-stone-100', textC: 'text-stone-700', border: 'border-stone-200' };
-            case 'OVERTIME': return { text: 'Làm thêm', icon: '⏰', bg: 'bg-indigo-100', textC: 'text-indigo-700', border: 'border-indigo-200' };
-            default: return { text: 'Đơn từ', icon: '📄', bg: 'bg-gray-100', textC: 'text-gray-700', border: 'border-gray-200' };
+            case 'NORMAL_LEAVE': return { text: 'Nghỉ phép', icon: '🌴', bg: 'bg-violet-50', textC: 'text-violet-600', border: 'border-violet-100/50' };
+            case 'HALF_DAY_LEAVE': return { text: 'Nghỉ nửa ngày', icon: '☀️', bg: 'bg-amber-50', textC: 'text-amber-600', border: 'border-amber-100/50' };
+            case 'SPECIAL_WFH_LEAVE': return { text: 'WFH', icon: '💻', bg: 'bg-blue-50', textC: 'text-blue-600', border: 'border-blue-100/50' };
+            case 'UNPAID_LEAVE': return { text: 'Nghỉ K.Lương', icon: '⛔', bg: 'bg-stone-50', textC: 'text-stone-600', border: 'border-stone-100/50' };
+            case 'OVERTIME': return { text: 'Làm thêm', icon: '⏰', bg: 'bg-indigo-50', textC: 'text-indigo-600', border: 'border-indigo-100/50' };
+            default: return { text: 'Đơn từ', icon: '📄', bg: 'bg-slate-50', textC: 'text-slate-600', border: 'border-slate-100/50' };
         }
     };
 
@@ -193,61 +202,65 @@ export default function EmployeeAttendancePage() {
         const weekDays = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
 
         return (
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden mt-6">
-                <div className="grid grid-cols-7 border-b border-gray-100 bg-gray-50">
+            <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm overflow-hidden mt-6">
+                <div className="grid grid-cols-7 border-b border-slate-100 bg-white">
                     {weekDays.map(d => (
-                        <div key={d} className="py-3 text-center text-sm font-semibold text-gray-600 border-r last:border-r-0 border-gray-100">
+                        <div key={d} className="py-4 text-center text-[11px] font-bold tracking-widest text-slate-400 uppercase">
                             {d}
                         </div>
                     ))}
                 </div>
-                <div className="grid grid-cols-7 grid-rows-6 h-[480px] sm:h-[540px]">
+                <div className="grid grid-cols-7 grid-rows-6 h-[560px] sm:h-[640px]">
                     {days.map((dayObj, idx) => {
                         if (!dayObj) {
-                            return <div key={`empty-${idx}`} className="p-1 border-b border-r border-gray-100 bg-gray-50/50" />;
+                            return <div key={`empty-${idx}`} className="p-2 border-b border-r border-slate-100/60 bg-slate-50/30" />;
                         }
 
                         let bgClass = "bg-white";
-                        if (dayObj.isToday) bgClass = "bg-blue-50/30";
-                        if (dayObj.isWeekend) bgClass = "bg-gray-50";
+                        if (dayObj.isToday) bgClass = "bg-blue-50/20";
+                        if (dayObj.isWeekend) bgClass = "bg-slate-50/50";
 
                         return (
-                            <div key={dayObj.day} className={`p-1 border-b border-r border-gray-100 relative ${bgClass} transition-colors hover:bg-gray-50 overflow-y-auto overflow-x-hidden custom-scrollbar`}>
-                                <div className={`w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-medium mb-1 shrink-0 ${dayObj.isToday ? 'bg-blue-600 text-white shadow-md' : 'text-gray-700'}`}>
-                                    {dayObj.day}
+                            <div key={dayObj.day} className={`p-2 border-b border-r border-slate-100/60 relative ${bgClass} transition-all hover:bg-slate-50 overflow-y-auto overflow-x-hidden custom-scrollbar group`}>
+                                <div className="flex justify-end mb-2">
+                                    <div className={`w-7 h-7 flex items-center justify-center rounded-full text-sm font-semibold transition-all ${dayObj.isToday ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : (dayObj.isWeekend ? 'text-slate-400' : 'text-slate-700 group-hover:text-blue-600')}`}>
+                                        {dayObj.day}
+                                    </div>
                                 </div>
 
-                                <div className="space-y-0.5 flex flex-col items-start text-[9px] leading-tight">
+                                <div className="space-y-1.5 flex flex-col items-start w-full">
                                     {dayObj.status === 'ATTENDED' && (
-                                        <div className="flex flex-col gap-0.5 w-full">
+                                        <div className="flex flex-col gap-1.5 w-full">
                                             {!(dayObj.att.status === 'ABSENT' && (dayObj.att.timeIn === '00:00:00' || !dayObj.att.timeIn)) && (
-                                                <div className="flex justify-between items-center bg-gray-100/80 px-1 py-0.5 rounded w-full">
-                                                    <div className="flex items-center gap-0.5" title="Giờ vào">
-                                                        <div className="w-1 h-1 rounded-full bg-emerald-500 shrink-0" />
-                                                        <span className="font-semibold text-gray-600">{formatTime(dayObj.att.timeIn)}</span>
+                                                <div className="flex flex-col gap-1.5 bg-slate-50/80 p-2 rounded-xl border border-slate-100/80 w-full transition-all hover:border-slate-200">
+                                                    <div className="flex justify-between items-center w-full px-0.5">
+                                                        <div className="flex items-center gap-1.5" title="Giờ vào">
+                                                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] shrink-0" />
+                                                            <span className="font-semibold text-slate-700 text-[11px] font-mono tracking-tight">{formatTime(dayObj.att.timeIn)}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5" title="Giờ ra">
+                                                            <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)] shrink-0" />
+                                                            <span className="font-semibold text-slate-700 text-[11px] font-mono tracking-tight">{formatTime(dayObj.att.timeOut)}</span>
+                                                        </div>
                                                     </div>
-                                                    <div className="flex items-center gap-0.5" title="Giờ ra">
-                                                        <div className="w-1 h-1 rounded-full bg-blue-500 shrink-0" />
-                                                        <span className="font-semibold text-gray-600">{formatTime(dayObj.att.timeOut)}</span>
+                                                    <div className="flex gap-1 flex-wrap">
+                                                        {getStatusBadge(dayObj.att.status)}
+                                                        {getCheckoutStatusBadge(dayObj.att.timeOut)}
                                                     </div>
                                                 </div>
                                             )}
-                                            <div className="flex gap-1 flex-wrap">
-                                                {getStatusBadge(dayObj.att.status)}
-                                                {getCheckoutStatusBadge(dayObj.att.timeOut)}
-                                            </div>
                                         </div>
                                     )}
 
                                     {dayObj.req && (
-                                        <div className={`px-1 py-0.5 ${getRequestBadgeInfo(dayObj.req.requestType).bg} ${getRequestBadgeInfo(dayObj.req.requestType).textC} rounded border ${getRequestBadgeInfo(dayObj.req.requestType).border} font-medium flex items-center gap-1 w-full mt-1 truncate`} title={getRequestBadgeInfo(dayObj.req.requestType).text}>
-                                            <span className="shrink-0">{getRequestBadgeInfo(dayObj.req.requestType).icon}</span> <span className="truncate">{getRequestBadgeInfo(dayObj.req.requestType).text}</span>
+                                        <div className={`px-2 py-1.5 ${getRequestBadgeInfo(dayObj.req.requestType).bg} ${getRequestBadgeInfo(dayObj.req.requestType).textC} rounded-lg border ${getRequestBadgeInfo(dayObj.req.requestType).border} flex items-center gap-1.5 w-full mt-1 truncate transition-all hover:scale-[1.02]`} title={getRequestBadgeInfo(dayObj.req.requestType).text}>
+                                            <span className="shrink-0 text-[12px]">{getRequestBadgeInfo(dayObj.req.requestType).icon}</span> <span className="text-[10px] font-bold truncate tracking-wide">{getRequestBadgeInfo(dayObj.req.requestType).text}</span>
                                         </div>
                                     )}
 
                                     {dayObj.status === 'UNEXCUSED_ABSENCE' && (
-                                        <div className="px-1 py-0.5 bg-rose-100 text-rose-700 rounded border border-rose-200 font-medium flex items-center gap-1 w-full mt-1 truncate">
-                                            <AlertCircle size={8} className="shrink-0" /> <span className="truncate">Nghỉ không phép</span>
+                                        <div className="px-2 py-1.5 bg-rose-50 text-rose-600 rounded-lg border border-rose-100/50 flex items-center gap-1.5 w-full mt-1 truncate transition-all hover:scale-[1.02]">
+                                            <AlertCircle size={10} className="shrink-0" /> <span className="text-[10px] font-bold truncate tracking-wide">Nghỉ không phép</span>
                                         </div>
                                     )}
                                 </div>
@@ -269,17 +282,18 @@ export default function EmployeeAttendancePage() {
                 <div className="flex gap-4">
                     <Button 
                         variant="outline" 
-                        className="flex items-center gap-2 text-blue-600 border-blue-200 hover:bg-blue-50"
+                        className="text-blue-600 border-blue-200 hover:bg-blue-50"
                         onClick={handleEnrollClick}
+                        leadingIcon={<Camera size={18} />}
                     >
-                        <Camera size={18} /> Cập nhật khuôn mặt
+                        Cập nhật khuôn mặt
                     </Button>
                     <Button 
                         variant="primary" 
-                        className="flex items-center gap-2"
                         onClick={() => setIsPunchModalOpen(true)}
+                        leadingIcon={<Clock size={18} />}
                     >
-                        <Clock size={18} /> Chấm công ngay
+                        Chấm công ngay
                     </Button>
                 </div>
             </div>
@@ -290,34 +304,45 @@ export default function EmployeeAttendancePage() {
                         <Button
                             variant={viewMode === 'calendar' ? 'primary' : 'outline'}
                             onClick={() => setViewMode('calendar')}
-                            className="flex items-center gap-2 px-4"
+                            className="px-4"
+                            leadingIcon={<Calendar size={16} />}
                         >
-                            <Calendar size={16} /> Tổng quan tháng
+                            Tổng quan tháng
                         </Button>
                         <Button
                             variant={viewMode === 'table' ? 'primary' : 'outline'}
                             onClick={() => setViewMode('table')}
-                            className="flex items-center gap-2 px-4"
+                            className="px-4"
+                            leadingIcon={<List size={16} />}
                         >
-                            <List size={16} /> Lịch sử chấm công
+                            Lịch sử chấm công
                         </Button>
                     </div>
 
-                    <div className="flex items-center gap-4 bg-white border border-gray-200 rounded-lg p-1">
-                        <button onClick={prevMonth} className="p-1 hover:bg-gray-100 rounded text-gray-600 transition-colors">
-                            <ChevronLeft size={20} />
-                        </button>
-                        <span className="font-semibold text-gray-700 min-w-[120px] text-center">
-                            Tháng {currentDate.getMonth() + 1}, {currentDate.getFullYear()}
-                        </span>
-                        <button onClick={nextMonth} className="p-1 hover:bg-gray-100 rounded text-gray-600 transition-colors">
-                            <ChevronRight size={20} />
+                    <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-4 bg-white border border-slate-200/60 shadow-sm rounded-xl p-1">
+                            <button onClick={prevMonth} className="p-1.5 hover:bg-slate-50 rounded-lg text-slate-600 transition-colors">
+                                <ChevronLeft size={18} />
+                            </button>
+                            <span className="font-semibold text-slate-700 min-w-[120px] text-center text-sm">
+                                Tháng {currentDate.getMonth() + 1}, {currentDate.getFullYear()}
+                            </span>
+                            <button onClick={nextMonth} className="p-1.5 hover:bg-slate-50 rounded-lg text-slate-600 transition-colors">
+                                <ChevronRight size={18} />
+                            </button>
+                        </div>
+                        
+                        <button 
+                            onClick={() => {
+                                fetchHistoryAndRequests();
+                                toast.show("Thành công", "Đã làm mới dữ liệu chấm công", "success");
+                            }} 
+                            className="text-slate-500 hover:text-blue-600 transition-all p-2.5 bg-white border border-slate-200/60 shadow-sm rounded-xl hover:bg-blue-50 active:scale-95"
+                            title="Làm mới dữ liệu"
+                        >
+                            <RefreshCw size={18} className={loading ? 'animate-spin text-blue-600' : ''} />
                         </button>
                     </div>
-                    
-                    <button onClick={fetchHistoryAndRequests} className="text-gray-500 hover:text-blue-600 transition-colors p-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
-                        <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
-                    </button>
                 </div>
                 
                 {viewMode === 'calendar' ? (
@@ -325,58 +350,66 @@ export default function EmployeeAttendancePage() {
                         {renderCalendar()}
                     </div>
                 ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left text-sm">
-                            <thead className="bg-white text-gray-500 border-b border-gray-100">
-                                <tr>
-                                    <th className="px-6 py-4 font-semibold">Ngày</th>
-                                    <th className="px-6 py-4 font-semibold">Giờ vào (Check-in)</th>
-                                    <th className="px-6 py-4 font-semibold">Giờ ra (Check-out)</th>
-                                    <th className="px-6 py-4 font-semibold">TT Check-in</th>
-                                    <th className="px-6 py-4 font-semibold">TT Check-out</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {loading && filteredHistory.length === 0 ? (
+                    <div className="p-6 pt-2">
+                        <div className="overflow-hidden rounded-2xl border border-slate-200/60 shadow-sm">
+                            <table className="w-full text-left text-sm bg-white">
+                                <thead className="bg-slate-50 border-b border-slate-200/60">
                                     <tr>
-                                        <td colSpan="5" className="px-6 py-8 text-center text-gray-500">Đang tải dữ liệu...</td>
+                                        <th className="px-6 py-4 text-xs font-bold tracking-widest text-slate-500 uppercase">Ngày</th>
+                                        <th className="px-6 py-4 text-xs font-bold tracking-widest text-slate-500 uppercase">Giờ vào (Check-in)</th>
+                                        <th className="px-6 py-4 text-xs font-bold tracking-widest text-slate-500 uppercase">Giờ ra (Check-out)</th>
+                                        <th className="px-6 py-4 text-xs font-bold tracking-widest text-slate-500 uppercase">TT Check-in</th>
+                                        <th className="px-6 py-4 text-xs font-bold tracking-widest text-slate-500 uppercase">TT Check-out</th>
                                     </tr>
-                                ) : filteredHistory.length === 0 ? (
-                                    <tr>
-                                        <td colSpan="5" className="px-6 py-12 text-center text-gray-500 flex flex-col items-center">
-                                            <Clock size={32} className="text-gray-300 mb-2" />
-                                            Chưa có dữ liệu chấm công tháng này.
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    filteredHistory.map((record) => (
-                                        <tr key={record.id} className="hover:bg-slate-50 transition-colors">
-                                            <td className="px-6 py-4 font-medium text-gray-800">{record.date}</td>
-                                            <td className="px-6 py-4">
-                                                {record.timeIn ? (
-                                                    <div className="flex flex-col">
-                                                        <span className="font-mono text-emerald-600 font-semibold">{formatTime(record.timeIn)}</span>
-                                                        {record.locationIn && <span className="text-xs text-gray-500 truncate max-w-[200px]" title={record.locationIn}>{record.locationIn}</span>}
-                                                    </div>
-                                                ) : '--:--'}
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {loading && filteredHistory.length === 0 ? (
+                                        <tr>
+                                            <td colSpan="5" className="px-6 py-12 text-center text-slate-500 font-medium">Đang tải dữ liệu...</td>
+                                        </tr>
+                                    ) : filteredHistory.length === 0 ? (
+                                        <tr>
+                                            <td colSpan="5" className="px-6 py-16 text-center text-slate-400 flex flex-col items-center">
+                                                <Clock size={40} className="text-slate-200 mb-3" />
+                                                <span className="font-medium text-slate-500">Chưa có dữ liệu chấm công tháng này.</span>
                                             </td>
-                                            <td className="px-6 py-4">
-                                                {record.timeOut ? (
-                                                    <div className="flex flex-col">
-                                                        <span className="font-mono text-blue-600 font-semibold">{formatTime(record.timeOut)}</span>
-                                                        {record.locationOut && <span className="text-xs text-gray-500 truncate max-w-[200px]" title={record.locationOut}>{record.locationOut}</span>}
-                                                    </div>
-                                                ) : (
-                                                    <span className="text-gray-400 italic">Chưa check-out</span>
-                                                )}
-                                            </td>
-                                            <td className="px-6 py-4">{getStatusBadge(record.status)}</td>
+                                        </tr>
+                                    ) : (
+                                        filteredHistory.map((record) => (
+                                            <tr key={record.id} className="hover:bg-slate-50/50 transition-colors group">
+                                                <td className="px-6 py-4 font-semibold text-slate-700">{record.date}</td>
+                                                <td className="px-6 py-4">
+                                                    {record.timeIn ? (
+                                                        <div className="flex flex-col gap-1">
+                                                            <div className="flex items-center gap-1.5">
+                                                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] shrink-0" />
+                                                                <span className="font-mono text-slate-700 font-bold">{formatTime(record.timeIn)}</span>
+                                                            </div>
+                                                            {record.locationIn && <span className="text-[11px] text-slate-400 truncate max-w-[200px]" title={record.locationIn}>{record.locationIn}</span>}
+                                                        </div>
+                                                    ) : <span className="text-slate-300 font-mono">--:--</span>}
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    {record.timeOut ? (
+                                                        <div className="flex flex-col gap-1">
+                                                            <div className="flex items-center gap-1.5">
+                                                                <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)] shrink-0" />
+                                                                <span className="font-mono text-slate-700 font-bold">{formatTime(record.timeOut)}</span>
+                                                            </div>
+                                                            {record.locationOut && <span className="text-[11px] text-slate-400 truncate max-w-[200px]" title={record.locationOut}>{record.locationOut}</span>}
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-slate-400 italic text-[13px]">Chưa check-out</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-6 py-4">{getStatusBadge(record.status)}</td>
                                             <td className="px-6 py-4">{getCheckoutStatusBadge(record.timeOut)}</td>
                                         </tr>
                                     ))
                                 )}
                             </tbody>
                         </table>
+                    </div>
                     </div>
                 )}
             </Card>

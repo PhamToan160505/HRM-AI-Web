@@ -74,12 +74,21 @@ export default function AdminDashboardPage() {
           <div className="mt-8 bg-white rounded-xl shadow-sm border border-slate-200 p-6">
             <h3 className="text-lg font-bold text-slate-800 mb-4">Phân bổ vai trò (Role)</h3>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-              {stats?.usersByRole && Object.entries(stats.usersByRole).map(([role, count]) => (
-                <div key={role} className="bg-slate-50 rounded-lg p-4 text-center border border-slate-100">
-                  <p className="text-xs font-semibold text-slate-500 mb-1">{role}</p>
-                  <p className="text-2xl font-bold text-slate-800">{count}</p>
-                </div>
-              ))}
+              {stats?.usersByRole && Object.entries(stats.usersByRole).map(([role, count]) => {
+                const roleNames = {
+                  ADMIN: 'Admin Quản trị',
+                  CEO: 'Tổng Giám Đốc',
+                  GIAM_DOC_PHONG_BAN: 'Giám đốc phòng ban',
+                  TRUONG_PHONG: 'Trưởng phòng',
+                  NHAN_VIEN: 'Nhân viên'
+                };
+                return (
+                  <div key={role} className="bg-slate-50 rounded-lg p-4 text-center border border-slate-100">
+                    <p className="text-xs font-semibold text-slate-500 mb-1">{roleNames[role] || role}</p>
+                    <p className="text-2xl font-bold text-slate-800">{count}</p>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </>
