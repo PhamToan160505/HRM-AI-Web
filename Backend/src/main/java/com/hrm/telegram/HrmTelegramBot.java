@@ -22,6 +22,7 @@ import java.util.List;
  */
 @Slf4j
 @Component
+@org.springframework.boot.autoconfigure.condition.ConditionalOnExpression("'${app.telegram.bot-token:}' != '' && '${app.telegram.bot-token:}' != 'YOUR_BOT_TOKEN_HERE'")
 public class HrmTelegramBot extends TelegramLongPollingBot {
 
     private final TelegramBotProperties properties;
