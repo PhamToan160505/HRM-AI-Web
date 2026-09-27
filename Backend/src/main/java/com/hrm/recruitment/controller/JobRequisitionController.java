@@ -54,35 +54,115 @@ public class JobRequisitionController {
         return ResponseEntity.ok(ApiResponse.ok(jobRequisitionService.getAllRequisitionsPaginated(extractUserId(userDetails), departmentId, targetRole, status, filterRequesterId, page, size), "Thành công"));
     }
 
+    @GetMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ROLE_TRUONG_PHONG', 'ROLE_GIAM_DOC_PHONG_BAN', 'ROLE_CEO', 'ROLE_ADMIN')")
+    public ResponseEntity<ApiResponse<JobRequisition>> getRequisition(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                jobRequisitionService.getRequisition(id, extractUserId(userDetails)),
+                "Thành công"));
+    }
+
     @PostMapping
     @PreAuthorize("hasAnyAuthority('ROLE_TRUONG_PHONG', 'ROLE_GIAM_DOC_PHONG_BAN', 'ROLE_CEO', 'ROLE_ADMIN')")
     public ResponseEntity<ApiResponse<JobRequisition>> createRequisition(
             @AuthenticationPrincipal UserDetails userDetails,
+            @RequestHeader(name = "X-Request-ID", required = false) String requestId,
+            @RequestHeader(name = "Idempotency-Key") String idempotencyKey,
             @RequestBody RequisitionRequest request) {
         // Lấy ID người dùng (trong JwtAuthenticationFilter chúng ta đã set ID vào Username của UserDetails hoặc ta sẽ trích xuất từ UserService)
         // Tuy nhiên hệ thống hiện tại lưu email trong getUsername(). 
         // Hãy gọi tạm qua email nếu cần, hoặc để tiện mình gửi kèm requesterId tạm thời.
         // Wait, Authentication object usually contains the User context in a custom way.
         // I will let it be injected from SecurityContext or we extract from database via email.
-        return ResponseEntity.ok(ApiResponse.ok(jobRequisitionService.createRequisition(extractUserId(userDetails), request), "Tạo yêu cầu tuyển dụng thành công"));
+        return ResponseEntity.ok(ApiResponse.ok(
+                jobRequisitionService.createRequisition(
+                        extractUserId(userDetails), request, requestId, idempotencyKey),
+                "Tạo yêu cầu tuyển dụng thành công"));
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ROLE_TRUONG_PHONG', 'ROLE_GIAM_DOC_PHONG_BAN', 'ROLE_CEO', 'ROLE_ADMIN')")
+    public ResponseEntity<ApiResponse<JobRequisition>> updateRequisition(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestBody RequisitionRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                jobRequisitionService.updateRequisition(id, extractUserId(userDetails), request),
+                "Đã cập nhật yêu cầu tuyển dụng"));
+    }
+
+    @PostMapping("/{id}/submit")
+    @PreAuthorize("hasAnyAuthority('ROLE_TRUONG_PHONG', 'ROLE_GIAM_DOC_PHONG_BAN', 'ROLE_CEO', 'ROLE_ADMIN')")
+    public ResponseEntity<ApiResponse<JobRequisition>> submitRequisition(
+            @PathVariable Long id,
+            @RequestHeader(name = "X-Request-ID", required = false) String requestId,
+            @RequestHeader(name = "Idempotency-Key") String idempotencyKey,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                jobRequisitionService.submitRequisition(
+                        id, extractUserId(userDetails), requestId, idempotencyKey),
+                "Đã gửi lại yêu cầu tuyển dụng"));
+    }
+
+    @PostMapping("/{id}/return")
+    @PreAuthorize("hasAnyAuthority('ROLE_TRUONG_PHONG', 'ROLE_GIAM_DOC_PHONG_BAN', 'ROLE_CEO', 'ROLE_ADMIN')")
+    public ResponseEntity<ApiResponse<JobRequisition>> returnRequisition(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> body,
+            @RequestHeader(name = "X-Request-ID", required = false) String requestId,
+            @RequestHeader(name = "Idempotency-Key") String idempotencyKey,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                jobRequisitionService.returnRequisition(
+                        id,
+                        extractUserId(userDetails),
+                        body.getOrDefault("comment", ""),
+                        requestId,
+                        idempotencyKey),
+                "Đã trả yêu cầu về để chỉnh sửa"));
+    }
+
+    @PostMapping("/{id}/withdraw")
+    @PreAuthorize("hasAnyAuthority('ROLE_TRUONG_PHONG', 'ROLE_GIAM_DOC_PHONG_BAN', 'ROLE_CEO', 'ROLE_ADMIN')")
+    public ResponseEntity<ApiResponse<JobRequisition>> withdrawRequisition(
+            @PathVariable Long id,
+            @RequestHeader(name = "X-Request-ID", required = false) String requestId,
+            @RequestHeader(name = "Idempotency-Key") String idempotencyKey,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                jobRequisitionService.withdrawRequisition(
+                        id, extractUserId(userDetails), requestId, idempotencyKey),
+                "Đã thu hồi yêu cầu tuyển dụng"));
     }
 
     @PostMapping("/{id}/approve")
-    @PreAuthorize("hasAnyAuthority('ROLE_CEO', 'ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_TRUONG_PHONG', 'ROLE_GIAM_DOC_PHONG_BAN', 'ROLE_CEO', 'ROLE_ADMIN')")
     public ResponseEntity<ApiResponse<JobRequisition>> approveRequisition(
             @PathVariable Long id,
+            @RequestHeader(name = "X-Request-ID", required = false) String requestId,
+            @RequestHeader(name = "Idempotency-Key") String idempotencyKey,
             @AuthenticationPrincipal UserDetails userDetails) {
-        return ResponseEntity.ok(ApiResponse.ok(jobRequisitionService.approveRequisition(id, extractUserId(userDetails)), "Đã duyệt yêu cầu"));
+        return ResponseEntity.ok(ApiResponse.ok(
+                jobRequisitionService.approveRequisition(
+                        id, extractUserId(userDetails), requestId, idempotencyKey),
+                "Đã duyệt yêu cầu"));
     }
 
     @PostMapping("/{id}/reject")
-    @PreAuthorize("hasAnyAuthority('ROLE_CEO', 'ROLE_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('ROLE_TRUONG_PHONG', 'ROLE_GIAM_DOC_PHONG_BAN', 'ROLE_CEO', 'ROLE_ADMIN')")
     public ResponseEntity<ApiResponse<JobRequisition>> rejectRequisition(
             @PathVariable Long id,
             @RequestBody Map<String, String> body,
+            @RequestHeader(name = "X-Request-ID", required = false) String requestId,
+            @RequestHeader(name = "Idempotency-Key") String idempotencyKey,
             @AuthenticationPrincipal UserDetails userDetails) {
         String reason = body.getOrDefault("reason", "");
-        return ResponseEntity.ok(ApiResponse.ok(jobRequisitionService.rejectRequisition(id, extractUserId(userDetails), reason), "Đã từ chối yêu cầu"));
+        return ResponseEntity.ok(ApiResponse.ok(
+                jobRequisitionService.rejectRequisition(
+                        id, extractUserId(userDetails), reason, requestId, idempotencyKey),
+                "Đã từ chối yêu cầu"));
     }
 
     // Helper method to extract user ID. 

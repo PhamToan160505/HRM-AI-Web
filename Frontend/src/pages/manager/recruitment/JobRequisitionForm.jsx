@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContext';
 import { useToast } from '../../../components/common/Toast';
@@ -23,6 +23,8 @@ const formatBudget = (value) => {
 
 export default function JobRequisitionForm() {
   const navigate = useNavigate();
+  const { id } = useParams();
+  const isEdit = Boolean(id);
   const { user } = useAuth();
   const { show } = useToast();
   const [loading, setLoading] = useState(false);
@@ -79,6 +81,36 @@ export default function JobRequisitionForm() {
     hinhThucLamViecKhac: '',
     description: ''
   });
+
+  useEffect(() => {
+    if (!isEdit) return;
+    setLoading(true);
+    api.get(`/api/job-requisitions/${id}`)
+      .then((res) => {
+        if (!res.data.success) return;
+        const requisition = res.data.data;
+        const budgetParts = (requisition.budget || '')
+          .replace(/VNĐ/gi, '')
+          .split(/\s*-\s*/);
+        setFormData({
+          title: requisition.title || '',
+          targetRole: requisition.targetRole || getDefaultRole(user?.role),
+          soLuong: requisition.soLuong || 1,
+          reason: requisition.reason || '',
+          requirements: requisition.requirements || '',
+          budgetMin: formatBudget(budgetParts[0] || ''),
+          budgetMax: formatBudget(budgetParts[1] || ''),
+          departmentId: requisition.departmentId || null,
+          capBac: requisition.capBac || CAP_BAC_PLACEHOLDER,
+          capBacKhac: '',
+          hinhThucLamViec: requisition.hinhThucLamViec || 'Toàn thời gian (Full-time)',
+          hinhThucLamViecKhac: '',
+          description: requisition.description || ''
+        });
+      })
+      .catch((err) => show('Lỗi', err.response?.data?.message || 'Không thể tải yêu cầu', 'error'))
+      .finally(() => setLoading(false));
+  }, [id, isEdit, user?.role]);
 
   const updateField = (field, value) => {
     setFormData((current) => ({ ...current, [field]: value }));
@@ -168,14 +200,23 @@ export default function JobRequisitionForm() {
         hinhThucLamViec: formData.hinhThucLamViec === 'Khác' ? formData.hinhThucLamViecKhac : formData.hinhThucLamViec
       };
       
-      const res = await api.post('/api/job-requisitions', payload);
+      let res;
+      if (isEdit) {
+        await api.put(`/api/job-requisitions/${id}`, payload);
+        res = await api.post(`/api/job-requisitions/${id}/submit`, null, {
+          headers: { 'Idempotency-Key': crypto.randomUUID() }
+        });
+      } else {
+        res = await api.post('/api/job-requisitions', payload, {
+          headers: { 'Idempotency-Key': crypto.randomUUID() }
+        });
+      }
       
       if (res.data.success) {
-        if (user?.role === 'ceo' || user?.role === 'admin') {
-          show('Thành công', 'Tạo yêu cầu tuyển dụng và tự động duyệt thành công', 'success');
-        } else {
-          show('Thành công', 'Đã gửi yêu cầu lên Tổng Giám đốc thành công', 'success');
-        }
+        show('Thành công', isEdit
+          ? 'Đã cập nhật và gửi lại yêu cầu thành công'
+          : 'Đã gửi yêu cầu tuyển dụng để phê duyệt', 'success');
+        navigate('../requisitions');
         // Xóa form
         setFormData({
           title: '',
@@ -210,7 +251,7 @@ export default function JobRequisitionForm() {
           <ArrowLeft size={20} />
         </button>
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Tạo yêu cầu tuyển dụng</h1>
+          <h1 className="text-2xl font-bold text-slate-800">{isEdit ? 'Chỉnh sửa yêu cầu tuyển dụng' : 'Tạo yêu cầu tuyển dụng'}</h1>
           <p className="text-slate-500 text-sm mt-1">
             Điền thông tin chi tiết về nhu cầu nhân sự để trình duyệt.
           </p>
@@ -472,7 +513,7 @@ export default function JobRequisitionForm() {
                 disabled={loading}
                 className="px-5 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors disabled:bg-blue-400"
               >
-                {loading ? 'Đang lưu...' : 'Gửi yêu cầu'}
+                {loading ? 'Đang lưu...' : isEdit ? 'Cập nhật và gửi lại' : 'Gửi yêu cầu'}
               </button>
             </div>
           </form>

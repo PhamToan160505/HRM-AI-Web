@@ -1,13 +1,19 @@
 package com.hrm.recruitment.service;
 
+import com.hrm.ai.service.AiAnalysisService;
+import com.hrm.ai.service.AiCvPipelineService;
+import com.hrm.ai.service.CvFileSafetyService;
+import com.hrm.ai.service.CvParserService;
+import com.hrm.configuration.service.ConfigurationService;
 import com.hrm.recruitment.entity.Application;
 import com.hrm.recruitment.repository.ApplicationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-import java.io.IOException;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -16,46 +22,65 @@ public class AsyncUploadService {
 
     private final CloudinaryService cloudinaryService;
     private final ApplicationRepository applicationRepository;
-    private final com.hrm.ai.service.CvParserService cvParserService;
-
-    @org.springframework.beans.factory.annotation.Autowired
-    @org.springframework.context.annotation.Lazy
-    private ApplicationService applicationService;
+    private final CvParserService cvParserService;
+    private final ConfigurationService configurationService;
+    private final AiCvPipelineService pipelineService;
+    private final AiAnalysisService analysisService;
+    private final JdbcTemplate jdbcTemplate;
 
     @Async
-    public void uploadFilesAndUpdateApplicationAsync(Long applicationId, byte[] cvBytes, String cvFilename, byte[] cccdBytes, String cccdFilename) {
-        log.info("Bắt đầu tiến trình upload file ngầm cho hồ sơ ID: {}", applicationId);
+    public void uploadAndAnalyze(Long applicationId, CvFileSafetyService.ValidatedCv validated, Long aiRunId) {
         try {
-            Application app = applicationRepository.findById(applicationId)
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy hồ sơ"));
+            Application application = applicationRepository.findById(applicationId)
+                    .orElseThrow(() -> new IllegalStateException("Không tìm thấy hồ sơ: " + applicationId));
+            String extension = validated.detectedType() == CvFileSafetyService.DetectedType.PDF ? ".pdf" : ".docx";
+            String serverFilename = UUID.randomUUID() + extension;
+            String cvUrl = cloudinaryService.uploadFileBytes(validated.bytes(), serverFilename, "cvs");
 
-            String cvUrl = cloudinaryService.uploadFileBytes(cvBytes, cvFilename, "cvs");
-            String cccdUrl = cloudinaryService.uploadFileBytes(cccdBytes, cccdFilename, "cccds");
-
-            app.setCvUrl(cvUrl);
-            app.setCccdUrl(cccdUrl);
-            
-            // Thực hiện OCR và đọc text PDF (có thể tốn thời gian nếu gọi Gemini Vision)
-            if (cvBytes != null && cvBytes.length > 0) {
-                String actualCvText = cvParserService.parseCvFile(cvBytes, cvFilename);
-                if (actualCvText == null || actualCvText.trim().isEmpty()) {
-                    actualCvText = "Lưu ý quan trọng cho AI: Hệ thống Backend đang hoạt động hoàn hảo và đã quét file CV này thành công. Tuy nhiên, file PDF mà ứng viên tải lên KHÔNG chứa bất kỳ văn bản nào (đây là file PDF dạng hình ảnh scan). " +
-                                   "Do đó, AI KHÔNG ĐƯỢC PHÉP báo lỗi hệ thống hay lỗi PDF parser. Hãy ghi rõ vào lời phê là 'Ứng viên đã nộp file CV dạng hình ảnh không thể đọc được chữ'. " +
-                                   "Dưới đây là thông tin ứng viên tự điền trên form: Tên: " + app.getFullName() + ", SĐT: " + app.getPhone() + ", Email: " + app.getEmail() + ".";
-                }
-                app.setRawCvText(actualCvText);
+            CvFileSafetyService.ValidatedCv extracted = validated;
+            int minChars = configurationService.requireInteger("ai.extraction.min_chars");
+            if (validated.detectedType() == CvFileSafetyService.DetectedType.PDF
+                    && validated.visibleText().trim().length() < minChars) {
+                String ocrText = cvParserService.parseCvFile(validated.bytes(), serverFilename);
+                if (ocrText != null && !ocrText.isBlank()) extracted = validated.withOcrText(ocrText.trim());
             }
-            
-            applicationRepository.save(app);
 
-            log.info("Đã hoàn tất upload file ngầm và trích xuất text cho hồ sơ ID: {}", applicationId);
-            
-            // Gọi AI tự động ngay sau khi có text
-            log.info("Bắt đầu gọi AI tự động chấm điểm cho hồ sơ ID: {}", applicationId);
-            applicationService.triggerAiReview(applicationId);
-            
-        } catch (Exception e) {
-            log.error("Lỗi khi upload file ngầm cho hồ sơ ID {}: {}", applicationId, e.getMessage(), e);
+            application.setCvUrl(cvUrl);
+            application.setCccdUrl(null);
+            application.setRawCvText(extracted.visibleText());
+            applicationRepository.save(application);
+            saveDocumentMetadata(applicationId, extracted, cvUrl);
+
+            if (aiRunId != null) pipelineService.process(applicationId, aiRunId, extracted);
+        } catch (Exception exception) {
+            log.error("Upload/analysis failed for application {}", applicationId, exception);
+            if (aiRunId != null) {
+                try { analysisService.fail(aiRunId, exception); }
+                catch (Exception finalizationError) {
+                    log.error("Cannot finalize failed AI run {}", aiRunId, finalizationError);
+                }
+            }
         }
+    }
+
+    private void saveDocumentMetadata(Long applicationId, CvFileSafetyService.ValidatedCv document, String url) {
+        int charCount = document.visibleText() == null ? 0 : document.visibleText().length();
+        int minChars = configurationService.requireInteger("ai.extraction.min_chars");
+        String quality = charCount >= minChars ? "OK" : "UNREADABLE";
+        jdbcTemplate.update("""
+                INSERT INTO application_documents
+                  (application_id, document_type, original_filename, detected_type, file_size_bytes,
+                   page_count, storage_url, extraction_method, extraction_quality,
+                   extracted_char_count, hidden_text_removed_chars)
+                VALUES (?, 'CV', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE storage_url = VALUES(storage_url),
+                  original_filename = VALUES(original_filename), detected_type = VALUES(detected_type),
+                  file_size_bytes = VALUES(file_size_bytes), page_count = VALUES(page_count),
+                  extraction_method = VALUES(extraction_method), extraction_quality = VALUES(extraction_quality),
+                  extracted_char_count = VALUES(extracted_char_count),
+                  hidden_text_removed_chars = VALUES(hidden_text_removed_chars), updated_at = CURRENT_TIMESTAMP(6)
+                """, applicationId, document.originalFilename(), document.detectedType().name(),
+                document.bytes().length, document.pageCount(), url, document.extractionMethod().name(),
+                quality, charCount, document.hiddenTextRemovedChars());
     }
 }

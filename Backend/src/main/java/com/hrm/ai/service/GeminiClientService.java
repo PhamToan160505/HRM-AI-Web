@@ -41,6 +41,10 @@ public class GeminiClientService {
      * Cơ chế Retry (2 lần) và Timeout (120s).
      */
     public Mono<String> callGemini(String prompt) {
+        return callGemini(prompt, 120, 2);
+    }
+
+    public Mono<String> callGemini(String prompt, int timeoutSeconds, int maxRetry) {
         String url = "/models/" + model + ":generateContent?key=" + apiKey;
 
         String requestBody = """
@@ -64,8 +68,8 @@ public class GeminiClientService {
                                     "Gemini API lỗi HTTP " + response.statusCode() + ": " + body));
                         }))
                 .bodyToMono(String.class)
-                .timeout(Duration.ofSeconds(120))
-                .retryWhen(Retry.backoff(2, Duration.ofSeconds(5))
+                .timeout(Duration.ofSeconds(timeoutSeconds))
+                .retryWhen(Retry.backoff(Math.max(0, maxRetry), Duration.ofSeconds(2))
                         .doBeforeRetry(sig -> log.warn("[Gemini] Retry #{} vì: {}",
                                 sig.totalRetriesInARow() + 1, sig.failure().getMessage())))
                 .onErrorResume(e -> {

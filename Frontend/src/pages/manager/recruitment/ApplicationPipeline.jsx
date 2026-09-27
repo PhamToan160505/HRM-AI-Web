@@ -6,15 +6,16 @@ import { Star, ShieldAlert, ShieldCheck, ChevronLeft, ChevronRight, Briefcase, U
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 const PIPELINE_COLUMNS = [
-  { id: 'NEW', title: 'Chờ AI xử lý', color: 'bg-gray-100', barColor: '#94a3b8' },
   { id: 'PENDING_HR_CV_REVIEW', title: 'HR Duyệt CV', color: 'bg-amber-50', barColor: '#fbbf24' },
   { id: 'PENDING_TECH_CV_REVIEW', title: 'Chuyên môn', color: 'bg-blue-50', barColor: '#60a5fa' },
   { id: 'PENDING_INTERVIEW_1', title: 'Phỏng vấn 1', color: 'bg-purple-50', barColor: '#a78bfa' },
-  { id: 'PENDING_CEO_EVALUATION', title: 'TGĐ Đánh giá', color: 'bg-indigo-50', barColor: '#818cf8' },
   { id: 'PENDING_INTERVIEW_2', title: 'Phỏng vấn 2', color: 'bg-pink-50', barColor: '#f472b6' },
+  { id: 'PENDING_HR_OFFER', title: 'HR soạn Offer', color: 'bg-cyan-50', barColor: '#22d3ee' },
   { id: 'PENDING_OFFER_APPROVAL', title: 'Duyệt Offer', color: 'bg-teal-50', barColor: '#2dd4bf' },
-  { id: 'OFFER_APPROVED', title: 'Đã nhận việc', color: 'bg-emerald-50', barColor: '#34d399' },
-  { id: 'REJECTED', title: 'Đã từ chối', color: 'bg-rose-50', barColor: '#f87171' } // Thêm cột từ chối cho biểu đồ
+  { id: 'OFFER_INTERNALLY_APPROVED', title: 'Offer đã duyệt', color: 'bg-emerald-50', barColor: '#34d399' },
+  { id: 'OFFER_SENT', title: 'Đã gửi Offer', color: 'bg-sky-50', barColor: '#38bdf8' },
+  { id: 'OFFER_ACCEPTED', title: 'Đã chấp nhận', color: 'bg-green-50', barColor: '#22c55e' },
+  { id: 'REJECTED', title: 'Đã từ chối', color: 'bg-rose-50', barColor: '#f87171' }
 ];
 
 export default function ApplicationPipeline() {
@@ -241,7 +242,7 @@ export default function ApplicationPipeline() {
   // --- RENDER LEVEL 2 ---
   const job = selectedCampaign.jobPosting;
   const filteredApps = applications; // For the board, we might exclude REJECTED, but let's keep all for stats
-  const boardColumns = PIPELINE_COLUMNS.filter(c => c.id !== 'REJECTED'); // Board doesn't show rejected
+  const boardColumns = PIPELINE_COLUMNS.filter(c => c.id !== 'REJECTED');
   
   // Prepare chart data
   const chartData = PIPELINE_COLUMNS.map(col => ({

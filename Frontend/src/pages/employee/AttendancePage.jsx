@@ -369,9 +369,11 @@ export default function EmployeeAttendancePage() {
                                         </tr>
                                     ) : filteredHistory.length === 0 ? (
                                         <tr>
-                                            <td colSpan="5" className="px-6 py-16 text-center text-slate-400 flex flex-col items-center">
-                                                <Clock size={40} className="text-slate-200 mb-3" />
-                                                <span className="font-medium text-slate-500">Chưa có dữ liệu chấm công tháng này.</span>
+                                            <td colSpan="5" className="px-6 py-16 text-center">
+                                                <div className="flex flex-col items-center justify-center text-slate-400">
+                                                    <Clock size={40} className="text-slate-200 mb-3" />
+                                                    <span className="font-medium text-slate-500">Chưa có dữ liệu chấm công tháng này.</span>
+                                                </div>
                                             </td>
                                         </tr>
                                     ) : (

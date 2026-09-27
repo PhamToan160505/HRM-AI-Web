@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Search, ShieldAlert, ShieldCheck, Star, ChevronLeft, Briefcase, Users, UserPlus, UserCheck, AlertCircle, ChevronRight, Trash2, Clock, Filter } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Search, ShieldAlert, ChevronLeft, Briefcase, Users, UserPlus, UserCheck, ChevronRight, Trash2, Clock, Filter, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../../services/api';
 import { useNotification } from '../../../context/NotificationContext';
@@ -33,6 +33,9 @@ export default function ApplicationListPage() {
   const [currentPage, setCurrentPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
+  const [sortMode, setSortMode] = useState('TIME');
+  const [aiByApplication, setAiByApplication] = useState({});
+  const [loadingAi, setLoadingAi] = useState(false);
   const pageSize = 5;
 
   // Fetch departments for filter
@@ -84,6 +87,41 @@ export default function ApplicationListPage() {
     }
   }, [selectedCampaign, currentPage, selectedStatus]);
 
+  useEffect(() => {
+    if (!selectedCampaign) {
+      setAiByApplication({});
+      setSortMode('TIME');
+      return;
+    }
+    let active = true;
+    setLoadingAi(true);
+    api.get(`/api/recruitment/jobs/${selectedCampaign.jobPosting.id}/ai-analyses/current`)
+      .then(response => {
+        if (!active) return;
+        const comparable = (response.data.data || []).reduce((result, analysis) => {
+          const previous = result[analysis.applicationId];
+          if (!previous || new Date(analysis.completedAt || analysis.createdAt) > new Date(previous.completedAt || previous.createdAt)) {
+            result[analysis.applicationId] = analysis;
+          }
+          return result;
+        }, {});
+        setAiByApplication(comparable);
+      })
+      .catch(() => { if (active) setAiByApplication({}); })
+      .finally(() => { if (active) setLoadingAi(false); });
+    return () => { active = false; };
+  }, [selectedCampaign]);
+
+  const displayedApplications = useMemo(() => {
+    if (sortMode !== 'AI_EVIDENCE') return applications;
+    return [...applications].sort((left, right) => {
+      const leftScore = Number(aiByApplication[left.id]?.evidenceScore ?? -1);
+      const rightScore = Number(aiByApplication[right.id]?.evidenceScore ?? -1);
+      if (rightScore !== leftScore) return rightScore - leftScore;
+      return new Date(left.createdAt) - new Date(right.createdAt);
+    });
+  }, [applications, aiByApplication, sortMode]);
+
   const fetchApplications = async () => {
     setLoadingApps(true);
     try {
@@ -124,19 +162,25 @@ export default function ApplicationListPage() {
   };
 
   const STATUS_MAP = {
-    'NEW':                     { label: 'Chờ AI xử lý', color: 'bg-gray-100 text-gray-700' },
     'PENDING_HR_CV_REVIEW':    { label: 'HR Duyệt CV', color: 'bg-amber-100 text-amber-700' },
     'PENDING_TECH_CV_REVIEW':  { label: 'Chuyên môn Duyệt CV', color: 'bg-blue-100 text-blue-700' },
     'PENDING_INTERVIEW_1':     { label: 'Phỏng vấn 1', color: 'bg-purple-100 text-purple-700' },
-    'PENDING_CEO_EVALUATION':  { label: 'TGĐ Đánh giá', color: 'bg-indigo-100 text-indigo-700' },
     'PENDING_INTERVIEW_2':     { label: 'Phỏng vấn 2', color: 'bg-pink-100 text-pink-700' },
+    'PENDING_HR_OFFER':        { label: 'HR soạn Offer', color: 'bg-cyan-100 text-cyan-700' },
     'PENDING_OFFER_APPROVAL':  { label: 'Chờ duyệt Offer', color: 'bg-teal-100 text-teal-700' },
-    'OFFER_APPROVED':          { label: 'Đã nhận việc', color: 'bg-emerald-100 text-emerald-700' },
+    'OFFER_INTERNALLY_APPROVED': { label: 'Offer đã duyệt nội bộ', color: 'bg-emerald-100 text-emerald-700' },
+    'OFFER_SENT':              { label: 'Đã gửi Offer', color: 'bg-sky-100 text-sky-700' },
+    'OFFER_ACCEPTED':          { label: 'Ứng viên đã chấp nhận', color: 'bg-green-100 text-green-700' },
+    'TALENT_POOL':             { label: 'Talent Pool', color: 'bg-violet-100 text-violet-700' },
+    'WITHDRAWN':               { label: 'Đã rút hồ sơ', color: 'bg-slate-100 text-slate-700' },
+    'OFFER_DECLINED':          { label: 'Từ chối Offer', color: 'bg-orange-100 text-orange-700' },
+    'OFFER_EXPIRED':           { label: 'Offer hết hạn', color: 'bg-slate-100 text-slate-700' },
+    'OFFER_REVOKED':           { label: 'Offer đã thu hồi', color: 'bg-red-100 text-red-700' },
     'REJECTED':                { label: 'Đã loại', color: 'bg-rose-100 text-rose-700' },
   };
 
   const getStatusBadge = (app) => {
-    if (app.needsVerification && app.approvalStatus === 'NEW') {
+    if (app.needsVerification && app.approvalStatus === 'PENDING_HR_CV_REVIEW') {
       return <span className="px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1 w-max bg-purple-100 text-purple-700">Cần xác minh</span>;
     }
     const s = STATUS_MAP[app.approvalStatus];
@@ -330,7 +374,7 @@ export default function ApplicationListPage() {
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
         {/* Filters Level 2 */}
-        <div className="p-4 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row gap-3">
+        <div className="p-4 border-b border-slate-200 bg-slate-50 flex flex-col lg:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input
@@ -353,7 +397,22 @@ export default function ApplicationListPage() {
               ))}
             </select>
           </div>
+          <button
+            type="button"
+            disabled={loadingAi}
+            onClick={() => setSortMode(current => current === 'TIME' ? 'AI_EVIDENCE' : 'TIME')}
+            className={`inline-flex items-center justify-center gap-2 rounded-lg border px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50 ${sortMode === 'AI_EVIDENCE' ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700'}`}
+            title="Chỉ dùng kết quả cùng cặp phiên bản tiêu chí và scoring profile của chiến dịch"
+          >
+            <Sparkles size={16} /> {sortMode === 'AI_EVIDENCE' ? 'Đang xếp theo bằng chứng AI' : 'Sắp theo bằng chứng AI'}
+          </button>
         </div>
+
+        {sortMode === 'AI_EVIDENCE' && (
+          <div className="border-b border-blue-100 bg-blue-50 px-4 py-2.5 text-xs text-blue-800">
+            AI chỉ đổi thứ tự hỗ trợ xem xét. Quyết định tuyển dụng vẫn do người có thẩm quyền thực hiện; chỉ so sánh kết quả cùng cặp version hiện tại.
+          </div>
+        )}
 
         {/* Table Level 2 */}
         <div className="overflow-x-auto flex-1">
@@ -371,13 +430,13 @@ export default function ApplicationListPage() {
                 <tr className="bg-slate-50 border-b border-slate-200">
                   <th className="p-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Ứng viên</th>
                   <th className="p-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Liên hệ</th>
-                  <th className="p-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Mức độ phù hợp</th>
+                  <th className="p-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Bằng chứng AI</th>
                   <th className="p-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Trạng thái</th>
                   <th className="p-4 text-xs font-semibold text-slate-600 uppercase tracking-wider text-right">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {applications.map(app => (
+                {displayedApplications.map(app => (
                   <tr key={app.id} className="hover:bg-slate-50/70 transition-colors group">
                     <td className="p-4">
                       <div className="flex items-center gap-3">
@@ -402,20 +461,13 @@ export default function ApplicationListPage() {
                       <div className="text-xs text-slate-500 mt-0.5">{app.phone}</div>
                     </td>
                     <td className="p-4">
-                      {app.fitScore ? (
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 max-w-[100px] h-2 bg-slate-100 rounded-full overflow-hidden">
-                            <div 
-                              className={`h-full rounded-full ${app.fitScore >= 80 ? 'bg-emerald-500' : app.fitScore >= 60 ? 'bg-blue-500' : 'bg-amber-500'}`}
-                              style={{ width: `${app.fitScore}%` }}
-                            ></div>
-                          </div>
-                          <span className={`font-semibold text-sm ${app.fitScore >= 80 ? 'text-emerald-600' : app.fitScore >= 60 ? 'text-blue-600' : 'text-amber-600'}`}>
-                            {app.fitScore}%
-                          </span>
+                      {aiByApplication[app.id]?.status === 'DONE' ? (
+                        <div className="min-w-40 space-y-1.5">
+                          <div className="flex items-center justify-between gap-3 text-xs"><span className="text-slate-500">Độ phủ lời khai</span><strong className="text-blue-700">{Number(aiByApplication[app.id].claimCoverage || 0).toFixed(0)}%</strong></div>
+                          <div className="flex items-center justify-between gap-3 text-xs"><span className="text-slate-500">Mức bằng chứng</span><strong className="text-indigo-700">{Number(aiByApplication[app.id].evidenceScore || 0).toFixed(0)}%</strong></div>
                         </div>
                       ) : (
-                        <span className="text-xs text-slate-400 italic">Chưa đánh giá</span>
+                        <span className="text-xs text-slate-400 italic">Chưa có kết quả cùng version</span>
                       )}
                     </td>
                     <td className="p-4">

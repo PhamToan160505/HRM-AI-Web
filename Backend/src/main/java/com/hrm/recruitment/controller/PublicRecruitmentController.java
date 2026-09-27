@@ -28,6 +28,8 @@ public class PublicRecruitmentController {
     private final ApplicationService applicationService;
     private final com.hrm.ai.service.CvParserService cvParserService;
     private final com.hrm.ai.service.CvExtractionService cvExtractionService;
+    private final com.hrm.ai.service.CvFileSafetyService cvFileSafetyService;
+    private final com.hrm.ai.service.AiConsentService aiConsentService;
 
     // Rate Limiter: 10 requests / 1 phút mỗi IP
     private final Map<String, Bucket> cache = new ConcurrentHashMap<>();
@@ -42,7 +44,7 @@ public class PublicRecruitmentController {
     @GetMapping("/{slug}")
     public ResponseEntity<ApiResponse<JobPosting>> getJobPosting(@PathVariable String slug) {
         JobPosting job = jobPostingService.getJobBySlug(slug);
-        if (!"OPEN".equals(job.getStatus())) {
+        if (job.getStatus() != com.hrm.recruitment.entity.JobPostingStatus.OPEN) {
             throw new IllegalArgumentException("Tin tuyển dụng này đã đóng");
         }
 
@@ -62,12 +64,26 @@ public class PublicRecruitmentController {
     @PostMapping("/{slug}/extract-cv")
     public ResponseEntity<ApiResponse<String>> extractCvData(
             @PathVariable String slug,
-            @RequestParam("cvFile") MultipartFile cvFile
+            @RequestParam("cvFile") MultipartFile cvFile,
+            @RequestParam(value = "aiConsent", defaultValue = "false") boolean aiConsent
     ) {
+        if (!aiConsent) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.error("Bạn cần đồng ý phân tích CV bằng AI trước khi dùng tính năng này."));
+        }
+        if (slug != null) {
+            return ResponseEntity.status(HttpStatus.GONE).body(ApiResponse.error(
+                    "Tính năng bóc tách trước khi nộp đã tắt để tránh gửi thông tin định danh chưa che cho AI. "
+                            + "Bạn hãy nhập họ tên, email và số điện thoại; phân tích bằng chứng sẽ chạy an toàn sau khi nộp."));
+        }
         JobPosting job = jobPostingService.getJobBySlug(slug);
         try {
             byte[] bytes = cvFile.getBytes();
-            String rawText = cvParserService.parseCvFile(bytes, cvFile.getOriginalFilename());
+            var validated = cvFileSafetyService.validateAndExtract(bytes, cvFile.getOriginalFilename());
+            String rawText = validated.visibleText();
+            if (rawText == null || rawText.trim().isEmpty()) {
+                rawText = cvParserService.parseCvFile(bytes, cvFile.getOriginalFilename());
+            }
             if (rawText == null || rawText.trim().isEmpty()) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                         .body(ApiResponse.error("Không thể đọc được văn bản từ CV này."));
@@ -91,6 +107,7 @@ public class PublicRecruitmentController {
             @RequestParam(value = "cccdFile", required = false) MultipartFile cccdFile,
             @RequestParam(value = "rawCvText", required = false) String rawCvText,
             @RequestParam(value = "extractedData", required = false) String extractedData,
+            @RequestParam(value = "aiConsent", defaultValue = "false") boolean aiConsent,
             HttpServletRequest request
     ) {
         JobPosting job = jobPostingService.getJobBySlug(slug);
@@ -109,7 +126,7 @@ public class PublicRecruitmentController {
         if (bucket.tryConsume(1)) {
             try {
                 Application app = applicationService.submitApplication(
-                        slug, fullName, email, phone, cvFile, cccdFile, rawCvText, extractedData
+                        slug, fullName, email, phone, cvFile, cccdFile, rawCvText, extractedData, aiConsent
                 );
                 return ResponseEntity.status(HttpStatus.CREATED)
                         .body(ApiResponse.ok(app, "Nộp hồ sơ thành công, AI đang tiến hành phân tích"));
@@ -121,5 +138,12 @@ public class PublicRecruitmentController {
             return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
                     .body(ApiResponse.error("Bạn đã thao tác quá nhanh. Vui lòng đợi 1 phút."));
         }
+    }
+
+    @GetMapping("/{slug}/ai-consent")
+    public ResponseEntity<ApiResponse<com.hrm.ai.service.AiConsentService.ConsentNotice>> aiConsentNotice(
+            @PathVariable String slug) {
+        jobPostingService.getJobBySlug(slug);
+        return ResponseEntity.ok(ApiResponse.ok(aiConsentService.notice(), "Nội dung đồng ý phân tích CV"));
     }
 }

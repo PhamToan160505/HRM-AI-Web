@@ -125,13 +125,19 @@ public class EmployeeRequestService {
         }
 
         for (User approver : approvers) {
+            String path = switch (approver.getRole()) {
+                case CEO -> "/ceo/requests";
+                case GIAM_DOC_PHONG_BAN -> "/director/requests";
+                case TRUONG_PHONG -> "/manager/requests";
+                default -> "/employee/my-requests";
+            };
             notificationService.createNotification(
                     approver.getId(),
                     "REQUEST",
                     "Có đơn yêu cầu mới",
                     "Nhân viên " + user.getHoTen() + " vừa tạo đơn yêu cầu mới.",
                     "binh_thuong",
-                    "/manager/requests"
+                    path
             );
         }
 

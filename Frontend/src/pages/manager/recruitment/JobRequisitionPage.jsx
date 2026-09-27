@@ -21,7 +21,8 @@ const ForcePortal = ({ children }) => {
 import { useAuth } from '../../../context/AuthContext';
 import { useToast } from '../../../components/common/Toast';
 import api from '../../../services/api';
-import { Filter, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Filter, ChevronLeft, ChevronRight, History } from 'lucide-react';
+import ApprovalTimelineModal from './components/ApprovalTimelineModal';
 
 const ROLES_MAP = {
   NHAN_VIEN: 'Nhân viên',
@@ -32,10 +33,13 @@ const ROLES_MAP = {
 };
 
 const STATUS_MAP = {
-  PENDING_CEO: { label: 'Chờ CEO duyệt', color: 'bg-yellow-100 text-yellow-800' },
+  DRAFT: { label: 'Bản nháp', color: 'bg-slate-100 text-slate-700' },
+  PENDING_APPROVAL: { label: 'Chờ duyệt', color: 'bg-yellow-100 text-yellow-800' },
   APPROVED: { label: 'Đã duyệt', color: 'bg-green-100 text-green-800' },
+  REVISION_REQUIRED: { label: 'Cần chỉnh sửa', color: 'bg-orange-100 text-orange-800' },
   REJECTED: { label: 'Từ chối', color: 'bg-red-100 text-red-800' },
-  POSTED: { label: 'Đã tạo chiến dịch', color: 'bg-indigo-100 text-indigo-800' },
+  CANCELLED: { label: 'Đã hủy', color: 'bg-slate-100 text-slate-700' },
+  FULFILLED: { label: 'Đã tuyển đủ', color: 'bg-indigo-100 text-indigo-800' },
 };
 
 export default function JobRequisitionPage() {
@@ -63,6 +67,7 @@ export default function JobRequisitionPage() {
   // Modal action (approve/reject)
   const [actionModal, setActionModal] = useState({ isOpen: false, type: '', reqId: null });
   const [actionReason, setActionReason] = useState('');
+  const [timelineRequisition, setTimelineRequisition] = useState(null);
 
   // Fetch initial deps
   useEffect(() => {
@@ -83,7 +88,7 @@ export default function JobRequisitionPage() {
       if (activeTab === 'my_requests') {
         url += `&filterRequesterId=${user.userId}`;
       } else if (activeTab === 'ceo_approved') {
-        // HR views ceo approved ones. The backend already handles showing APPROVED/POSTED for HR
+        // HR views approved requests. Posting lifecycle is tracked separately.
         // We can optionally force it if needed, but backend takes care of it based on role.
       }
       
@@ -116,12 +121,25 @@ export default function JobRequisitionPage() {
 
   const handleAction = async () => {
     const { type, reqId } = actionModal;
+    if ((type === 'reject' || type === 'return') && !actionReason.trim()) {
+      show('Thiếu thông tin', 'Vui lòng nhập lý do trước khi tiếp tục', 'error');
+      return;
+    }
     try {
       if (type === 'approve') {
-        await api.post(`/api/job-requisitions/${reqId}/approve`);
+        await api.post(`/api/job-requisitions/${reqId}/approve`, null, {
+          headers: { 'Idempotency-Key': crypto.randomUUID() }
+        });
         show('Thành công', 'Đã duyệt yêu cầu', 'success');
+      } else if (type === 'return') {
+        await api.post(`/api/job-requisitions/${reqId}/return`, { comment: actionReason }, {
+          headers: { 'Idempotency-Key': crypto.randomUUID() }
+        });
+        show('Thành công', 'Đã trả yêu cầu về để chỉnh sửa', 'success');
       } else {
-        await api.post(`/api/job-requisitions/${reqId}/reject`, { reason: actionReason });
+        await api.post(`/api/job-requisitions/${reqId}/reject`, { reason: actionReason }, {
+          headers: { 'Idempotency-Key': crypto.randomUUID() }
+        });
         show('Thành công', 'Đã từ chối yêu cầu', 'success');
       }
       fetchRequisitions();
@@ -130,6 +148,18 @@ export default function JobRequisitionPage() {
     } finally {
       setActionModal({ isOpen: false, type: '', reqId: null });
       setActionReason('');
+    }
+  };
+
+  const handleWithdraw = async (reqId) => {
+    try {
+      await api.post(`/api/job-requisitions/${reqId}/withdraw`, null, {
+        headers: { 'Idempotency-Key': crypto.randomUUID() }
+      });
+      show('Thành công', 'Đã thu hồi yêu cầu về bản nháp', 'success');
+      fetchRequisitions();
+    } catch (error) {
+      show('Lỗi', error.response?.data?.message || 'Không thể thu hồi yêu cầu', 'error');
     }
   };
 
@@ -173,10 +203,13 @@ export default function JobRequisitionPage() {
               className="px-4 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 appearance-none shadow-sm min-w-[140px]"
             >
               <option value="">Tất cả trạng thái</option>
-              <option value="PENDING_CEO">Chờ duyệt</option>
+              <option value="DRAFT">Bản nháp</option>
+              <option value="PENDING_APPROVAL">Chờ duyệt</option>
               <option value="APPROVED">Đã duyệt</option>
-              <option value="POSTED">Đã lên chiến dịch</option>
+              <option value="REVISION_REQUIRED">Cần chỉnh sửa</option>
               <option value="REJECTED">Bị từ chối</option>
+              <option value="CANCELLED">Đã hủy</option>
+              <option value="FULFILLED">Đã tuyển đủ</option>
             </select>
 
           <button
@@ -283,7 +316,15 @@ export default function JobRequisitionPage() {
                         {STATUS_MAP[req.status]?.label || req.status}
                       </span>
                       <div className="flex gap-2">
-                        {req.status === 'PENDING_CEO' && (user.role === 'ceo' || user.role === 'admin') && (
+                        <button
+                          type="button"
+                          onClick={() => setTimelineRequisition(req)}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                          title="Xem lịch sử gửi, trả về và duyệt"
+                        >
+                          <History size={15} /> Lịch sử
+                        </button>
+                        {req.status === 'PENDING_APPROVAL' && (user.role === 'ceo' || user.role === 'admin') && req.requesterId !== user.userId && (
                           <>
                             <button
                               onClick={() => setActionModal({ isOpen: true, type: 'approve', reqId: req.id })}
@@ -292,12 +333,34 @@ export default function JobRequisitionPage() {
                               Duyệt
                             </button>
                             <button
+                              onClick={() => setActionModal({ isOpen: true, type: 'return', reqId: req.id })}
+                              className="text-white bg-amber-500 hover:bg-amber-600 px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
+                            >
+                              Trả về
+                            </button>
+                            <button
                               onClick={() => setActionModal({ isOpen: true, type: 'reject', reqId: req.id })}
                               className="text-white bg-red-500 hover:bg-red-600 px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
                             >
                               Từ chối
                             </button>
                           </>
+                        )}
+                        {req.status === 'PENDING_APPROVAL' && req.requesterId === user.userId && (
+                          <button
+                            onClick={() => handleWithdraw(req.id)}
+                            className="text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
+                          >
+                            Thu hồi
+                          </button>
+                        )}
+                        {(req.status === 'REVISION_REQUIRED' || req.status === 'DRAFT') && req.requesterId === user.userId && (
+                          <button
+                            onClick={() => navigate(`${req.id}/edit`)}
+                            className="text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
+                          >
+                            Chỉnh sửa
+                          </button>
                         )}
                         {req.status === 'APPROVED' && user?.role === 'truong_phong' && user?.tenPhong === 'Nhân sự' && (
                           <button
@@ -368,7 +431,7 @@ export default function JobRequisitionPage() {
       )}
 
       {/* Modal Reject */}
-      {actionModal.isOpen && actionModal.type === 'reject' && (
+      {actionModal.isOpen && (actionModal.type === 'reject' || actionModal.type === 'return') && (
         <ForcePortal>
           <div className="fixed inset-0 z-[9999] overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
             <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
@@ -379,13 +442,13 @@ export default function JobRequisitionPage() {
                   <div className="sm:flex sm:items-start">
                     <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
                       <h3 className="text-lg leading-6 font-medium text-gray-900" id="modal-title">
-                        Lý do từ chối
+                        {actionModal.type === 'return' ? 'Lý do trả về' : 'Lý do từ chối'}
                       </h3>
                       <div className="mt-2">
                         <textarea
                           rows={4}
                           className="shadow-sm focus:ring-red-500 focus:border-red-500 block w-full sm:text-sm border-gray-300 rounded-md p-2 border"
-                          placeholder="Nhập lý do từ chối..."
+                          placeholder={actionModal.type === 'return' ? 'Nhập nội dung cần chỉnh sửa...' : 'Nhập lý do từ chối...'}
                           value={actionReason}
                           onChange={(e) => setActionReason(e.target.value)}
                         />
@@ -399,7 +462,7 @@ export default function JobRequisitionPage() {
                     onClick={handleAction}
                     className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm"
                   >
-                    Xác nhận từ chối
+                    {actionModal.type === 'return' ? 'Xác nhận trả về' : 'Xác nhận từ chối'}
                   </button>
                   <button
                     type="button"
@@ -462,6 +525,9 @@ export default function JobRequisitionPage() {
             </div>
           </div>
         </ForcePortal>
+      )}
+      {timelineRequisition && (
+        <ApprovalTimelineModal requisition={timelineRequisition} onClose={() => setTimelineRequisition(null)} />
       )}
     </div>
   );

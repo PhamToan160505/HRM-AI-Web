@@ -21,6 +21,9 @@ public class AccountCreationRequest {
     @Column(name = "application_id", nullable = false)
     private Long applicationId;
 
+    @Column(name = "employee_id")
+    private Long employeeId;
+
     @Column(name = "ho_ten", nullable = false, length = 150)
     private String hoTen;
 
@@ -34,8 +37,29 @@ public class AccountCreationRequest {
     private String chucVu;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "mode", nullable = false)
+    @Builder.Default
+    private RequestMode mode = RequestMode.PREPARE_ONLY;
+
+    @Column(name = "user_id")
+    private Long userId;
+
+    @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
     private RequestStatus status;
+
+    @Column(name = "approved_by")
+    private Long approvedBy;
+
+    @Column(name = "approved_at")
+    private LocalDateTime approvedAt;
+
+    @Column(name = "last_error", length = 1000)
+    private String lastError;
+
+    @Column(name = "retry_count", nullable = false)
+    @Builder.Default
+    private Integer retryCount = 0;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -44,11 +68,15 @@ public class AccountCreationRequest {
     protected void onCreate() {
         createdAt = LocalDateTime.now();
         if (status == null) {
-            status = RequestStatus.PENDING;
+            status = RequestStatus.PENDING_ADMIN;
         }
     }
 
     public enum RequestStatus {
-        PENDING, APPROVED, REJECTED
+        PENDING_ADMIN, APPROVED_REQUEST, PROVISIONING, PROVISIONED, FAILED, CANCELLED
+    }
+
+    public enum RequestMode {
+        PREPARE_ONLY, ENSURE_ACTIVE
     }
 }

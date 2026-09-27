@@ -133,25 +133,26 @@ export default function ApplicationPersonalInfoForm({ application, mode = 'manag
     <div className="mb-8">
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-bold text-slate-800">Thông tin cá nhân</h3>
-        {mode === 'public' && <span className="text-xs text-blue-600 font-medium bg-blue-50 px-2 py-1 rounded">Vui lòng kiểm tra lại thông tin AI trích xuất</span>}
+        {mode === 'public' && <span className="text-xs text-blue-600 font-medium bg-blue-50 px-2 py-1 rounded">Chỉ thu thập thông tin cần thiết để ứng tuyển</span>}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
         {renderField('fullName', 'Họ và tên', <User size={16} />)}
-        {renderField('dob', 'Ngày sinh', <Calendar size={16} />)}
-        {renderField('gender', 'Giới tính', <User size={16} />, 'text', [
-          { label: 'Nam', value: 'Nam' },
-          { label: 'Nữ', value: 'Nữ' },
-          { label: 'Khác', value: 'Khác' }
-        ])}
         {renderField('email', 'Email', <Mail size={16} />, 'email')}
         {renderField('phone', 'SĐT', <Phone size={16} />)}
-        {renderField('cccd', 'CCCD', <CreditCard size={16} />)}
-        
-        {renderField('nation', 'Dân tộc', <Globe size={16} />)}
-        {renderField('nationality', 'Quốc tịch', <Globe size={16} />)}
-        {renderField('religion', 'Tôn giáo', <Globe size={16} />)}
-        {renderField('address', 'Địa chỉ', <MapPin size={16} />)}
+        {mode !== 'public' && <>
+          {renderField('dob', 'Ngày sinh', <Calendar size={16} />)}
+          {renderField('gender', 'Giới tính', <User size={16} />, 'text', [
+            { label: 'Nam', value: 'Nam' },
+            { label: 'Nữ', value: 'Nữ' },
+            { label: 'Khác', value: 'Khác' }
+          ])}
+          {renderField('cccd', 'CCCD', <CreditCard size={16} />)}
+          {renderField('nation', 'Dân tộc', <Globe size={16} />)}
+          {renderField('nationality', 'Quốc tịch', <Globe size={16} />)}
+          {renderField('religion', 'Tôn giáo', <Globe size={16} />)}
+          {renderField('address', 'Địa chỉ', <MapPin size={16} />)}
+        </>}
       </div>
 
       {mode === 'public' && onSave && (

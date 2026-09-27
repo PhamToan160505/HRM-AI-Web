@@ -121,13 +121,13 @@ export default function JobPostingList() {
   // Handle Actions
   const handleCloseJob = async (id) => {
     try {
-      const res = await api.patch(`/api/recruitment/jobs/${id}/status`, { status: 'CLOSED' });
+      const res = await api.patch(`/api/recruitment/jobs/${id}/status`, { status: 'PAUSED' });
       if (res.data.success) {
-        showNotification('Thành công', 'Đã đóng chiến dịch', 'success');
+        showNotification('Thành công', 'Đã tạm dừng chiến dịch', 'success');
         fetchCampaigns();
       }
     } catch (err) {
-      showNotification('Lỗi', 'Không thể đóng chiến dịch', 'error');
+      showNotification('Lỗi', err.response?.data?.message || 'Không thể tạm dừng chiến dịch', 'error');
     }
   };
 
@@ -139,7 +139,7 @@ export default function JobPostingList() {
         fetchCampaigns();
       }
     } catch (err) {
-      showNotification('Lỗi', 'Không thể mở lại chiến dịch', 'error');
+      showNotification('Lỗi', err.response?.data?.message || 'Không thể mở lại chiến dịch', 'error');
     }
   };
 
@@ -377,7 +377,7 @@ export default function JobPostingList() {
                           job.status === 'OPEN' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
                         }`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${job.status === 'OPEN' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
-                          {job.status === 'OPEN' ? 'Đang mở' : 'Đã đóng'}
+                          {job.status === 'OPEN' ? 'Đang mở' : job.status === 'PAUSED' ? 'Tạm dừng' : job.status === 'EXPIRED' ? 'Hết hạn' : job.status === 'FILLED' ? 'Đã tuyển đủ' : 'Đã hủy'}
                         </span>
                       </div>
                       
@@ -410,18 +410,26 @@ export default function JobPostingList() {
 
                   {isExpanded && (
                     <div className="border-t border-slate-100 animate-fade-in-up">
-                      <div className="p-5 grid grid-cols-2 md:grid-cols-4 gap-4 bg-slate-50/80">
+                      <div className="p-5 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 bg-slate-50/80">
                         <div className="bg-white rounded-lg p-3 border border-slate-100"><p className="text-xs text-slate-400 mb-1">Số lượng tuyển</p><p className="text-sm font-semibold text-slate-800">{job.soLuongTuyen} người</p></div>
                         <div className="bg-white rounded-lg p-3 border border-slate-100"><p className="text-xs text-slate-400 mb-1">Mức lương</p><p className="text-sm font-semibold text-slate-800">{job.coThoaThuan ? 'Thỏa thuận' : (job.mucLuong || '—')}</p></div>
                         <div className="bg-white rounded-lg p-3 border border-slate-100"><p className="text-xs text-slate-400 mb-1">Hình thức</p><p className="text-sm font-semibold text-slate-800">{job.hinhThucLamViec?.replace('_', '-') || '—'}</p></div>
                         <div className="bg-white rounded-lg p-3 border border-slate-100"><p className="text-xs text-slate-400 mb-1">Hạn nộp hồ sơ</p><p className="text-sm font-semibold text-slate-800">{new Date(job.hanNopHoSo).toLocaleDateString('vi-VN')}</p></div>
+                        <div className="rounded-lg border border-blue-100 bg-blue-50 p-3"><p className="mb-1 text-xs text-blue-500">Phiên bản tiêu chí</p><p className="text-sm font-bold text-blue-900">{job.criteriaVersionId ? `#${job.criteriaVersionId}` : 'Chưa khóa'}</p></div>
+                        <div className="rounded-lg border border-indigo-100 bg-indigo-50 p-3"><p className="mb-1 text-xs text-indigo-500">Scoring profile</p><p className="text-sm font-bold text-indigo-900">{job.scoringProfileVersionId ? `#${job.scoringProfileVersionId}` : 'Chưa khóa'}</p></div>
+                      </div>
+
+                      <div className="border-t border-slate-100 bg-white px-5 py-3 text-xs text-slate-500">
+                        {job.status === 'OPEN'
+                          ? 'Hai phiên bản trên đã khóa cho chiến dịch đang mở. Kết quả AI chỉ được so sánh khi cùng cặp phiên bản.'
+                          : 'Phiên bản tiêu chí và scoring profile sẽ được khóa khi chiến dịch chuyển sang OPEN.'}
                       </div>
 
                       {canManageCampaigns && (
                         <div className="px-5 pb-4 border-t border-slate-100 bg-white flex justify-end gap-2 pt-3">
                           <Link to={`/manager/recruitment/campaigns/edit/${job.id}`} className="flex items-center gap-1.5 px-4 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg font-medium text-sm transition-colors border border-blue-200">Sửa</Link>
                           {job.status === 'OPEN' ? (
-                            <button onClick={(e) => openConfirm(e, 'CLOSE', job.id, 'Xác nhận đóng', 'Bạn có chắc chắn muốn đóng chiến dịch này?')} className="flex items-center gap-1.5 px-4 py-2 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-lg font-medium text-sm border border-amber-200"><XCircle size={16} /> Đóng đợt</button>
+                            <button onClick={(e) => openConfirm(e, 'CLOSE', job.id, 'Xác nhận tạm dừng', 'Bạn có chắc chắn muốn tạm dừng chiến dịch này?')} className="flex items-center gap-1.5 px-4 py-2 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-lg font-medium text-sm border border-amber-200"><XCircle size={16} /> Tạm dừng</button>
                           ) : (
                             <Link to={`/manager/recruitment/campaigns/edit/${job.id}?reopen=true`} className="flex items-center gap-1.5 px-4 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg font-medium text-sm border border-emerald-200"><CheckCircle2 size={16} /> Mở đợt</Link>
                           )}

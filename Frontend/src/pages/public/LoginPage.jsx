@@ -2,19 +2,20 @@ import React, { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import {
   ArrowRight,
+  BadgeCheck,
   Building2,
   Check,
-  ChevronDown,
   KeyRound,
   ShieldCheck,
   Sparkles,
   UserRound,
+  UsersRound,
 } from 'lucide-react';
+import logoImg from '../../assets/logo.jpg';
 import { useAuth } from '../../context/AuthContext';
 import { useLogin } from '../../hooks/useLogin';
-import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
-import { Card } from '../../components/common/Card';
+import './LoginPage.css';
 
 const DEMO_ACCOUNTS = [
   { label: 'Quản trị viên', shortLabel: 'Admin', maNhanVien: '99000001' },
@@ -24,17 +25,19 @@ const DEMO_ACCOUNTS = [
   { label: 'Nhân viên', shortLabel: 'Nhân viên', maNhanVien: '01000002' },
 ];
 
-const HIGHLIGHTS = [
-  'Tuyển dụng với trợ lý AI',
-  'Chấm công khuôn mặt chính xác',
-  'Tự động hóa tính lương và báo cáo',
+const LOGIN_FEATURES = [
+  {
+    icon: ShieldCheck,
+    title: 'Dữ liệu nhất quán',
+    description: 'Mọi nghiệp vụ nhân sự được kết nối trong một hệ thống.',
+  },
+  {
+    icon: ArrowRight,
+    title: 'Ra quyết định tốt hơn',
+    description: 'AI hỗ trợ phân tích, con người luôn là người quyết định.',
+  },
 ];
 
-/**
- * Trang đăng nhập — public, không cần JWT.
- * Thiết kế: split layout — panel trái (brand) + panel phải (form).
- * Bảng màu: xanh dương & trắng theo SKILL_frontend-design.md mục 0.
- */
 export default function LoginPage() {
   const { isAuthenticated, role } = useAuth();
   const { handleLogin, loading, error, clearError } = useLogin();
@@ -42,8 +45,8 @@ export default function LoginPage() {
   const [maNhanVien, setMaNhanVien] = useState('');
   const [password, setPassword] = useState('');
   const [validationErrors, setValidationErrors] = useState({});
+  const [activeTab, setActiveTab] = useState('login');
 
-  // Nếu đã đăng nhập, redirect về dashboard tương ứng
   if (isAuthenticated) {
     const redirectMap = {
       admin: '/admin/dashboard',
@@ -52,31 +55,26 @@ export default function LoginPage() {
       truong_phong: '/manager/dashboard',
       nhan_vien: '/employee/dashboard',
     };
-    
+
     if (!redirectMap[role]) {
-      // Clear old/invalid token to break redirect loop
       localStorage.removeItem('hrm_token');
       localStorage.removeItem('hrm_user');
       window.location.reload();
       return null;
     }
-    
+
     return <Navigate to={redirectMap[role]} replace />;
   }
 
   const validate = () => {
     const errors = {};
-    if (!maNhanVien.trim()) {
-      errors.maNhanVien = 'Vui lòng nhập mã nhân viên';
-    }
-    if (!password) {
-      errors.password = 'Vui lòng nhập mật khẩu';
-    }
+    if (!maNhanVien.trim()) errors.maNhanVien = 'Vui lòng nhập mã nhân viên';
+    if (!password) errors.password = 'Vui lòng nhập mật khẩu';
     return errors;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     clearError();
 
     const errors = validate();
@@ -84,201 +82,213 @@ export default function LoginPage() {
       setValidationErrors(errors);
       return;
     }
+
     setValidationErrors({});
     await handleLogin(maNhanVien, password);
   };
 
+  const updateField = (field, value) => {
+    if (field === 'maNhanVien') setMaNhanVien(value);
+    if (field === 'password') setPassword(value);
+    setValidationErrors((current) => ({ ...current, [field]: undefined }));
+    clearError();
+  };
+
+  const selectDemoAccount = (demoMaNhanVien) => {
+    setMaNhanVien(demoMaNhanVien);
+    setPassword('Admin@123');
+    setValidationErrors({});
+    clearError();
+    setActiveTab('login');
+  };
+
   return (
-    <main className="min-h-screen bg-slate-50 lg:grid lg:grid-cols-[minmax(460px,0.92fr)_1.08fr]">
-      {/* ── Panel trái — Brand ────────────────────────────────────── */}
-      <section className="relative hidden min-h-screen overflow-hidden bg-gradient-to-br from-[#102a67] via-[#1748b5] to-[#2870ed] p-10 text-white lg:flex lg:flex-col lg:justify-between xl:p-14">
-        <div className="absolute -right-32 -top-28 h-96 w-96 rounded-full bg-sky-300/20 blur-3xl" />
-        <div className="absolute -bottom-44 -left-24 h-[30rem] w-[30rem] rounded-full bg-blue-950/30 blur-3xl" />
-        <div
-          className="absolute inset-0 opacity-[0.08]"
-          style={{
-            backgroundImage:
-              'linear-gradient(rgba(255,255,255,.7) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.7) 1px, transparent 1px)',
-            backgroundSize: '44px 44px',
-            maskImage: 'linear-gradient(to bottom, black, transparent 82%)',
-          }}
-        />
+    <main className="hrm-login-page">
+      <div className="hrm-login-shell">
+        <section className="hrm-login-brand" aria-label="Giới thiệu HRM AI">
+          <div className="hrm-login-brand-ring" aria-hidden="true" />
+          <div className="hrm-login-brand-glow" aria-hidden="true" />
 
-        {/* Logo */}
-        <div className="relative z-10 flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/20 bg-white/15 shadow-lg shadow-blue-950/20 backdrop-blur-sm">
-            <Building2 size={21} strokeWidth={1.8} />
-          </div>
-          <div>
-            <p className="text-lg font-bold leading-none tracking-tight">HRM AI</p>
-            <p className="mt-1 text-[11px] font-medium tracking-wide text-blue-100/75">
-              HUMAN RESOURCE MANAGEMENT
-            </p>
-          </div>
-        </div>
-
-        {/* Main brand copy */}
-        <div className="relative z-10 my-12 max-w-xl">
-          <h1 className="max-w-lg text-[2.6rem] font-bold leading-[1.12] tracking-[-0.035em] xl:text-5xl">
-            Quản trị nhân sự
-            <span className="mt-1 block text-sky-200">thông minh hơn mỗi ngày</span>
-          </h1>
-          <p className="mt-5 max-w-lg text-sm leading-6 text-blue-100/80 xl:text-[15px]">
-            Một không gian làm việc thống nhất giúp doanh nghiệp vận hành đội ngũ hiệu quả,
-            minh bạch và an toàn.
-          </p>
-
-          <div className="mt-8 space-y-3">
-            {HIGHLIGHTS.map((item) => (
-              <div key={item} className="flex items-center gap-3 text-sm text-blue-50/90">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-300/20 text-cyan-100">
-                  <Check size={12} strokeWidth={3} />
-                </span>
-                {item}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="relative z-10 flex items-center gap-2 text-xs text-blue-100/65">
-          <ShieldCheck size={15} />
-          <span>Dữ liệu được mã hóa và bảo vệ theo tiêu chuẩn doanh nghiệp</span>
-        </div>
-      </section>
-
-      {/* ── Panel phải — Form đăng nhập ───────────────────────────── */}
-      <section className="relative flex min-h-screen items-center justify-center overflow-hidden px-5 py-10 sm:px-8 lg:px-12">
-        <div className="absolute right-0 top-0 h-72 w-72 rounded-full bg-blue-100/60 blur-3xl" />
-        <div className="absolute bottom-0 left-16 h-56 w-56 rounded-full bg-indigo-100/50 blur-3xl" />
-
-        <div className="relative z-10 w-full max-w-[440px] animate-fade-in-up">
-          {/* Mobile logo */}
-          <div className="mb-8 flex items-center justify-center gap-3 lg:hidden">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-700 to-blue-500 text-white shadow-lg shadow-blue-600/25">
-              <Building2 size={21} />
-            </div>
-            <div>
-              <p className="text-lg font-bold leading-none text-slate-900">HRM AI</p>
-              <p className="mt-1 text-[10px] font-medium tracking-wide text-slate-400">HUMAN RESOURCE MANAGEMENT</p>
-            </div>
-          </div>
-
-          <Card className="w-full backdrop-blur-sm" innerClassName="bg-white/95 p-8 sm:p-10">
-            <div className="mb-7">
-              <h2 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-[28px]">
-                Chào mừng trở lại
-              </h2>
-              <p className="mt-2 text-sm text-slate-500">
-                Đăng nhập để tiếp tục vào không gian làm việc của bạn.
-              </p>
-            </div>
-
-            <form id="login-form" onSubmit={handleSubmit} noValidate className="space-y-5">
-              {/* Global error từ server */}
-              {error && (
-                <div
-                  role="alert"
-                  className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-xs leading-5 text-red-700"
-                >
-                  <span className="mt-0.5 shrink-0">⚠</span>
-                  {error}
-                </div>
-              )}
-
-              <Input
-                id="login-manhanvien"
-                label="Mã nhân viên"
-                type="text"
-                placeholder="Nhập mã nhân viên"
-                value={maNhanVien}
-                onChange={(e) => setMaNhanVien(e.target.value)}
-                error={validationErrors.maNhanVien}
-                startIcon={<UserRound size={17} />}
-                className="h-12 rounded-xl border-slate-200 bg-slate-50/70 text-[13px] focus:bg-white"
-                required
-                autoComplete="username"
-                autoFocus
-              />
-
-              <Input
-                id="login-password"
-                label="Mật khẩu"
-                type="password"
-                placeholder="Nhập mật khẩu"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                error={validationErrors.password}
-                startIcon={<KeyRound size={17} />}
-                className="h-12 rounded-xl border-slate-200 bg-slate-50/70 text-[13px] focus:bg-white"
-                required
-                autoComplete="current-password"
-              />
-
-              <Button
-                id="login-submit-btn"
-                type="submit"
-                fullWidth
-                loading={loading}
-                size="lg"
-                trailingIcon={<ArrowRight size={18} />}
-              >
-                {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
-              </Button>
-            </form>
-
-            {/* Gợi ý tài khoản demo */}
-            <details className="group mt-6 rounded-2xl border border-slate-200 bg-slate-50/70 open:bg-white">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 text-xs font-semibold text-slate-600 marker:content-none">
-                <span className="flex items-center gap-2">
-                  Dùng tài khoản trải nghiệm
-                </span>
-                <ChevronDown size={15} className="text-slate-400 transition-transform group-open:rotate-180" />
-              </summary>
-              <div className="border-t border-slate-100 px-4 pb-4 pt-3">
-                <p className="mb-3 text-[11px] leading-4 text-slate-400">
-                  Chọn một vai trò để hệ thống tự điền thông tin đăng nhập.
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  {DEMO_ACCOUNTS.map(({ label, shortLabel, maNhanVien: demoMaNhanVien }) => {
-                    const isSelected = maNhanVien === demoMaNhanVien;
-                    return (
-                      <button
-                        key={demoMaNhanVien}
-                        type="button"
-                        title={label}
-                        onClick={() => {
-                          setMaNhanVien(demoMaNhanVien);
-                          setPassword('Admin@123');
-                          setValidationErrors({});
-                          clearError();
-                        }}
-                        className={`flex min-h-10 items-center justify-between rounded-xl border px-3 py-2 text-left text-[11px] font-medium transition-all ${
-                          isSelected
-                            ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm'
-                            : 'border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:text-blue-700'
-                        }`}
-                      >
-                        <span className="truncate">{shortLabel}</span>
-                        {isSelected && <Check size={13} className="shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </details>
-          </Card>
-
-          <div className="mt-6 flex flex-col items-center justify-center gap-2 text-center text-[11px] text-slate-400 sm:flex-row sm:gap-3">
-            <span>© 2026 HRM AI</span>
-            <span className="hidden h-1 w-1 rounded-full bg-slate-300 sm:block" />
-            <span className="inline-flex items-center gap-1.5">
-              <ShieldCheck size={12} />
-              Hệ thống dành riêng cho nội bộ doanh nghiệp
+          <div className="hrm-login-logo">
+            <span className="hrm-login-logo-mark overflow-hidden p-0.5">
+              <img src={logoImg} alt="HRM AI Logo" className="w-full h-full object-cover rounded-xl" />
+            </span>
+            <span>
+              <strong>HRM AI</strong>
+              <small>QUẢN TRỊ NHÂN SỰ</small>
             </span>
           </div>
-        </div>
-      </section>
+
+          <div className="hrm-login-brand-content">
+            <div className="hrm-login-pill">
+              <span>Vận hành đội ngũ trong một không gian</span>
+            </div>
+
+            <h1>
+              Hiểu đội ngũ.
+              <span>Vận hành tốt hơn.</span>
+            </h1>
+
+            <p className="hrm-login-brand-copy">
+              Tuyển dụng, chấm công, tính lương và theo dõi vận hành — rõ ràng,
+              liền mạch trong cùng một hệ thống.
+            </p>
+
+            <div className="hrm-login-benefits">
+              {LOGIN_FEATURES.map(({ icon: Icon, title, description }) => (
+                <article className="hrm-login-benefit" key={title}>
+                  <Icon size={23} strokeWidth={1.8} />
+                  <h2>{title}</h2>
+                  <p>{description}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+
+          <p className="hrm-login-brand-footer">
+            Một hệ thống thống nhất cho toàn bộ hành trình nhân sự.
+          </p>
+        </section>
+
+        <section className="hrm-login-auth" aria-label="Đăng nhập hệ thống">
+          <div className="hrm-login-auth-inner">
+            <div className="hrm-login-mobile-logo">
+              <span className="hrm-login-mobile-logo-mark overflow-hidden p-0.5">
+                <img src={logoImg} alt="HRM AI Logo" className="w-full h-full object-cover rounded-lg" />
+              </span>
+              <span>
+                <strong>HRM AI</strong>
+                <small>QUẢN TRỊ NHÂN SỰ</small>
+              </span>
+            </div>
+
+            <header className="hrm-login-heading">
+              <p>CHÀO MỪNG TRỞ LẠI</p>
+              <h2>Tiếp tục quản lý đội ngũ</h2>
+              <span>Đăng nhập để truy cập không gian làm việc của bạn.</span>
+            </header>
+
+            <div className="hrm-login-card">
+              <div className="hrm-login-tabs" role="tablist" aria-label="Tùy chọn đăng nhập">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === 'login'}
+                  className={activeTab === 'login' ? 'is-active' : ''}
+                  onClick={() => setActiveTab('login')}
+                >
+                  Đăng nhập
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === 'demo'}
+                  className={activeTab === 'demo' ? 'is-active' : ''}
+                  onClick={() => setActiveTab('demo')}
+                >
+                  Tài khoản demo
+                </button>
+              </div>
+
+              {activeTab === 'login' ? (
+                <form className="hrm-login-form" id="login-form" onSubmit={handleSubmit} noValidate>
+                  {error && (
+                    <div className="hrm-login-server-error" role="alert">
+                      {error}
+                    </div>
+                  )}
+
+                  <div className="hrm-login-field">
+                    <Input
+                      id="login-manhanvien"
+                      label="Mã nhân viên"
+                      type="text"
+                      placeholder="Ví dụ: 99000001"
+                      value={maNhanVien}
+                      onChange={(event) => updateField('maNhanVien', event.target.value)}
+                      error={validationErrors.maNhanVien}
+                      startIcon={<UserRound size={19} strokeWidth={1.8} />}
+                      className="hrm-login-input"
+                      required
+                      autoComplete="username"
+                      autoFocus
+                    />
+                  </div>
+
+                  <div className="hrm-login-field">
+                    <Input
+                      id="login-password"
+                      label="Mật khẩu"
+                      type="password"
+                      placeholder="Nhập mật khẩu"
+                      value={password}
+                      onChange={(event) => updateField('password', event.target.value)}
+                      error={validationErrors.password}
+                      startIcon={<KeyRound size={19} strokeWidth={1.8} />}
+                      className="hrm-login-input"
+                      required
+                      autoComplete="current-password"
+                    />
+                  </div>
+
+                  <p className="hrm-login-account-note">
+                    <BadgeCheck size={17} />
+                    Dành cho tài khoản nội bộ đã được cấp quyền
+                  </p>
+
+                  <button className="hrm-login-submit" id="login-submit-btn" type="submit" disabled={loading}>
+                    {loading ? (
+                      <>
+                        <span className="hrm-login-spinner" aria-hidden="true" />
+                        Đang đăng nhập...
+                      </>
+                    ) : (
+                      <>
+                        Đăng nhập
+                        <ArrowRight size={18} />
+                      </>
+                    )}
+                  </button>
+                </form>
+              ) : (
+                <div className="hrm-login-demo-panel">
+                  <div className="hrm-login-demo-note">
+                    <UsersRound size={19} />
+                    <p>Chọn vai trò để tự điền tài khoản. Mật khẩu mặc định là Admin@123.</p>
+                  </div>
+
+                  <div className="hrm-login-demo-grid">
+                    {DEMO_ACCOUNTS.map(({ label, shortLabel, maNhanVien: demoMaNhanVien }) => {
+                      const isSelected = maNhanVien === demoMaNhanVien;
+                      return (
+                        <button
+                          key={demoMaNhanVien}
+                          type="button"
+                          className={isSelected ? 'is-selected' : ''}
+                          onClick={() => selectDemoAccount(demoMaNhanVien)}
+                        >
+                          <span>
+                            <strong>{shortLabel}</strong>
+                            <small>{demoMaNhanVien}</small>
+                          </span>
+                          {isSelected ? <Check size={17} /> : <ArrowRight size={16} />}
+                          <span className="hrm-login-sr-only">Chọn tài khoản {label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <footer className="hrm-login-footer">
+              <span>© 2026 HRM AI</span>
+              <i aria-hidden="true" />
+              <span><ShieldCheck size={13} /> Hệ thống nội bộ doanh nghiệp</span>
+            </footer>
+          </div>
+        </section>
+      </div>
     </main>
   );
 }

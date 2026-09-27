@@ -4,6 +4,7 @@ import com.hrm.attendance.repository.AttendanceRepository;
 import com.hrm.common.repository.UserRepository;
 import com.hrm.recruitment.repository.ApplicationRepository;
 import com.hrm.recruitment.entity.ApplicationStatus;
+import com.hrm.recruitment.entity.JobPostingStatus;
 import com.hrm.recruitment.repository.JobPostingRepository;
 import com.hrm.common.repository.DepartmentRepository;
 import com.hrm.common.payroll.repository.PayrollRepository;
@@ -44,12 +45,11 @@ public class DashboardService {
         Double totalBudget = userRepository.sumTotalSalaryBudgetByRoleIn(employeeRoles);
         stats.put("totalSalaryBudget", totalBudget != null ? totalBudget : 0.0);
         
-        long totalOpenJobs = jobPostingRepository.countByStatus("OPEN");
+        long totalOpenJobs = jobPostingRepository.countByStatus(JobPostingStatus.OPEN);
         stats.put("openJobs", totalOpenJobs);
         
         long pendingDirectorApps =
-            applicationRepository.countByApprovalStatus(ApplicationStatus.PENDING_CEO_EVALUATION)
-            + applicationRepository.countByApprovalStatus(ApplicationStatus.PENDING_OFFER_APPROVAL);
+            applicationRepository.countByApprovalStatus(ApplicationStatus.PENDING_OFFER_APPROVAL);
         stats.put("pendingApplications", pendingDirectorApps);
         
         long pendingPayrolls = payrollRepository.countByStatus("DRAFT");
@@ -139,7 +139,7 @@ public class DashboardService {
         Double totalBudget = userRepository.sumTotalSalaryBudgetByDepartmentId(deptId);
         stats.put("totalSalaryBudget", totalBudget != null ? totalBudget : 0.0);
         
-        long totalOpenJobs = jobPostingRepository.countByStatusAndDepartmentId("OPEN", deptId);
+        long totalOpenJobs = jobPostingRepository.countByStatusAndDepartmentId(JobPostingStatus.OPEN, deptId);
         stats.put("openJobs", totalOpenJobs);
         
         long pendingDirectorApps = applicationRepository.countByApprovalStatusAndJobPosting_DepartmentId(
@@ -266,7 +266,7 @@ public class DashboardService {
         }
         stats.put("payrollStatus", payrollStatus);
         
-        stats.put("openJobs", jobPostingRepository.findByStatus("OPEN"));
+        stats.put("openJobs", jobPostingRepository.findByStatus(JobPostingStatus.OPEN));
         
         return stats;
     }

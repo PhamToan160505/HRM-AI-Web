@@ -8,16 +8,22 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface JobRequisitionRepository extends JpaRepository<JobRequisition, Long> {
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select j from JobRequisition j where j.id = :id")
+    Optional<JobRequisition> lockById(@Param("id") Long id);
     List<JobRequisition> findByRequesterId(Long requesterId);
     List<JobRequisition> findByDepartmentId(Long departmentId);
     List<JobRequisition> findByStatus(JobRequisitionStatus status);
     List<JobRequisition> findByDepartmentIdAndStatus(Long departmentId, JobRequisitionStatus status);
 
-    @Query("SELECT j FROM JobRequisition j WHERE (:departmentId IS NULL OR j.departmentId = :departmentId) AND (:targetRole IS NULL OR j.targetRole = :targetRole) AND (:status IS NULL OR j.status = :status) AND (:filterRequesterId IS NULL OR j.requesterId = :filterRequesterId) AND (j.requesterId = :userId OR :isCEO = true OR (:isHR = true AND j.status IN ('APPROVED', 'POSTED')))")
+    @Query("SELECT j FROM JobRequisition j WHERE (:departmentId IS NULL OR j.departmentId = :departmentId) AND (:targetRole IS NULL OR j.targetRole = :targetRole) AND (:status IS NULL OR j.status = :status) AND (:filterRequesterId IS NULL OR j.requesterId = :filterRequesterId) AND (j.requesterId = :userId OR :isCEO = true OR (:isHR = true AND j.status = com.hrm.recruitment.entity.JobRequisitionStatus.APPROVED))")
     Page<JobRequisition> findWithFiltersAndPermissions(
             @Param("departmentId") Long departmentId, 
             @Param("targetRole") Role targetRole, 

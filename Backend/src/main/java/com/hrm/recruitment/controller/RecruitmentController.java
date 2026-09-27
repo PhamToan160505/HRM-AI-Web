@@ -1,11 +1,15 @@
 package com.hrm.recruitment.controller;
 
 import com.hrm.ai.entity.AiDecisionLog;
+import com.hrm.ai.entity.AiAnalysis;
 import com.hrm.exception.ApiResponse;
 import com.hrm.recruitment.entity.Application;
+import com.hrm.recruitment.entity.ApplicationTransitionLog;
 import com.hrm.recruitment.entity.JobPosting;
+import com.hrm.recruitment.entity.RecruitmentEntityType;
 import com.hrm.recruitment.service.ApplicationService;
 import com.hrm.recruitment.service.JobPostingService;
+import com.hrm.recruitment.service.RecruitmentTransitionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -15,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.hrm.ai.service.AiRecruiterDigestService;
+import com.hrm.ai.service.AiAnalysisService;
 
 @RestController
 @RequestMapping("/api/recruitment")
@@ -24,6 +29,8 @@ public class RecruitmentController {
     private final JobPostingService jobPostingService;
     private final ApplicationService applicationService;
     private final AiRecruiterDigestService aiRecruiterDigestService;
+    private final RecruitmentTransitionService recruitmentTransitionService;
+    private final AiAnalysisService aiAnalysisService;
 
     // --- JOB POSTINGS ---
 
@@ -63,7 +70,7 @@ public class RecruitmentController {
         if (!jobPostingService.isSpecialRole(userDetails)) {
             return ResponseEntity.status(403).body(ApiResponse.error("Bạn không có quyền tạo chiến dịch tuyển dụng"));
         }
-        JobPosting job = jobPostingService.createJob(request);
+        JobPosting job = jobPostingService.createJob(request, userDetails);
         return ResponseEntity.ok(ApiResponse.ok(job, "Tạo tin tuyển dụng thành công"));
     }
 
@@ -73,7 +80,7 @@ public class RecruitmentController {
         if (!jobPostingService.isSpecialRole(userDetails)) {
             return ResponseEntity.status(403).body(ApiResponse.error("Bạn không có quyền sửa chiến dịch tuyển dụng"));
         }
-        JobPosting job = jobPostingService.updateJob(id, request);
+        JobPosting job = jobPostingService.updateJob(id, request, userDetails);
         return ResponseEntity.ok(ApiResponse.ok(job, "Cập nhật tin tuyển dụng thành công"));
     }
 
@@ -83,7 +90,7 @@ public class RecruitmentController {
         if (!jobPostingService.isSpecialRole(userDetails)) {
             return ResponseEntity.status(403).body(ApiResponse.error("Bạn không có quyền thay đổi trạng thái chiến dịch"));
         }
-        JobPosting job = jobPostingService.updateJobStatus(id, request.status());
+        JobPosting job = jobPostingService.updateJobStatus(id, request.status(), request.reason(), userDetails);
         return ResponseEntity.ok(ApiResponse.ok(job, "Cập nhật trạng thái thành công"));
     }
 
@@ -119,8 +126,12 @@ public class RecruitmentController {
 
     @GetMapping("/applications/{id}")
     @PreAuthorize("hasAnyRole('TRUONG_PHONG', 'GIAM_DOC_PHONG_BAN', 'CEO')")
-    public ResponseEntity<ApiResponse<Application>> getApplicationById(@PathVariable Long id) {
-        return ResponseEntity.ok(ApiResponse.ok(applicationService.getApplicationById(id), "Thành công"));
+    public ResponseEntity<ApiResponse<Application>> getApplicationById(
+            @PathVariable Long id,
+            @org.springframework.security.core.annotation.AuthenticationPrincipal com.hrm.security.CustomUserDetails userDetails) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                applicationService.viewApplication(id, userDetails.getUserId()),
+                "Thành công"));
     }
 
     @PostMapping("/applications/{id}/approve")
@@ -128,9 +139,12 @@ public class RecruitmentController {
     public ResponseEntity<ApiResponse<Application>> approveApplication(
             @PathVariable Long id,
             @RequestBody(required = false) Map<String, String> body,
+            @RequestHeader(name = "X-Request-ID", required = false) String requestId,
+            @RequestHeader(name = "Idempotency-Key") String idempotencyKey,
             @org.springframework.security.core.annotation.AuthenticationPrincipal com.hrm.security.CustomUserDetails userDetails) {
         String feedback = (body != null) ? body.getOrDefault("feedback", "") : "";
-        Application app = applicationService.approveApplication(id, userDetails, feedback);
+        Application app = applicationService.approveApplication(
+                id, userDetails, feedback, requestId, idempotencyKey);
         return ResponseEntity.ok(ApiResponse.ok(app, "Đã duyệt hồ sơ sang vòng tiếp theo"));
     }
 
@@ -139,14 +153,26 @@ public class RecruitmentController {
     public ResponseEntity<ApiResponse<Application>> rejectApplication(
             @PathVariable Long id, 
             @RequestBody(required = false) Map<String, String> body,
+            @RequestHeader(name = "X-Request-ID", required = false) String requestId,
+            @RequestHeader(name = "Idempotency-Key") String idempotencyKey,
             @org.springframework.security.core.annotation.AuthenticationPrincipal com.hrm.security.CustomUserDetails userDetails
     ) {
         String reason = (body != null) ? body.getOrDefault("reason", "") : "";
         if (reason.trim().isEmpty()) {
             throw new RuntimeException("Phải nhập lý do từ chối");
         }
-        Application app = applicationService.rejectApplication(id, userDetails, reason);
+        Application app = applicationService.rejectApplication(
+                id, userDetails, reason, requestId, idempotencyKey);
         return ResponseEntity.ok(ApiResponse.ok(app, "Đã từ chối hồ sơ"));
+    }
+
+    @GetMapping("/applications/{id}/transitions")
+    @PreAuthorize("hasAnyRole('TRUONG_PHONG', 'GIAM_DOC_PHONG_BAN', 'CEO', 'ADMIN')")
+    public ResponseEntity<ApiResponse<List<ApplicationTransitionLog>>> getApplicationTimeline(@PathVariable Long id) {
+        applicationService.getApplicationById(id);
+        return ResponseEntity.ok(ApiResponse.ok(
+                recruitmentTransitionService.getTimeline(RecruitmentEntityType.APPLICATION, id),
+                "Lấy lịch sử chuyển trạng thái thành công"));
     }
 
     @DeleteMapping("/applications/{id}")
@@ -167,6 +193,29 @@ public class RecruitmentController {
     @PreAuthorize("hasAnyRole('TRUONG_PHONG', 'GIAM_DOC_PHONG_BAN', 'CEO')")
     public ResponseEntity<ApiResponse<List<AiDecisionLog>>> getAiLogs(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.ok(applicationService.getAiLogsForApplication(id), "Thành công"));
+    }
+
+    @GetMapping("/applications/{id}/ai-analyses")
+    @PreAuthorize("hasAnyRole('TRUONG_PHONG', 'GIAM_DOC_PHONG_BAN', 'CEO', 'ADMIN')")
+    public ResponseEntity<ApiResponse<List<AiAnalysisService.AnalysisView>>> getAiAnalysisHistory(
+            @PathVariable Long id) {
+        applicationService.getApplicationById(id);
+        return ResponseEntity.ok(ApiResponse.ok(aiAnalysisService.history(id),
+                "Lịch sử phân tích AI theo phiên bản"));
+    }
+
+    @GetMapping("/jobs/{jobId}/ai-analyses/current")
+    @PreAuthorize("hasAnyRole('TRUONG_PHONG', 'GIAM_DOC_PHONG_BAN', 'CEO', 'ADMIN')")
+    public ResponseEntity<ApiResponse<List<AiAnalysisService.AnalysisView>>> getCurrentComparableAiAnalyses(
+            @PathVariable Long jobId,
+            @org.springframework.security.core.annotation.AuthenticationPrincipal com.hrm.security.CustomUserDetails userDetails) {
+        if (!jobPostingService.hasAccessToJob(jobId, userDetails)) {
+            throw com.hrm.exception.AppException.forbidden("Bạn không có quyền xem kết quả AI của posting này");
+        }
+        List<AiAnalysisService.AnalysisView> results = aiAnalysisService.getCurrentComparableViews(jobId);
+        return ResponseEntity.ok(ApiResponse.ok(
+                results,
+                "Chỉ trả kết quả AI cùng cặp criteria/scoring version hiện tại"));
     }
 
     @PostMapping("/test-digest")
@@ -192,9 +241,18 @@ public class RecruitmentController {
             String capBac,
             com.hrm.common.entity.Role targetRole,
             Long departmentId,
-            Long jobRequisitionId
+            Long jobRequisitionId,
+            List<ScreeningCriterionRequest> criteria
     ) {}
-    public record StatusRequest(String status) {}
+    public record ScreeningCriterionRequest(
+            String id,
+            String name,
+            String type,
+            Integer weight,
+            List<String> synonyms,
+            String evidenceExpected
+    ) {}
+    public record StatusRequest(String status, String reason) {}
     public record PriorityRequest(boolean isPriority) {}
     public record ReasonRequest(String reason) {}
 }

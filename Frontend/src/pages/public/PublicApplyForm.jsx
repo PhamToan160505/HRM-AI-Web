@@ -16,7 +16,8 @@ export default function PublicApplyForm() {
   
   const [step, setStep] = useState(1);
   const [cvFile, setCvFile] = useState(null);
-  const [cccdFile, setCccdFile] = useState(null);
+  const [aiConsent, setAiConsent] = useState(false);
+  const [consentNotice, setConsentNotice] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [extractingCv, setExtractingCv] = useState(false);
   const [extractedCvData, setExtractedCvData] = useState(null);
@@ -39,6 +40,14 @@ export default function PublicApplyForm() {
       });
   }, [jobSlug]);
 
+  useEffect(() => {
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+    fetch(`${apiUrl}/public/apply/${jobSlug}/ai-consent`)
+      .then(res => res.json())
+      .then(data => data.success && setConsentNotice(data.data))
+      .catch(() => setConsentNotice(null));
+  }, [jobSlug]);
+
   const handleNextToStep2 = () => {
     if (!cvFile) {
       showNotification('Lỗi', 'Vui lòng upload CV của bạn', 'error');
@@ -52,12 +61,17 @@ export default function PublicApplyForm() {
       showNotification('Lỗi', 'Không có CV để trích xuất', 'error');
       return;
     }
+    if (!aiConsent) {
+      showNotification('Cần sự đồng ý', 'Hãy đồng ý phân tích CV bằng AI trước khi dùng tính năng này.', 'error');
+      return;
+    }
 
     setExtractingCv(true);
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
       const formData = new FormData();
       formData.append('cvFile', cvFile);
+      formData.append('aiConsent', 'true');
 
       const res = await fetch(`${apiUrl}/public/apply/${jobSlug}/extract-cv`, {
         method: 'POST',
@@ -80,6 +94,10 @@ export default function PublicApplyForm() {
 
   const handleSubmit = async (formData) => {
     if (submitting) return;
+    if (!formData.fullName?.trim() || !formData.email?.trim() || !formData.phone?.trim()) {
+      showNotification('Thiếu thông tin', 'Họ tên, email và số điện thoại là bắt buộc.', 'error');
+      return;
+    }
     setSubmitting(true);
     try {
       const data = new FormData();
@@ -87,14 +105,14 @@ export default function PublicApplyForm() {
       data.append('email', formData.email);
       data.append('phone', formData.phone);
       if (cvFile) data.append('cvFile', cvFile);
-      if (cccdFile) data.append('cccdFile', cccdFile);
+      data.append('aiConsent', String(aiConsent));
       
       // Backend sẽ tự động đọc file PDF để trích xuất chữ. Frontend không cần gửi rawCvText giả nữa.
       data.append('rawCvText', '');
       
       // Gửi toàn bộ thông tin ứng viên đã nhập làm extractedData ban đầu
       const formattedData = {};
-      Object.keys(formData).forEach(key => {
+      ['fullName', 'email', 'phone'].forEach(key => {
         formattedData[key] = { value: formData[key], confidence: 100 };
       });
       data.append('extractedData', JSON.stringify(formattedData));
@@ -231,20 +249,24 @@ export default function PublicApplyForm() {
               <label className="block">
                 <span className="text-sm font-medium text-slate-700 block mb-2">Tải lên CV (Bắt buộc)</span>
                 <div className="border-2 border-dashed border-blue-200 rounded-xl p-8 text-center hover:bg-blue-50 transition-colors cursor-pointer relative">
-                  <input type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={(e) => setCvFile(e.target.files[0])} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                  <input type="file" accept=".pdf,.docx" onChange={(e) => setCvFile(e.target.files[0])} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
                   <Upload size={32} className="text-blue-500 mx-auto mb-3" />
                   <p className="text-sm font-medium text-blue-700">
                     {cvFile ? cvFile.name : 'Nhấn để chọn file hoặc kéo thả vào đây'}
                   </p>
-                  <p className="text-xs text-slate-500 mt-1">Hỗ trợ PDF, DOCX, JPG, PNG (Tối đa 5MB)</p>
+                  <p className="text-xs text-slate-500 mt-1">Chỉ hỗ trợ PDF hoặc DOCX an toàn</p>
                 </div>
               </label>
 
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700 block mb-2">Tải lên Ảnh CCCD/CMND (Tuỳ chọn)</span>
-                <div className="border border-slate-200 rounded-lg p-4 flex items-center gap-4">
-                  <input type="file" accept="image/*" onChange={(e) => setCccdFile(e.target.files[0])} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
-                </div>
+              <label className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4">
+                <input type="checkbox" checked={aiConsent} onChange={(e) => setAiConsent(e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-blue-300 text-blue-600" />
+                <span className="text-sm text-slate-700">
+                  <strong className="block text-slate-900">Đồng ý để AI hỗ trợ phân tích CV (không bắt buộc)</strong>
+                  <span>{consentNotice?.purpose || 'AI chỉ hỗ trợ trích xuất bằng chứng; con người quyết định tuyển dụng.'}</span>
+                  {consentNotice?.providerDisclosure && <span className="mt-1 block text-xs text-slate-500">{consentNotice.providerDisclosure}</span>}
+                  <span className="mt-1 block text-xs font-medium text-blue-700">Không đồng ý vẫn nộp hồ sơ bình thường.</span>
+                </span>
               </label>
             </div>
 
@@ -271,11 +293,11 @@ export default function PublicApplyForm() {
             )}
             
             <div className="bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded-lg text-sm flex items-center justify-between">
-              <span>Hệ thống đã nhận được CV của bạn. Bạn có thể tự điền thông tin hoặc sử dụng AI để tự động trích xuất.</span>
+              <span>Hệ thống đã nhận CV. Vui lòng nhập ba thông tin liên hệ bên dưới; AI chỉ phân tích bằng chứng sau khi nộp và chỉ khi bạn đồng ý.</span>
               <button 
                 onClick={handleExtractAI}
-                disabled={extractingCv}
-                className="flex items-center gap-2 bg-white text-blue-600 px-4 py-2 rounded-md font-medium border border-blue-200 hover:bg-blue-50 transition-colors shadow-sm disabled:opacity-70 disabled:cursor-not-allowed whitespace-nowrap ml-4"
+                disabled={extractingCv || !aiConsent}
+                className="hidden"
               >
                 {extractingCv ? (
                   <><Loader2 className="animate-spin" size={16} /> Đang xử lý...</>
@@ -307,7 +329,9 @@ export default function PublicApplyForm() {
             </div>
             <h3 className="text-2xl font-bold text-slate-800">Nộp hồ sơ thành công!</h3>
             <p className="text-slate-600 max-w-md mx-auto">
-              Hồ sơ của bạn đã được gửi đến bộ phận Tuyển dụng và đang được Trí tuệ Nhân tạo (AI) của chúng tôi phân tích sơ bộ. Chúng tôi sẽ phản hồi qua Email trong thời gian sớm nhất.
+              {aiConsent
+                ? 'Hồ sơ đã được gửi đến bộ phận Tuyển dụng và AI đang hỗ trợ trích xuất bằng chứng theo sự đồng ý của bạn. Con người là bên quyết định.'
+                : 'Hồ sơ đã được gửi đến bộ phận Tuyển dụng và không được gửi cho nhà cung cấp AI. Chúng tôi sẽ phản hồi qua email.'}
             </p>
           </div>
         )}

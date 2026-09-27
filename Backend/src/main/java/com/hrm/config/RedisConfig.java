@@ -10,6 +10,7 @@ import org.springframework.data.redis.listener.adapter.MessageListenerAdapter;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 import com.hrm.chat.service.RedisMessageSubscriber;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 @Configuration
 public class RedisConfig {
@@ -26,6 +27,7 @@ public class RedisConfig {
     }
 
     @Bean
+    @ConditionalOnProperty(name = "app.redis.listener-enabled", havingValue = "true")
     public RedisMessageListenerContainer redisContainer(
             RedisConnectionFactory connectionFactory,
             MessageListenerAdapter listenerAdapter) {

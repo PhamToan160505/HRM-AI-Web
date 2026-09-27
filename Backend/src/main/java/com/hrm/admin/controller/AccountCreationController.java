@@ -8,6 +8,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import com.hrm.security.CustomUserDetails;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 @RestController
 @RequestMapping("/api/admin/account-requests")
@@ -23,9 +25,10 @@ public class AccountCreationController {
     }
 
     @PostMapping("/{id}/approve")
-    public ApiResponse<String> approveRequest(@PathVariable Long id) {
-        accountCreationService.approveRequest(id);
-        return ApiResponse.ok("Đã duyệt yêu cầu và tạo tài khoản thành công!", "Success");
+    public ApiResponse<String> approveRequest(@PathVariable Long id,
+                                              @AuthenticationPrincipal CustomUserDetails actor) {
+        accountCreationService.approveRequest(id, actor.getUserId());
+        return ApiResponse.ok("Đã chuẩn bị tài khoản ở trạng thái chưa kích hoạt.", "Success");
     }
 
     @PostMapping("/{id}/reject")

@@ -1,7 +1,9 @@
 package com.hrm.recruitment.service;
 
 import com.hrm.ai.entity.AiDecisionLog;
+import com.hrm.ai.entity.AiAnalysis;
 import com.hrm.ai.repository.AiDecisionLogRepository;
+import com.hrm.ai.service.AiAnalysisService;
 import com.hrm.ai.service.CvExtractionService;
 import com.hrm.ai.service.CvParserService;
 import com.hrm.ai.service.FraudDetectionService;
@@ -9,6 +11,8 @@ import com.hrm.ai.service.SemanticFitScoreService;
 import com.hrm.recruitment.entity.Application;
 import com.hrm.recruitment.entity.ApplicationStatus;
 import com.hrm.recruitment.entity.JobPosting;
+import com.hrm.recruitment.entity.JobPostingStatus;
+import com.hrm.recruitment.entity.RecruitmentAction;
 import com.hrm.recruitment.repository.ApplicationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,9 +25,8 @@ import com.hrm.common.repository.UserRepository;
 import com.hrm.common.entity.Role;
 import com.hrm.common.entity.User;
 import com.hrm.email.service.EmailService;
-import com.hrm.admin.entity.AccountCreationRequest;
-import com.hrm.admin.repository.AccountCreationRequestRepository;
 import java.util.List;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -42,13 +45,28 @@ public class ApplicationService {
     private final UserRepository userRepository;
     private final EmailService emailService;
     private final AsyncUploadService asyncUploadService;
-    private final AccountCreationRequestRepository accountCreationRequestRepository;
-    private final com.hrm.recruitment.repository.JobPostingRepository jobPostingRepository;
     private final com.hrm.common.repository.DepartmentRepository departmentRepository;
+    private final RecruitmentTransitionService recruitmentTransitionService;
+    private final AiAnalysisService aiAnalysisService;
+    private final com.hrm.ai.service.AiConsentService aiConsentService;
+    private final com.hrm.ai.service.AiCvPipelineService aiCvPipelineService;
+    private final com.hrm.ai.service.CvFileSafetyService cvFileSafetyService;
+    private final com.hrm.configuration.service.ConfigurationService configurationService;
+    private final InterviewService interviewService;
 
     public Application getApplicationById(Long id) {
         return applicationRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Application not found"));
+    }
+
+    @Transactional
+    public Application viewApplication(Long id, Long viewerId) {
+        Application application = getApplicationById(id);
+        if (application.getFirstViewedAt() == null) {
+            application.setFirstViewedAt(java.time.LocalDateTime.now());
+            application.setViewedBy(viewerId);
+        }
+        return application;
     }
 
     public List<AiDecisionLog> getAiLogsForApplication(Long applicationId) {
@@ -84,7 +102,7 @@ public class ApplicationService {
             }
             if (status != null && !status.isEmpty() && !"ALL".equals(status)) {
                 if ("NEEDS_VERIFICATION".equals(status)) {
-                    predicates.add(cb.equal(root.get("approvalStatus"), ApplicationStatus.NEW));
+                    predicates.add(cb.equal(root.get("approvalStatus"), ApplicationStatus.PENDING_HR_CV_REVIEW));
                     predicates.add(cb.isTrue(root.get("needsVerification")));
                 } else if ("PENDING_HR_CV_REVIEW".equals(status)) {
                     predicates.add(cb.equal(root.get("approvalStatus"), ApplicationStatus.PENDING_HR_CV_REVIEW));
@@ -131,7 +149,13 @@ public class ApplicationService {
         return userDetails.getHoTen() + " - " + chucDanh;
     }
 
-    public Application approveApplication(Long id, com.hrm.security.CustomUserDetails userDetails, String feedback) {
+    @Transactional
+    public Application approveApplication(
+            Long id,
+            com.hrm.security.CustomUserDetails userDetails,
+            String feedback,
+            String requestId,
+            String idempotencyKey) {
         Application app = getApplicationById(id);
         Role targetRole = app.getJobPosting().getTargetRole();
         if (targetRole == null) {
@@ -151,80 +175,76 @@ public class ApplicationService {
             }
         }
         
-        // State Machine Logic
+        RecruitmentAction action;
         switch (app.getApprovalStatus()) {
             case PENDING_HR_CV_REVIEW:
-                // HR Duyệt CV
+                requireFeedback(feedback, "Nhận xét HR");
                 app.setHrReviewFeedback(feedback);
                 app.setHrReviewer(getReviewerString(userDetails));
-                app.setApprovalStatus(ApplicationStatus.PENDING_TECH_CV_REVIEW);
+                action = RecruitmentAction.APPROVE_HR_CV;
                 break;
             case PENDING_TECH_CV_REVIEW:
-                // Trưởng phòng / GĐ Duyệt CV
+                requireFeedback(feedback, "Nhận xét chuyên môn");
                 app.setTechReviewFeedback(feedback);
                 app.setTechReviewer(getReviewerString(userDetails));
-                app.setApprovalStatus(ApplicationStatus.PENDING_INTERVIEW_1);
+                action = RecruitmentAction.APPROVE_TECH_CV;
                 break;
             case PENDING_INTERVIEW_1:
-                // Pass Phỏng vấn vòng 1
+                requireFeedback(feedback, "Kết luận phỏng vấn vòng 1");
+                interviewService.requireReadyToPass(id, 1);
                 app.setInterview1Feedback(feedback);
                 app.setInterview1Reviewer(getReviewerString(userDetails));
-                if (targetRole == Role.TRUONG_PHONG) {
-                    app.setApprovalStatus(ApplicationStatus.PENDING_CEO_EVALUATION);
-                } else {
-                    app.setApprovalStatus(ApplicationStatus.PENDING_INTERVIEW_2);
-                }
-                break;
-            case PENDING_CEO_EVALUATION:
-                // TGĐ đánh giá PV 1 của Trưởng phòng
-                app.setApprovalStatus(ApplicationStatus.PENDING_INTERVIEW_2);
+                action = RecruitmentAction.PASS_INTERVIEW_1;
                 break;
             case PENDING_INTERVIEW_2:
-                // Pass Phỏng vấn vòng 2 (Đàm phán)
+                requireFeedback(feedback, "Kết luận phỏng vấn vòng 2 và đàm phán");
+                interviewService.requireReadyToPass(id, 2);
                 app.setInterview2Feedback(feedback);
                 app.setInterview2Reviewer(getReviewerString(userDetails));
-                app.setApprovalStatus(ApplicationStatus.PENDING_HR_OFFER);
+                action = RecruitmentAction.PASS_INTERVIEW_2;
                 break;
             case PENDING_HR_OFFER:
-                // HR lên Bảng Offer trình CEO
-                app.setOfferDetails(feedback);
-                app.setApprovalStatus(ApplicationStatus.PENDING_OFFER_APPROVAL);
-                break;
             case PENDING_OFFER_APPROVAL:
-                // TGĐ Duyệt Offer cuối cùng (Có thể lưu lại CEO feedback nếu cần, ở đây tạm thời chỉ duyệt)
-                // app.setCeoFeedback(feedback); // Nếu có
-                app.setApprovalStatus(ApplicationStatus.OFFER_APPROVED);
-                // Gửi Offer Letter
-                emailService.sendApprovalEmail(app.getEmail(), app.getFullName(), app.getJobPosting().getTitle()); // Tạm dùng Approval email
-                // Tạo tài khoản cho nhân viên mới
-                AccountCreationRequest accountReq = AccountCreationRequest.builder()
-                        .applicationId(app.getId())
-                        .hoTen(app.getFullName())
-                        .email(app.getEmail())
-                        .chucVu(app.getJobPosting().getTitle())
-                        .departmentId(app.getJobPosting().getDepartmentId())
-                        .status(AccountCreationRequest.RequestStatus.PENDING)
-                        .build();
-                accountCreationRequestRepository.save(accountReq);
-
-                // Tự động đóng chiến dịch nếu đã tuyển đủ số lượng
-                int currentAccepted = (int) applicationRepository.countByJobPostingIdAndApprovalStatus(app.getJobPosting().getId(), ApplicationStatus.OFFER_APPROVED);
-                if (currentAccepted + 1 >= app.getJobPosting().getSoLuongTuyen()) {
-                    app.getJobPosting().setStatus("CLOSED");
-                    jobPostingRepository.save(app.getJobPosting());
-                }
-                
-                break;
+                throw com.hrm.exception.AppException.conflict(
+                        "Offer phải được xử lý qua API offer versioned, không dùng endpoint duyệt hồ sơ chung");
             default:
-                throw new RuntimeException("Trạng thái hiện tại không cho phép duyệt: " + app.getApprovalStatus());
+                throw com.hrm.exception.AppException.conflict(
+                        "Trạng thái hiện tại không cho phép duyệt: " + app.getApprovalStatus());
         }
-        return applicationRepository.save(app);
+        return recruitmentTransitionService.transitionApplication(
+                app,
+                action,
+                userDetails.getUserId(),
+                userDetails.getRole(),
+                feedback,
+                requestId,
+                idempotencyKey);
     }
 
-    public Application rejectApplication(Long id, com.hrm.security.CustomUserDetails userDetails, String reason) {
+    @Transactional
+    public Application rejectApplication(
+            Long id,
+            com.hrm.security.CustomUserDetails userDetails,
+            String reason,
+            String requestId,
+            String idempotencyKey) {
         Application app = getApplicationById(id);
-        if (app.getApprovalStatus() == ApplicationStatus.OFFER_APPROVED || app.getApprovalStatus() == ApplicationStatus.REJECTED) {
-            throw new RuntimeException("Hồ sơ đã đóng, không thể từ chối");
+
+        if (app.getApprovalStatus() == ApplicationStatus.PENDING_OFFER_APPROVAL
+                || app.getApprovalStatus() == ApplicationStatus.OFFER_INTERNALLY_APPROVED) {
+            throw com.hrm.exception.AppException.conflict(
+                    "Hồ sơ ở giai đoạn offer phải được xử lý qua API offer versioned");
+        }
+        if (app.getApprovalStatus() == ApplicationStatus.PENDING_HR_OFFER) {
+            boolean isHrDirector = userDetails.getRole() == Role.GIAM_DOC_PHONG_BAN
+                    && userDetails.getDepartmentId() != null
+                    && departmentRepository.findById(userDetails.getDepartmentId())
+                    .map(department -> "Nhân sự".equalsIgnoreCase(department.getTenPhong().trim()))
+                    .orElse(false);
+            if (userDetails.getRole() != Role.CEO && !isHrDirector) {
+                throw com.hrm.exception.AppException.forbidden(
+                        "Từ giai đoạn offer, chỉ HR Head hoặc CEO được từ chối hồ sơ");
+            }
         }
 
         Role targetRole = app.getJobPosting().getTargetRole();
@@ -252,7 +272,6 @@ public class ApplicationService {
                 }
             }
         }
-        app.setApprovalStatus(ApplicationStatus.REJECTED);
         app.setRejectionReason(reason);
         app.setRejectorName(getReviewerString(userDetails));
         
@@ -267,7 +286,17 @@ public class ApplicationService {
                 .build();
         aiDecisionLogRepository.save(logEntry);
         
-        Application savedApp = applicationRepository.save(app);
+        Application savedApp = recruitmentTransitionService.transitionApplication(
+                app,
+                RecruitmentAction.REJECT_APPLICATION,
+                userDetails.getUserId(),
+                userDetails.getRole(),
+                reason,
+                requestId,
+                idempotencyKey);
+
+        // Force optimistic-lock/constraint checks before the external email side effect.
+        applicationRepository.flush();
         
         // Gửi email cảm ơn
         emailService.sendRejectionEmail(savedApp.getEmail(), savedApp.getFullName(), savedApp.getJobPosting().getTitle());
@@ -286,10 +315,14 @@ public class ApplicationService {
      * AI sẽ được chạy thủ công bởi Trưởng phòng qua endpoint riêng.
      * Lý do: tránh lãng phí token AI khi ứng viên spam hồ sơ.
      */
-    public Application submitApplication(String slug, String fullName, String email, String phone, MultipartFile cvFile, MultipartFile cccdFile, String rawCvTextFrontend, String extractedData) throws IOException {
+    @Transactional
+    public Application submitApplication(String slug, String fullName, String email, String phone,
+                                         MultipartFile cvFile, MultipartFile cccdFile,
+                                         String rawCvTextFrontend, String extractedData,
+                                         boolean aiConsent) throws IOException {
         JobPosting job = jobPostingService.getJobBySlug(slug);
 
-        if (!"OPEN".equals(job.getStatus())) {
+        if (job.getStatus() != JobPostingStatus.OPEN) {
             throw new RuntimeException("Tin tuyển dụng này đã đóng");
         }
         
@@ -306,7 +339,15 @@ public class ApplicationService {
         }
 
         // 1. Đọc text thật từ file PDF: Sẽ được chạy ngầm trong AsyncUploadService để tránh treo UI.
-        byte[] cvBytes = (cvFile != null && !cvFile.isEmpty()) ? cvFile.getBytes() : null;
+        if (cccdFile != null && !cccdFile.isEmpty()) {
+            throw com.hrm.exception.AppException.badRequest(
+                    "Không thu thập CCCD ở bước ứng tuyển; giấy tờ định danh chỉ dùng khi pre-boarding");
+        }
+        if (cvFile == null || cvFile.isEmpty()) {
+            throw com.hrm.exception.AppException.badRequest("CV là bắt buộc");
+        }
+        com.hrm.ai.service.CvFileSafetyService.ValidatedCv validated =
+                cvFileSafetyService.validateAndExtract(cvFile.getBytes(), cvFile.getOriginalFilename());
 
         // Lưu hồ sơ với rawCvText tạm thời, AsyncUploadService sẽ cập nhật lại sau
 
@@ -316,24 +357,30 @@ public class ApplicationService {
                 .email(email)
                 .phone(phone)
                 .cvUrl("UPLOADING")
-                .cccdUrl("UPLOADING")
+                .cccdUrl(null)
                 .rawCvText("Đang trích xuất văn bản (chạy ngầm)...") // Lưu tạm thời, AsyncUploadService sẽ cập nhật
                 .extractedData(extractedData)     // Lưu thông tin người dùng đã xác nhận từ frontend
-                .approvalStatus(com.hrm.recruitment.entity.ApplicationStatus.NEW) // Vừa mới tạo, chờ AI duyệt
+                .rawCvText(null)
+                .approvalStatus(com.hrm.recruitment.entity.ApplicationStatus.PENDING_HR_CV_REVIEW)
                 .needsVerification(false)
                 .isPriority(false)
                 .fraudFlagged(false)
                 .fitScore(0)
                 .build();
 
-        Application savedApp = applicationRepository.save(application);
+        Application savedApp = applicationRepository.saveAndFlush(application);
         
         // Kích hoạt tiến trình upload file ngầm lên Cloudinary
-        byte[] cccdBytes = (cccdFile != null && !cccdFile.isEmpty()) ? cccdFile.getBytes() : null;
-        String cvFilename = cvFile != null ? cvFile.getOriginalFilename() : null;
-        String cccdFilename = cccdFile != null ? cccdFile.getOriginalFilename() : null;
-        
-        asyncUploadService.uploadFilesAndUpdateApplicationAsync(savedApp.getId(), cvBytes, cvFilename, cccdBytes, cccdFilename);
+        aiConsentService.record(savedApp.getId(), aiConsent);
+        boolean aiEnabled = "ON".equalsIgnoreCase(configurationService.requireString("ai.mode"));
+        AiAnalysis run = aiAnalysisService.createRun(savedApp, aiConsent && aiEnabled);
+        Long queuedRunId = run.getStatus() == com.hrm.ai.entity.AiAnalysisStatus.QUEUED ? run.getId() : null;
+        org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                new org.springframework.transaction.support.TransactionSynchronization() {
+                    @Override public void afterCommit() {
+                        asyncUploadService.uploadAndAnalyze(savedApp.getId(), validated, queuedRunId);
+                    }
+                });
         
 
         
@@ -346,20 +393,32 @@ public class ApplicationService {
      */
     public Application triggerAiReview(Long id) {
         Application app = getApplicationById(id);
+        if (id != null) {
+            if (!aiConsentService.isGranted(id)) {
+                throw com.hrm.exception.AppException.conflict(
+                        "Ứng viên chưa đồng ý phân tích CV bằng AI; không được gửi CV cho nhà cung cấp AI");
+            }
+            aiCvPipelineService.queueFromStoredText(id);
+            return applicationRepository.findById(id).orElse(app);
+        }
 
         String rawCvText = app.getRawCvText();
         JobPosting jd = app.getJobPosting();
 
+        AiAnalysis analysisRun = aiAnalysisService.start(app);
         try {
             processAiPipeline(app, jd, rawCvText);
         } catch (Exception e) {
+            aiAnalysisService.fail(analysisRun, e);
             System.err.println("CRITICAL AI ERROR:");
             e.printStackTrace();
             log.error("Manual AI trigger failed for application {}.", app.getId(), e);
             throw new RuntimeException("AI đánh giá thất bại: " + e.getMessage());
         }
 
-        return applicationRepository.findById(id).orElse(app);
+        Application refreshed = applicationRepository.findById(id).orElse(app);
+        aiAnalysisService.complete(analysisRun, refreshed);
+        return refreshed;
     }
 
     /**
@@ -406,17 +465,8 @@ public class ApplicationService {
         SemanticFitScoreService.FitScoreResult fitScoreResult = semanticFitScoreService.calculateFitScore(app.getId(), rawCvText, combinedJd, capBacStr);
         app.setFitScore(fitScoreResult.score());
 
-        // Nếu điểm quá thấp (< 40), chứng tỏ CV không phù hợp (mismatch)
-        // -> Từ chối luôn, KHÔNG chạy kiểm tra gian lận và KHÔNG trích xuất câu hỏi phỏng vấn để tiết kiệm token.
-        if (fitScoreResult.score() < 40) {
-            app.setApprovalStatus(com.hrm.recruitment.entity.ApplicationStatus.REJECTED);
-            applicationRepository.save(app);
-            // Gửi email cảm ơn
-            emailService.sendRejectionEmail(app.getEmail(), app.getFullName(), jd.getTitle());
-            return;
-        }
-
-        // 2. Chống gian lận (Chỉ chạy nếu CV có tiềm năng)
+        // 2. Chống thao túng. Kết quả chỉ gắn cờ để con người kiểm tra,
+        // không được tự động từ chối hoặc chặn hồ sơ đi tiếp.
         FraudDetectionService.FraudResult fraudResult = fraudDetectionService.detectFraud(app.getId(), rawCvText);
         app.setFraudFlagged(fraudResult.isFraud());
 
@@ -452,9 +502,12 @@ public class ApplicationService {
         }
         // Đánh giá hoàn tất thành công
         app.setExtractedData(extractedJson);
-        // AI duyệt xong, chuyển qua cho HR review CV
-        app.setApprovalStatus(com.hrm.recruitment.entity.ApplicationStatus.PENDING_HR_CV_REVIEW);
-
         applicationRepository.save(app);
+    }
+
+    private void requireFeedback(String feedback, String fieldName) {
+        if (feedback == null || feedback.isBlank()) {
+            throw com.hrm.exception.AppException.badRequest(fieldName + " là bắt buộc");
+        }
     }
 }

@@ -63,6 +63,7 @@ public class SecurityConfig {
                 .requestMatchers("/public/**").permitAll()
                 .requestMatchers("/ws/**").permitAll()      // WebSocket handshake
                 .requestMatchers("/actuator/health").permitAll()
+                .requestMatchers("/telegram/**").permitAll()  // Telegram Bot webhook
                 // Mọi route còn lại yêu cầu xác thực
                 .anyRequest().authenticated()
             )

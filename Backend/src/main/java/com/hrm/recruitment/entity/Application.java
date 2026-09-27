@@ -49,6 +49,14 @@ public class Application {
     @Column(nullable = false, length = 30)
     private ApplicationStatus approvalStatus; // Dùng Enum State Machine
 
+    @Version
+    @Column(nullable = false)
+    private Long version;
+
+    private LocalDateTime firstViewedAt;
+
+    private Long viewedBy;
+
     @Column(nullable = false)
     private Boolean needsVerification = false;
 

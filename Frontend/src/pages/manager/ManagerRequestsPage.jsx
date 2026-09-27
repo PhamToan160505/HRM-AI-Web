@@ -10,7 +10,7 @@ export default function ManagerRequestsPage() {
   const { role } = useAuth();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
-  
+
   // Modal state
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [processingId, setProcessingId] = useState(null);
@@ -146,7 +146,7 @@ export default function ManagerRequestsPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Quản lý Đơn từ</h1>
+          <h1 className="text-2xl font-bold text-slate-800">Quản lý đơn từ</h1>
           <p className="text-sm text-slate-500 mt-1">Duyệt yêu cầu nghỉ phép, làm thêm giờ của nhân viên cấp dưới</p>
         </div>
       </div>
@@ -299,14 +299,14 @@ export default function ManagerRequestsPage() {
                 <FileText className="text-blue-600" size={20} />
                 Chi tiết Đơn từ
               </h3>
-              <button 
+              <button
                 onClick={() => setSelectedRequest(null)}
                 className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-200 transition-colors"
               >
                 <X size={20} />
               </button>
             </div>
-            
+
             <div className="p-6 space-y-4 text-sm">
               <div className="flex items-center gap-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
                 <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-lg shrink-0">
@@ -321,14 +321,14 @@ export default function ManagerRequestsPage() {
               <div className="grid grid-cols-3 gap-y-3 gap-x-4 border-b border-slate-100 pb-4">
                 <div className="col-span-1 text-slate-500 font-medium">Loại đơn:</div>
                 <div className="col-span-2 font-semibold text-slate-800">{getTypeLabel(selectedRequest.requestType)}</div>
-                
+
                 <div className="col-span-1 text-slate-500 font-medium">Trạng thái:</div>
                 <div className="col-span-2">{getStatusBadge(selectedRequest.status)}</div>
 
                 <div className="col-span-1 text-slate-500 font-medium">Thời gian:</div>
                 <div className="col-span-2 text-slate-800">
                   {new Date(selectedRequest.startDate).toLocaleDateString('vi-VN')}
-                  {selectedRequest.startDate !== selectedRequest.endDate && 
+                  {selectedRequest.startDate !== selectedRequest.endDate &&
                     ` - ${new Date(selectedRequest.endDate).toLocaleDateString('vi-VN')}`
                   }
                 </div>
@@ -433,7 +433,7 @@ export default function ManagerRequestsPage() {
                 )}
               </div>
             )}
-            
+
             {selectedRequest.status !== 'PENDING' && !(selectedRequest.status === 'FORWARDED' && role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN') && (
               <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end">
                 <button

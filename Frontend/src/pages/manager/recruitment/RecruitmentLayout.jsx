@@ -1,11 +1,11 @@
 import React from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
-import { Briefcase, FileText, CheckSquare, Settings, BarChart2, Users, LayoutDashboard, List, Kanban } from 'lucide-react';
+import { Armchair, Briefcase, FileText, List, Kanban } from 'lucide-react';
 
 import { useAuth } from '../../../context/AuthContext';
 
 export default function RecruitmentLayout() {
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   
   // Xác định base path theo role
   let basePath = '/manager/recruitment';
@@ -13,12 +13,17 @@ export default function RecruitmentLayout() {
   if (role === 'ceo') basePath = '/ceo/recruitment';
   if (role === 'admin') basePath = '/admin/recruitment';
 
+  const isHrManagement = ['truong_phong', 'giam_doc_phong_ban'].includes(role)
+    && ['Nhân sự', 'Nhân Su', 'Phòng Nhân sự'].includes(user?.tenPhong);
   const tabs = [
     { path: `${basePath}/requisitions`, label: 'Yêu cầu tuyển dụng', icon: <FileText size={18} /> },
     { path: `${basePath}/campaigns`, label: 'Chiến dịch tuyển dụng', icon: <Briefcase size={18} /> },
     { path: `${basePath}/applications`, label: 'Danh sách hồ sơ', icon: <List size={18} /> },
     { path: `${basePath}/pipeline`, label: 'Pipeline & Thống kê', icon: <Kanban size={18} /> },
   ];
+  if (role === 'ceo' || isHrManagement) {
+    tabs.push({ path: `${basePath}/seats`, label: 'Seat ledger', icon: <Armchair size={18} /> });
+  }
 
   return (
     <div className="flex flex-col h-full bg-slate-50">

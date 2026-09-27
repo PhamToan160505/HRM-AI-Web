@@ -3,7 +3,7 @@ import { AlertCircle, ChevronRight, Star } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 
 export default function DirectorDashboardPage() {
   const navigate = useNavigate();
@@ -40,12 +40,12 @@ export default function DirectorDashboardPage() {
   const barChartData = Array.from({length: 8}).map((_, i) => ({ value: Math.random() * 20 + 5 }));
 
   const attendanceData = [
-    { name: 'Có mặt', value: stats.todayAttendance.present || 1, color: '#3b82f6' }, // Blue
+    { name: 'Có mặt', value: stats.todayAttendance.present || 1, color: '#10b981' }, // Emerald
     { name: 'Đi muộn', value: stats.todayAttendance.late || 0, color: '#f59e0b' }, // Amber
     { name: 'Vắng', value: stats.todayAttendance.absent || 0, color: '#ef4444' }, // Red
   ];
 
-  const COLORS = ['#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#fcd34d', '#fbbf24'];
+  const COLORS = ['#6366f1', '#8b5cf6', '#d946ef', '#ec4899', '#f43f5e', '#f97316', '#fbbf24', '#10b981', '#0ea5e9'];
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-10">
@@ -147,28 +147,38 @@ export default function DirectorDashboardPage() {
       </div>
 
       {/* Row 2: Middle Section */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Department Distribution */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 lg:col-span-2 hover:shadow-md transition-shadow">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-6">Phân bổ chức vụ</p>
-              <div className="h-64">
+              <div className="h-72">
                   <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                           <Pie
-                              data={stats.departmentDistribution.length > 0 ? stats.departmentDistribution : [{name: 'No data', value: 1}]}
+                              data={stats.departmentDistribution.length > 0 ? stats.departmentDistribution : [{name: 'Chưa có dữ liệu', value: 1}]}
                               cx="50%"
                               cy="50%"
-                              innerRadius={60}
-                              outerRadius={100}
-                              paddingAngle={2}
+                              innerRadius={70}
+                              outerRadius={110}
+                              paddingAngle={3}
                               dataKey="value"
-                              label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                              stroke="none"
                           >
                               {stats.departmentDistribution.map((entry, index) => (
                                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                               ))}
                           </Pie>
-                          <Tooltip />
+                          <Tooltip 
+                            formatter={(value, name) => [`${value} nhân sự`, name]}
+                            contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} 
+                          />
+                          <Legend 
+                            layout="vertical" 
+                            verticalAlign="middle" 
+                            align="right" 
+                            wrapperStyle={{ fontSize: '13px', fontFamily: 'Inter, sans-serif', paddingLeft: '20px' }} 
+                            iconType="circle"
+                          />
                       </PieChart>
                   </ResponsiveContainer>
               </div>

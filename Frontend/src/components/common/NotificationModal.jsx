@@ -1,10 +1,13 @@
 import React, { useContext } from 'react';
 import { NotificationContext } from '../../context/NotificationContext';
+import { useAuth } from '../../context/AuthContext';
+import { resolveNotificationLink } from '../../utils/notificationUtils';
 import { AlertTriangle, Info, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const NotificationModal = () => {
   const { urgentNotification, closeUrgentModal, selectedNotification, closeNotification } = useContext(NotificationContext);
+  const { role } = useAuth();
   const navigate = useNavigate();
 
   const notif = urgentNotification || selectedNotification;
@@ -65,7 +68,8 @@ const NotificationModal = () => {
               className="mt-3 inline-flex w-full justify-center rounded-lg bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto transition-colors"
               onClick={() => {
                 handleClose();
-                navigate(notif.lienKet);
+                const targetUrl = resolveNotificationLink(notif.lienKet, role);
+                if (targetUrl) navigate(targetUrl);
               }}
             >
               Xem chi tiết

@@ -1,6 +1,11 @@
 package com.hrm.recruitment.service;
 
 import com.hrm.recruitment.entity.JobPosting;
+import com.hrm.recruitment.entity.JobPostingStatus;
+import com.hrm.recruitment.entity.JobRequisition;
+import com.hrm.recruitment.entity.JobRequisitionStatus;
+import com.hrm.recruitment.entity.RecruitmentAction;
+import com.hrm.recruitment.entity.RecruitmentEntityType;
 import com.hrm.recruitment.repository.JobPostingRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -18,6 +23,9 @@ public class JobPostingService {
     private final com.hrm.recruitment.repository.ApplicationRepository applicationRepository;
     private final com.hrm.recruitment.repository.JobRequisitionRepository jobRequisitionRepository;
     private final com.hrm.common.repository.DepartmentRepository departmentRepository;
+    private final RecruitmentTransitionService recruitmentTransitionService;
+    private final PostingVersionLockService postingVersionLockService;
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
     private static final Pattern NONLATIN = Pattern.compile("[^\\w-]");
     private static final Pattern WHITESPACE = Pattern.compile("[\\s]");
@@ -57,22 +65,22 @@ public class JobPostingService {
         if (isSpecialRole(currentUser)) {
             return jobs;
         }
-        return jobs.stream().filter(job -> "OPEN".equals(job.getStatus()) || isRequester(job, currentUser.getUserId())).toList();
+        return jobs.stream().filter(job -> job.getStatus() == JobPostingStatus.OPEN || isRequester(job, currentUser.getUserId())).toList();
     }
 
     public List<java.util.Map<String, Object>> getJobStats(com.hrm.security.CustomUserDetails currentUser) {
         List<JobPosting> jobs = jobPostingRepository.findAll();
         if (!isSpecialRole(currentUser)) {
-            jobs = jobs.stream().filter(job -> "OPEN".equals(job.getStatus()) || isRequester(job, currentUser.getUserId())).toList();
+            jobs = jobs.stream().filter(job -> job.getStatus() == JobPostingStatus.OPEN || isRequester(job, currentUser.getUserId())).toList();
         }
         List<java.util.Map<String, Object>> statsList = new java.util.ArrayList<>();
         
         for (JobPosting job : jobs) {
             long total = applicationRepository.countByJobPostingId(job.getId());
-            long newApps = applicationRepository.countByJobPostingIdAndApprovalStatus(job.getId(), com.hrm.recruitment.entity.ApplicationStatus.NEW);
+            long newApps = applicationRepository.countByJobPostingIdAndFirstViewedAtIsNull(job.getId());
             long pendingHr = applicationRepository.countByJobPostingIdAndApprovalStatus(job.getId(), com.hrm.recruitment.entity.ApplicationStatus.PENDING_HR_CV_REVIEW);
             long pendingTech = applicationRepository.countByJobPostingIdAndApprovalStatus(job.getId(), com.hrm.recruitment.entity.ApplicationStatus.PENDING_TECH_CV_REVIEW);
-            long approved = applicationRepository.countByJobPostingIdAndApprovalStatus(job.getId(), com.hrm.recruitment.entity.ApplicationStatus.OFFER_APPROVED);
+            long approved = applicationRepository.countByJobPostingIdAndApprovalStatus(job.getId(), com.hrm.recruitment.entity.ApplicationStatus.OFFER_ACCEPTED);
             long rejected = applicationRepository.countByJobPostingIdAndApprovalStatus(job.getId(), com.hrm.recruitment.entity.ApplicationStatus.REJECTED);
             
             java.util.Map<String, Object> stat = new java.util.HashMap<>();
@@ -110,10 +118,10 @@ public class JobPostingService {
         List<java.util.Map<String, Object>> statsList = new java.util.ArrayList<>();
         for (JobPosting job : jobPage.getContent()) {
             long total = applicationRepository.countByJobPostingId(job.getId());
-            long newApps = applicationRepository.countByJobPostingIdAndApprovalStatus(job.getId(), com.hrm.recruitment.entity.ApplicationStatus.NEW);
+            long newApps = applicationRepository.countByJobPostingIdAndFirstViewedAtIsNull(job.getId());
             long pendingHr = applicationRepository.countByJobPostingIdAndApprovalStatus(job.getId(), com.hrm.recruitment.entity.ApplicationStatus.PENDING_HR_CV_REVIEW);
             long pendingTech = applicationRepository.countByJobPostingIdAndApprovalStatus(job.getId(), com.hrm.recruitment.entity.ApplicationStatus.PENDING_TECH_CV_REVIEW);
-            long approved = applicationRepository.countByJobPostingIdAndApprovalStatus(job.getId(), com.hrm.recruitment.entity.ApplicationStatus.OFFER_APPROVED);
+            long approved = applicationRepository.countByJobPostingIdAndApprovalStatus(job.getId(), com.hrm.recruitment.entity.ApplicationStatus.OFFER_ACCEPTED);
             long rejected = applicationRepository.countByJobPostingIdAndApprovalStatus(job.getId(), com.hrm.recruitment.entity.ApplicationStatus.REJECTED);
             
             java.util.Map<String, Object> stat = new java.util.HashMap<>();
@@ -144,7 +152,7 @@ public class JobPostingService {
 
     public List<JobPosting> getOpenJobs() {
         return jobPostingRepository.findAll().stream()
-                .filter(job -> "OPEN".equals(job.getStatus()))
+                .filter(job -> job.getStatus() == JobPostingStatus.OPEN)
                 .toList();
     }
 
@@ -157,14 +165,23 @@ public class JobPostingService {
     @org.springframework.scheduling.annotation.Scheduled(cron = "0 0 0 * * ?")
     public void closeExpiredJobs() {
         List<JobPosting> openJobs = jobPostingRepository.findAll().stream()
-                .filter(job -> "OPEN".equals(job.getStatus()) && java.time.LocalDateTime.now().isAfter(job.getHanNopHoSo()))
+                .filter(job -> job.getStatus() == JobPostingStatus.OPEN && java.time.LocalDateTime.now().isAfter(job.getHanNopHoSo()))
                 .toList();
-        
-        openJobs.forEach(job -> job.setStatus("CLOSED"));
-        jobPostingRepository.saveAll(openJobs);
+
+        openJobs.forEach(job -> recruitmentTransitionService.transitionPosting(
+                job,
+                RecruitmentAction.EXPIRE_POSTING,
+                null,
+                null,
+                "Hết hạn nộp hồ sơ",
+                null,
+                "posting-expire-" + job.getId() + "-" + job.getHanNopHoSo()));
     }
 
-    public JobPosting createJob(com.hrm.recruitment.controller.RecruitmentController.JobPostingRequest request) {
+    @org.springframework.transaction.annotation.Transactional
+    public JobPosting createJob(
+            com.hrm.recruitment.controller.RecruitmentController.JobPostingRequest request,
+            com.hrm.security.CustomUserDetails actor) {
         if (!request.ngayBatDau().isBefore(request.hanNopHoSo())) {
             throw new IllegalArgumentException("Ngày bắt đầu phải trước hạn nộp hồ sơ");
         }
@@ -177,7 +194,19 @@ public class JobPostingService {
             throw new IllegalArgumentException("Mức lương không được là số âm");
         }
 
+        if (request.jobRequisitionId() == null) {
+            throw new IllegalArgumentException("Phải chọn yêu cầu tuyển dụng đã được duyệt");
+        }
+        JobRequisition requisition = jobRequisitionRepository.findById(request.jobRequisitionId())
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy yêu cầu tuyển dụng"));
+        if (requisition.getStatus() != JobRequisitionStatus.APPROVED) {
+            throw new com.hrm.exception.AppException(
+                    org.springframework.http.HttpStatus.CONFLICT,
+                    "Chỉ có thể tạo chiến dịch từ yêu cầu tuyển dụng đã được duyệt");
+        }
+
         String slug = toSlug(request.title()) + "-" + System.currentTimeMillis();
+        String criteriaDefinition = validateAndSerializeCriteria(request, null);
         
         JobPosting job = JobPosting.builder()
                 .title(request.title())
@@ -195,22 +224,37 @@ public class JobPostingService {
                 .targetRole(request.targetRole())
                 .departmentId(request.departmentId())
                 .jobRequisitionId(request.jobRequisitionId())
-                .status("OPEN")
+                .criteriaDefinition(criteriaDefinition)
+                .status(JobPostingStatus.DRAFT)
                 .slug(slug)
                 .build();
         JobPosting savedJob = jobPostingRepository.save(job);
-        
-        if (request.jobRequisitionId() != null) {
-            jobRequisitionRepository.findById(request.jobRequisitionId()).ifPresent(req -> {
-                req.setStatus(com.hrm.recruitment.entity.JobRequisitionStatus.POSTED);
-                jobRequisitionRepository.save(req);
-            });
-        }
-        
-        return savedJob;
+
+        recruitmentTransitionService.recordCreation(
+                RecruitmentEntityType.JOB_POSTING,
+                savedJob.getId(),
+                actor.getUserId(),
+                actor.getRole(),
+                JobPostingStatus.DRAFT.name(),
+                null,
+                null);
+
+        savedJob = postingVersionLockService.lockInitialPair(savedJob, actor.getUserId());
+        return recruitmentTransitionService.transitionPosting(
+                savedJob,
+                RecruitmentAction.OPEN_POSTING,
+                actor.getUserId(),
+                actor.getRole(),
+                "Mở chiến dịch sau khi tạo",
+                null,
+                null);
     }
 
-    public JobPosting updateJob(Long id, com.hrm.recruitment.controller.RecruitmentController.JobPostingRequest request) {
+    @org.springframework.transaction.annotation.Transactional
+    public JobPosting updateJob(
+            Long id,
+            com.hrm.recruitment.controller.RecruitmentController.JobPostingRequest request,
+            com.hrm.security.CustomUserDetails actor) {
         JobPosting job = jobPostingRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy tin tuyển dụng"));
                 
@@ -226,6 +270,15 @@ public class JobPostingService {
             throw new IllegalArgumentException("Mức lương không được là số âm");
         }
 
+        boolean scoringCriteriaChanged = !java.util.Objects.equals(job.getTitle(), request.title())
+                || !java.util.Objects.equals(job.getDescription(), request.description())
+                || !java.util.Objects.equals(job.getRequirements(), request.requirements())
+                || !java.util.Objects.equals(job.getCapBac(), request.capBac())
+                || !java.util.Objects.equals(job.getTargetRole(), request.targetRole());
+        String criteriaDefinition = validateAndSerializeCriteria(request, job.getCriteriaDefinition());
+        scoringCriteriaChanged = scoringCriteriaChanged
+                || !java.util.Objects.equals(job.getCriteriaDefinition(), criteriaDefinition);
+
         job.setTitle(request.title());
         job.setDescription(request.description());
         job.setRequirements(request.requirements());
@@ -237,6 +290,7 @@ public class JobPostingService {
         job.setMucLuong(request.mucLuong());
         job.setCoThoaThuan(request.coThoaThuan());
         job.setQuyenLoi(request.quyenLoi());
+        job.setCriteriaDefinition(criteriaDefinition);
         if (request.capBac() != null && !request.capBac().trim().isEmpty()) {
             job.setCapBac(request.capBac());
         }
@@ -250,14 +304,55 @@ public class JobPostingService {
             job.setJobRequisitionId(request.jobRequisitionId());
         }
         
-        return jobPostingRepository.save(job);
+        JobPosting saved = jobPostingRepository.save(job);
+        if (saved.getStatus() != JobPostingStatus.DRAFT && scoringCriteriaChanged) {
+            saved = postingVersionLockService.createNewCriteriaVersion(
+                    saved,
+                    actor.getUserId(),
+                    "Cập nhật nội dung JD/tiêu chí của posting đã mở");
+        }
+        return saved;
     }
 
-    public JobPosting updateJobStatus(Long id, String status) {
+    @org.springframework.transaction.annotation.Transactional
+    public JobPosting updateJobStatus(
+            Long id,
+            String status,
+            String reason,
+            com.hrm.security.CustomUserDetails actor) {
         JobPosting job = jobPostingRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy tin tuyển dụng"));
-        job.setStatus(status);
-        return jobPostingRepository.save(job);
+        JobPostingStatus target;
+        try {
+            target = JobPostingStatus.valueOf(status == null ? "" : status.trim().toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalArgumentException("Trạng thái chiến dịch không hợp lệ: " + status);
+        }
+        RecruitmentAction action = resolvePostingAction(job.getStatus(), target);
+        if (target == JobPostingStatus.OPEN
+                && (job.getCriteriaVersionId() == null || job.getScoringProfileVersionId() == null)) {
+            job = postingVersionLockService.lockInitialPair(job, actor.getUserId());
+        }
+        return recruitmentTransitionService.transitionPosting(
+                job,
+                action,
+                actor.getUserId(),
+                actor.getRole(),
+                reason,
+                null,
+                null);
+    }
+
+    private RecruitmentAction resolvePostingAction(JobPostingStatus from, JobPostingStatus to) {
+        if (from == JobPostingStatus.OPEN && to == JobPostingStatus.PAUSED) return RecruitmentAction.PAUSE_POSTING;
+        if (from == JobPostingStatus.PAUSED && to == JobPostingStatus.OPEN) return RecruitmentAction.RESUME_POSTING;
+        if (from == JobPostingStatus.EXPIRED && to == JobPostingStatus.OPEN) return RecruitmentAction.EXTEND_POSTING;
+        if (from == JobPostingStatus.FILLED && to == JobPostingStatus.OPEN) return RecruitmentAction.REOPEN_POSTING;
+        if ((from == JobPostingStatus.OPEN || from == JobPostingStatus.PAUSED) && to == JobPostingStatus.CANCELLED) {
+            return RecruitmentAction.CANCEL_POSTING;
+        }
+        throw com.hrm.exception.AppException.conflict(
+                "Không thể chuyển chiến dịch từ " + from + " sang " + to);
     }
 
     @org.springframework.transaction.annotation.Transactional
@@ -275,5 +370,45 @@ public class JobPostingService {
         String normalized = Normalizer.normalize(nowhitespace, Normalizer.Form.NFD);
         String slug = NONLATIN.matcher(normalized).replaceAll("");
         return slug.toLowerCase(Locale.ENGLISH);
+    }
+
+    private String validateAndSerializeCriteria(
+            com.hrm.recruitment.controller.RecruitmentController.JobPostingRequest request,
+            String existingDefinition) {
+        List<com.hrm.recruitment.controller.RecruitmentController.ScreeningCriterionRequest> criteria =
+                request.criteria();
+        if (criteria == null || criteria.isEmpty()) {
+            if (existingDefinition != null && !existingDefinition.isBlank()) {
+                return existingDefinition;
+            }
+            criteria = List.of(new com.hrm.recruitment.controller.RecruitmentController.ScreeningCriterionRequest(
+                    "C1", request.title(), "MUST", 100, List.of(),
+                    request.requirements() == null ? request.description() : request.requirements()));
+        }
+        java.util.Set<String> ids = new java.util.HashSet<>();
+        int totalWeight = 0;
+        for (var criterion : criteria) {
+            if (criterion.id() == null || criterion.id().isBlank() || !ids.add(criterion.id().trim())) {
+                throw com.hrm.exception.AppException.badRequest("Mã tiêu chí phải có và không được trùng");
+            }
+            if (criterion.name() == null || criterion.name().isBlank()) {
+                throw com.hrm.exception.AppException.badRequest("Tên tiêu chí là bắt buộc");
+            }
+            if (!"MUST".equals(criterion.type()) && !"NICE".equals(criterion.type())) {
+                throw com.hrm.exception.AppException.badRequest("Loại tiêu chí chỉ nhận MUST hoặc NICE");
+            }
+            if (criterion.weight() == null || criterion.weight() <= 0) {
+                throw com.hrm.exception.AppException.badRequest("Trọng số tiêu chí phải lớn hơn 0");
+            }
+            totalWeight += criterion.weight();
+        }
+        if (totalWeight != 100) {
+            throw com.hrm.exception.AppException.badRequest("Tổng trọng số bộ tiêu chí phải bằng 100");
+        }
+        try {
+            return objectMapper.writeValueAsString(criteria);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+            throw new IllegalStateException("Không thể lưu bộ tiêu chí chấm CV", exception);
+        }
     }
 }

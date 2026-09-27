@@ -55,6 +55,10 @@ public class JobRequisition {
     @Column(nullable = false, length = 30)
     private JobRequisitionStatus status;
 
+    @Version
+    @Column(nullable = false)
+    private Long version;
+
     @Column(name = "requester_id", nullable = false)
     private Long requesterId; // ID người yêu cầu
 

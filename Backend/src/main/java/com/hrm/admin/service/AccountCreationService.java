@@ -16,7 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.util.List;
-import java.util.Optional;
+import java.time.LocalDateTime;
 
 @Service
 @RequiredArgsConstructor
@@ -29,20 +29,21 @@ public class AccountCreationService {
     private final EmailService emailService;
 
     public List<AccountCreationRequest> getPendingRequests() {
-        return requestRepository.findByStatus(AccountCreationRequest.RequestStatus.PENDING);
+        return requestRepository.findByStatus(AccountCreationRequest.RequestStatus.PENDING_ADMIN);
     }
 
     @Transactional
-    public void approveRequest(Long requestId) {
+    public void approveRequest(Long requestId, Long actorId) {
         AccountCreationRequest request = requestRepository.findById(requestId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu tạo tài khoản"));
 
-        if (request.getStatus() != AccountCreationRequest.RequestStatus.PENDING) {
+        if (request.getStatus() != AccountCreationRequest.RequestStatus.PENDING_ADMIN) {
             throw new AppException(HttpStatus.BAD_REQUEST, "Yêu cầu này đã được xử lý");
         }
 
         if (userRepository.existsByEmail(request.getEmail())) {
-            request.setStatus(AccountCreationRequest.RequestStatus.REJECTED);
+            request.setStatus(AccountCreationRequest.RequestStatus.FAILED);
+            request.setLastError("Email đã tồn tại trong hệ thống");
             requestRepository.save(request);
             throw new AppException(HttpStatus.BAD_REQUEST, "Email " + request.getEmail() + " đã tồn tại trong hệ thống");
         }
@@ -62,19 +63,19 @@ public class AccountCreationService {
                 .role(Role.NHAN_VIEN) // Mặc định là nhân viên, admin có thể đổi sau
                 .departmentId(request.getDepartmentId())
                 .chucVu(request.getChucVu())
-                .active(true)
+                .active(false)
                 .build();
 
-        userRepository.save(newUser);
+        User savedUser = userRepository.save(newUser);
 
-        // 4. Đánh dấu request là đã duyệt
-        request.setStatus(AccountCreationRequest.RequestStatus.APPROVED);
+        // Tài khoản chỉ được chuẩn bị ở DISABLED trước ngày nhận việc.
+        request.setUserId(savedUser.getId());
+        request.setApprovedBy(actorId);
+        request.setApprovedAt(LocalDateTime.now());
+        request.setStatus(AccountCreationRequest.RequestStatus.PROVISIONED);
         requestRepository.save(request);
 
-        // 5. Gửi email
-        emailService.sendAccountInfo(newUser.getEmail(), newUser.getHoTen(), maNhanVien, rawPassword);
-
-        log.info("Đã tạo tài khoản thành công cho ứng viên {}: maNhanVien={}", request.getHoTen(), maNhanVien);
+        log.info("Đã chuẩn bị tài khoản DISABLED cho account request {}", request.getId());
     }
 
     @Transactional
@@ -82,9 +83,51 @@ public class AccountCreationService {
         AccountCreationRequest request = requestRepository.findById(requestId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu"));
         
-        request.setStatus(AccountCreationRequest.RequestStatus.REJECTED);
+        request.setStatus(AccountCreationRequest.RequestStatus.CANCELLED);
         requestRepository.save(request);
         log.info("Đã từ chối yêu cầu tạo tài khoản {}", requestId);
+    }
+
+    @Transactional
+    public void ensureActiveForEmployee(Long employeeId) {
+        AccountCreationRequest request = requestRepository.findByEmployeeId(employeeId)
+                .orElseThrow(() -> AppException.notFound("Không tìm thấy yêu cầu cấp tài khoản của nhân viên"));
+        request.setMode(AccountCreationRequest.RequestMode.ENSURE_ACTIVE);
+        request.setStatus(AccountCreationRequest.RequestStatus.PROVISIONING);
+        request.setLastError(null);
+
+        String rawPassword = generateRandomPassword(12);
+        User user;
+        if (request.getUserId() != null) {
+            user = userRepository.findById(request.getUserId())
+                    .orElseThrow(() -> AppException.notFound("Không tìm thấy tài khoản đã chuẩn bị"));
+            user.setPasswordHash(passwordEncoder.encode(rawPassword));
+            user.setActive(true);
+        } else {
+            if (userRepository.existsByEmail(request.getEmail())) {
+                request.setStatus(AccountCreationRequest.RequestStatus.FAILED);
+                request.setLastError("Email đã được sử dụng bởi tài khoản khác");
+                request.setRetryCount(request.getRetryCount() + 1);
+                requestRepository.save(request);
+                throw AppException.conflict("Email nhân viên đã được sử dụng bởi tài khoản khác");
+            }
+            user = User.builder()
+                    .hoTen(request.getHoTen())
+                    .email(request.getEmail())
+                    .maNhanVien(generateMaNhanVien(Role.NHAN_VIEN, request.getDepartmentId()))
+                    .passwordHash(passwordEncoder.encode(rawPassword))
+                    .role(Role.NHAN_VIEN)
+                    .departmentId(request.getDepartmentId())
+                    .chucVu(request.getChucVu())
+                    .active(true)
+                    .build();
+        }
+        user = userRepository.save(user);
+        request.setUserId(user.getId());
+        request.setStatus(AccountCreationRequest.RequestStatus.PROVISIONED);
+        requestRepository.save(request);
+        emailService.sendAccountInfo(user.getEmail(), user.getHoTen(), user.getMaNhanVien(), rawPassword);
+        log.info("Đã bảo đảm tài khoản ACTIVE cho employee {}", employeeId);
     }
 
     private String generateMaNhanVien(com.hrm.common.entity.Role role, Long departmentId) {

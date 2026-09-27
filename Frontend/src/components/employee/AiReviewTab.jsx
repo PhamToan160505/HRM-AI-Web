@@ -87,7 +87,6 @@ export default function AiReviewTab({ employeeId, createdAt }) {
                         ))}
                     </select>
                     <Button onClick={handleGenerateReview} disabled={generating} className="flex items-center gap-1.5 py-1.5 px-3">
-                        {generating ? <RefreshCcw size={14} className="animate-spin" /> : <Sparkles size={14} />} 
                         {generating ? 'Đang tạo...' : 'Tạo mới'}
                     </Button>
                 </div>

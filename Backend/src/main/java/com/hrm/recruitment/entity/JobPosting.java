@@ -32,8 +32,13 @@ public class JobPosting {
     @Column(nullable = false, unique = true)
     private String slug;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30)
+    private JobPostingStatus status;
+
+    @Version
     @Column(nullable = false)
-    private String status; // OPEN, CLOSED
+    private Long version;
 
     // Bắt buộc (không dùng cho checkDepartmentScope)
     @Column(nullable = false)
@@ -70,6 +75,15 @@ public class JobPosting {
 
     @Column(name = "job_requisition_id")
     private Long jobRequisitionId;
+
+    @Column(name = "criteria_version_id")
+    private Long criteriaVersionId;
+
+    @Column(name = "scoring_profile_version_id")
+    private Long scoringProfileVersionId;
+
+    @Column(name = "criteria_definition", nullable = false, columnDefinition = "json")
+    private String criteriaDefinition;
 
     @CreationTimestamp
     private LocalDateTime createdAt;

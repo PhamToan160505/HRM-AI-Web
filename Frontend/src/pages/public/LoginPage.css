@@ -1,0 +1,642 @@
+.hrm-login-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: stretch;
+  padding: 16px clamp(24px, 2.25vw, 44px);
+  overflow: auto;
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.hrm-login-shell {
+  width: min(100%, 1840px);
+  min-height: calc(100vh - 32px);
+  min-height: calc(100dvh - 32px);
+  margin: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 55fr) minmax(0, 45fr);
+  overflow: hidden;
+  border-radius: 42px;
+  background: #ffffff;
+  box-shadow: 0 28px 80px rgba(30, 58, 138, 0.13);
+}
+
+.hrm-login-brand {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: clamp(40px, 3.7vw, 64px) clamp(46px, 4.2vw, 72px);
+  color: #ffffff;
+  background: linear-gradient(135deg, #102a67 0%, #1748b5 55%, #2870ed 100%);
+}
+
+.hrm-login-brand-ring {
+  position: absolute;
+  top: -190px;
+  right: -155px;
+  width: 570px;
+  height: 570px;
+  border: 82px solid rgba(116, 171, 255, 0.1);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.hrm-login-brand-glow {
+  position: absolute;
+  left: -180px;
+  bottom: -220px;
+  width: 520px;
+  height: 520px;
+  border-radius: 50%;
+  background: rgba(31, 94, 215, 0.3);
+  filter: blur(60px);
+  pointer-events: none;
+}
+
+.hrm-login-logo,
+.hrm-login-mobile-logo {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.hrm-login-logo-mark {
+  width: 58px;
+  height: 58px;
+  flex: 0 0 58px;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  color: #1d4ed8;
+  background: #ffffff;
+  box-shadow: 0 14px 28px rgba(5, 28, 82, 0.22);
+  overflow: hidden;
+}
+
+.hrm-login-logo strong,
+.hrm-login-mobile-logo strong {
+  display: block;
+  font-size: 18px;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+.hrm-login-logo small,
+.hrm-login-mobile-logo small {
+  display: block;
+  margin-top: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.2em;
+  color: rgba(219, 234, 254, 0.76);
+}
+
+.hrm-login-brand-content {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 28px 0;
+}
+
+.hrm-login-pill {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 17px;
+  border: 1px solid rgba(191, 219, 254, 0.25);
+  border-radius: 999px;
+  color: #dbeafe;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+  backdrop-filter: blur(10px);
+}
+
+.hrm-login-pill svg {
+  color: #7dd3fc;
+}
+
+.hrm-login-brand h1 {
+  max-width: 760px;
+  margin-top: 34px;
+  font-size: clamp(54px, 4.15vw, 78px);
+  font-weight: 800;
+  line-height: 0.99;
+  letter-spacing: -0.065em;
+}
+
+.hrm-login-brand h1 span {
+  display: block;
+  margin-top: 10px;
+  color: #91c4f4;
+}
+
+.hrm-login-brand-copy {
+  max-width: 660px;
+  margin-top: 30px;
+  color: rgba(219, 234, 254, 0.78);
+  font-size: 15px;
+  line-height: 1.9;
+  letter-spacing: -0.015em;
+}
+
+.hrm-login-benefits {
+  max-width: 700px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 15px;
+  margin-top: 36px;
+}
+
+.hrm-login-benefit {
+  min-width: 0;
+  min-height: 142px;
+  padding: 22px;
+  border: 1px solid rgba(191, 219, 254, 0.22);
+  border-radius: 21px;
+  background: rgba(255, 255, 255, 0.075);
+  backdrop-filter: blur(12px);
+}
+
+.hrm-login-benefit > svg {
+  color: #7dd3fc;
+}
+
+.hrm-login-benefit h2 {
+  margin-top: 18px;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+}
+
+.hrm-login-benefit p {
+  margin-top: 7px;
+  color: rgba(219, 234, 254, 0.62);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.hrm-login-brand-footer {
+  position: relative;
+  z-index: 1;
+  color: rgba(219, 234, 254, 0.53);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.hrm-login-auth {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: clamp(58px, 8.5vh, 78px) clamp(46px, 4.5vw, 78px) 50px;
+  background: #ffffff;
+}
+
+.hrm-login-auth-inner {
+  width: 100%;
+  max-width: 560px;
+}
+
+.hrm-login-mobile-logo {
+  display: none;
+}
+
+.hrm-login-heading > p {
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.24em;
+}
+
+.hrm-login-heading h2 {
+  margin-top: 15px;
+  color: #0f172a;
+  font-size: clamp(34px, 2.55vw, 46px);
+  font-weight: 800;
+  line-height: 1.08;
+  letter-spacing: -0.055em;
+}
+
+.hrm-login-heading > span {
+  display: block;
+  margin-top: 14px;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.hrm-login-card {
+  margin-top: 36px;
+  padding: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.035);
+  border-radius: 28px;
+  background: #ffffff;
+  box-shadow: 0 20px 58px rgba(15, 46, 91, 0.1);
+}
+
+.hrm-login-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 6px;
+  border-radius: 16px;
+  background: #f1f5f9;
+}
+
+.hrm-login-tabs button {
+  min-width: 0;
+  height: 48px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 12px;
+  color: #64748b;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.hrm-login-tabs button:hover {
+  color: #1d4ed8;
+}
+
+.hrm-login-tabs button.is-active {
+  color: #1d4ed8;
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(15, 46, 91, 0.07);
+}
+
+.hrm-login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 38px 18px 20px;
+}
+
+.hrm-login-server-error {
+  padding: 12px 14px;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  color: #b91c1c;
+  background: #fef2f2;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.hrm-login-field > div {
+  gap: 7px;
+}
+
+.hrm-login-field label {
+  color: #334155;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.hrm-login-field .hrm-login-input {
+  width: 100%;
+  height: 58px;
+  padding-right: 46px;
+  padding-left: 48px;
+  border: 1px solid #dbe3ee;
+  border-radius: 15px;
+  color: #0f172a;
+  background: #ffffff;
+  box-shadow: none;
+  font-size: 13px;
+}
+
+.hrm-login-field .hrm-login-input:hover {
+  border-color: #93c5fd;
+}
+
+.hrm-login-field .hrm-login-input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.hrm-login-field .hrm-login-input::placeholder {
+  color: #a3afc2;
+}
+
+.hrm-login-account-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -1px 0 0;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.hrm-login-account-note svg {
+  flex: 0 0 auto;
+  color: #2563eb;
+}
+
+.hrm-login-submit {
+  width: 100%;
+  height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border: 0;
+  border-radius: 15px;
+  color: #ffffff;
+  background: #2563eb;
+  box-shadow: 0 12px 26px rgba(37, 99, 235, 0.23);
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.hrm-login-submit:hover:not(:disabled) {
+  background: #1d4ed8;
+  box-shadow: 0 16px 30px rgba(37, 99, 235, 0.28);
+  transform: translateY(-1px);
+}
+
+.hrm-login-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.hrm-login-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: hrm-login-spin 0.8s linear infinite;
+}
+
+@keyframes hrm-login-spin {
+  to { transform: rotate(360deg); }
+}
+
+.hrm-login-demo-panel {
+  padding: 30px 16px 14px;
+}
+
+.hrm-login-demo-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 13px 14px;
+  border-radius: 15px;
+  color: #1e40af;
+  background: #eff6ff;
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+.hrm-login-demo-note svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.hrm-login-demo-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.hrm-login-demo-grid button {
+  min-width: 0;
+  min-height: 66px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 15px;
+  color: #334155;
+  background: #ffffff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hrm-login-demo-grid button:hover {
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  transform: translateY(-1px);
+}
+
+.hrm-login-demo-grid button.is-selected {
+  border-color: #60a5fa;
+  color: #1e40af;
+  background: #eff6ff;
+}
+
+.hrm-login-demo-grid strong,
+.hrm-login-demo-grid small {
+  display: block;
+}
+
+.hrm-login-demo-grid strong {
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hrm-login-demo-grid small {
+  margin-top: 5px;
+  color: #94a3b8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 9px;
+}
+
+.hrm-login-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 12px;
+  margin-top: 28px;
+  color: #94a3b8;
+  font-size: 10px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.hrm-login-footer > span:last-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.hrm-login-footer i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #cbd5e1;
+}
+
+.hrm-login-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 1023px) {
+  .hrm-login-page {
+    padding: 0;
+    background: #ffffff;
+  }
+
+  .hrm-login-shell {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: block;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .hrm-login-brand {
+    display: none;
+  }
+
+  .hrm-login-auth {
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding: 34px 22px;
+  }
+
+  .hrm-login-mobile-logo {
+    display: flex;
+    margin-bottom: 42px;
+  }
+
+  .hrm-login-mobile-logo-mark {
+    width: 48px;
+    height: 48px;
+    display: grid;
+    place-items: center;
+    border-radius: 15px;
+    color: #ffffff;
+    background: #2563eb;
+    box-shadow: 0 12px 25px rgba(37, 99, 235, 0.22);
+  }
+
+  .hrm-login-mobile-logo small {
+    color: #94a3b8;
+  }
+}
+
+@media (max-width: 560px) {
+  .hrm-login-heading h2 {
+    font-size: 32px;
+  }
+
+  .hrm-login-card {
+    margin-top: 26px;
+    padding: 10px;
+    border-radius: 22px;
+  }
+
+  .hrm-login-form,
+  .hrm-login-demo-panel {
+    padding-right: 6px;
+    padding-left: 6px;
+  }
+
+  .hrm-login-demo-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 1024px) and (max-height: 760px) {
+  .hrm-login-brand {
+    padding-top: 32px;
+    padding-bottom: 32px;
+  }
+
+  .hrm-login-logo-mark {
+    width: 50px;
+    height: 50px;
+    flex-basis: 50px;
+  }
+
+  .hrm-login-brand h1 {
+    margin-top: 24px;
+    font-size: clamp(48px, 3.7vw, 64px);
+  }
+
+  .hrm-login-brand-copy {
+    margin-top: 20px;
+  }
+
+  .hrm-login-benefits {
+    margin-top: 24px;
+  }
+
+  .hrm-login-benefit {
+    min-height: 120px;
+    padding: 18px;
+  }
+
+  .hrm-login-benefit h2 {
+    margin-top: 12px;
+  }
+
+  .hrm-login-auth {
+    padding-top: 30px;
+    padding-bottom: 30px;
+  }
+
+  .hrm-login-card {
+    margin-top: 22px;
+  }
+
+  .hrm-login-form {
+    gap: 14px;
+    padding-top: 22px;
+  }
+
+  .hrm-login-field .hrm-login-input,
+  .hrm-login-submit {
+    height: 50px;
+  }
+
+  .hrm-login-footer {
+    margin-top: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hrm-login-page *,
+  .hrm-login-page *::before,
+  .hrm-login-page *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

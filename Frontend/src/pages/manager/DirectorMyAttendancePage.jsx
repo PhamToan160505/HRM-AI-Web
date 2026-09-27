@@ -268,17 +268,18 @@ export default function DirectorMyAttendancePage() {
                 <div className="flex gap-4">
                     <Button 
                         variant="outline" 
-                        className="flex items-center gap-2 text-blue-600 border-blue-200 hover:bg-blue-50"
+                        className="text-blue-600 border-blue-200 hover:bg-blue-50"
                         onClick={handleEnrollClick}
+                        leadingIcon={<Camera size={18} />}
                     >
-                        <Camera size={18} /> Cập nhật khuôn mặt
+                        Cập nhật khuôn mặt
                     </Button>
                     <Button 
                         variant="primary" 
-                        className="flex items-center gap-2"
                         onClick={() => setIsPunchModalOpen(true)}
+                        leadingIcon={<Clock size={18} />}
                     >
-                        <Clock size={18} /> Chấm công ngay
+                        Chấm công ngay
                     </Button>
                 </div>
             </div>
@@ -289,16 +290,18 @@ export default function DirectorMyAttendancePage() {
                         <Button
                             variant={viewMode === 'calendar' ? 'primary' : 'outline'}
                             onClick={() => setViewMode('calendar')}
-                            className="flex items-center gap-2 px-4"
+                            className="px-4"
+                            leadingIcon={<Calendar size={16} />}
                         >
-                            <Calendar size={16} /> Tổng quan tháng
+                            Tổng quan tháng
                         </Button>
                         <Button
                             variant={viewMode === 'table' ? 'primary' : 'outline'}
                             onClick={() => setViewMode('table')}
-                            className="flex items-center gap-2 px-4"
+                            className="px-4"
+                            leadingIcon={<List size={16} />}
                         >
-                            <List size={16} /> Lịch sử chấm công
+                            Lịch sử chấm công
                         </Button>
                     </div>
 
@@ -352,9 +355,11 @@ export default function DirectorMyAttendancePage() {
                                         </tr>
                                     ) : filteredHistory.length === 0 ? (
                                         <tr>
-                                            <td colSpan="5" className="px-6 py-16 text-center text-slate-400 flex flex-col items-center">
-                                                <Clock size={40} className="text-slate-200 mb-3" />
-                                                <span className="font-medium text-slate-500">Chưa có dữ liệu chấm công tháng này.</span>
+                                            <td colSpan="5" className="px-6 py-16 text-center">
+                                                <div className="flex flex-col items-center justify-center text-slate-400">
+                                                    <Clock size={40} className="text-slate-200 mb-3" />
+                                                    <span className="font-medium text-slate-500">Chưa có dữ liệu chấm công tháng này.</span>
+                                                </div>
                                             </td>
                                         </tr>
                                     ) : (

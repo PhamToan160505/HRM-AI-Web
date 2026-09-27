@@ -98,10 +98,10 @@ export function Button({
       {loading && <Loader2 size={16} className="animate-spin shrink-0 mr-2" />}
       
       {!loading && leadingIcon && (
-        <span className="mr-2 group-hover:-translate-x-0.5 transition-smooth">{leadingIcon}</span>
+        <span className="mr-2 inline-flex items-center shrink-0 group-hover:-translate-x-0.5 transition-smooth">{leadingIcon}</span>
       )}
       
-      <span>{children}</span>
+      <span className="inline-flex items-center">{children}</span>
 
       {!loading && trailingIcon && (
         <span className={[

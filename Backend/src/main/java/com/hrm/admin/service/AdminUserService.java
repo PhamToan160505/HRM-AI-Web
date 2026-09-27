@@ -56,7 +56,7 @@ public class AdminUserService {
                 .role(request.getRole())
                 .departmentId(request.getDepartmentId())
                 .chucVu(request.getChucVu())
-                .active(true)
+                .active(request.getRequestId() == null)
                 .build();
 
         User savedUser = userRepository.save(user);
@@ -67,7 +67,8 @@ public class AdminUserService {
 
         if (request.getRequestId() != null) {
             accountCreationRequestRepository.findById(request.getRequestId()).ifPresent(req -> {
-                req.setStatus(com.hrm.admin.entity.AccountCreationRequest.RequestStatus.APPROVED);
+                req.setUserId(savedUser.getId());
+                req.setStatus(com.hrm.admin.entity.AccountCreationRequest.RequestStatus.PROVISIONED);
                 accountCreationRequestRepository.save(req);
             });
         }
