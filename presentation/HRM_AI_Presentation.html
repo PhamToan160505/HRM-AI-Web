@@ -108,42 +108,44 @@
       transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
-    /* Header Bar */
+    /* Header Bar — Centered Titles */
     .slide-header {
-      padding: 1.5rem 2.25rem 0.5rem 2.25rem;
+      padding: 1.25rem 2.25rem 0.5rem 2.25rem;
       display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
+      justify-content: center;
+      align-items: center;
+      position: relative;
       z-index: 10;
     }
 
+    .title-group {
+      text-align: center;
+    }
+
     .title-group h2 {
-      font-size: 1.65rem;
+      font-size: 1.75rem;
       font-weight: 800;
       color: var(--text-main);
       letter-spacing: -0.02em;
       line-height: 1.25;
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
     }
 
     .subtitle {
-      font-size: 0.92rem;
+      font-size: 0.95rem;
       color: var(--accent-blue-light);
       margin-top: 0.35rem;
       font-weight: 500;
     }
 
     .brand-tag {
+      position: absolute;
+      right: 2.25rem;
+      top: 1.5rem;
       font-size: 0.85rem;
       font-weight: 700;
       color: var(--text-muted);
       letter-spacing: 0.1em;
       text-transform: uppercase;
-      display: flex;
-      align-items: center;
-      gap: 0.4rem;
     }
     .brand-tag span {
       color: var(--accent-blue);
@@ -184,49 +186,50 @@
       z-index: 30;
     }
 
-    /* Card System */
+    /* Card System — Evenly Spaced & Comfortably Filled */
     .grid-2 {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 1.25rem;
-      height: calc(100% - 1rem);
+      gap: 1.5rem;
+      height: calc(100% - 0.75rem);
     }
 
     .grid-3 {
       display: grid;
       grid-template-columns: 1fr 1fr 1fr;
       gap: 1.25rem;
-      height: calc(100% - 1rem);
+      height: calc(100% - 0.75rem);
     }
 
     .grid-steps {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
       grid-template-rows: repeat(3, 1fr);
-      gap: 0.75rem;
-      height: calc(100% - 1rem);
+      gap: 0.85rem;
+      height: calc(100% - 0.75rem);
     }
 
     .card {
       background: var(--card-bg-solid);
       border: 1px solid var(--card-border);
-      border-radius: 14px;
-      padding: 1.25rem;
+      border-radius: 16px;
+      padding: 1.5rem 1.6rem;
       display: flex;
       flex-direction: column;
+      justify-content: space-around; /* Distributes vertical spacing evenly */
       transition: all 0.25s ease;
       position: relative;
     }
 
     .card:hover {
       border-color: var(--card-border-hover);
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
     }
 
     .card-title {
-      font-size: 1.1rem;
+      font-size: 1.15rem;
       font-weight: 700;
-      margin-bottom: 0.85rem;
+      margin-bottom: 0.6rem;
       display: flex;
       align-items: center;
       gap: 0.5rem;
@@ -241,21 +244,21 @@
       list-style: none;
       display: flex;
       flex-direction: column;
-      gap: 0.7rem;
+      gap: 0.95rem; /* Balanced gap between items */
     }
 
     .card-list li {
-      font-size: 0.88rem;
-      line-height: 1.45;
+      font-size: 0.92rem;
+      line-height: 1.5;
       color: var(--text-main);
       display: flex;
       align-items: flex-start;
-      gap: 0.5rem;
+      gap: 0.6rem;
     }
 
     .card-list li strong {
       color: #FFFFFF;
-      font-weight: 600;
+      font-weight: 700;
       min-width: fit-content;
     }
 
@@ -263,7 +266,7 @@
       width: 6px;
       height: 6px;
       border-radius: 50%;
-      margin-top: 0.45rem;
+      margin-top: 0.5rem;
       flex-shrink: 0;
     }
     .bullet-blue { background: var(--accent-blue); }
@@ -271,53 +274,55 @@
     .bullet-purple { background: var(--accent-purple); }
     .bullet-amber { background: var(--accent-amber); }
 
-    /* Step Item inside Grid-12 — All Uniform Blue */
+    /* Step Item inside Grid-12 — Centered Text & Uniform Blue */
     .step-card {
       background: rgba(22, 31, 50, 0.9);
       border: 1px solid rgba(59, 130, 246, 0.4);
-      border-radius: 10px;
-      padding: 0.65rem 0.85rem;
+      border-radius: 12px;
+      padding: 0.75rem 0.9rem;
       display: flex;
       flex-direction: column;
       justify-content: center;
+      align-items: center;
+      text-align: center;
       position: relative;
       overflow: hidden;
     }
 
     .step-num {
-      font-size: 0.72rem;
+      font-size: 0.75rem;
       font-weight: 800;
       letter-spacing: 0.05em;
       text-transform: uppercase;
-      margin-bottom: 0.2rem;
+      margin-bottom: 0.25rem;
       color: var(--accent-blue-light);
     }
 
     .step-title {
-      font-size: 0.85rem;
+      font-size: 0.88rem;
       font-weight: 700;
       color: #FFF;
-      line-height: 1.2;
+      line-height: 1.25;
     }
 
     .step-desc {
-      font-size: 0.74rem;
+      font-size: 0.76rem;
       color: var(--text-muted);
-      margin-top: 0.2rem;
-      line-height: 1.25;
+      margin-top: 0.25rem;
+      line-height: 1.3;
     }
 
     /* Code Snippet Box */
     .code-box {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.78rem;
+      font-size: 0.8rem;
       background: #090D16;
-      border: 1px solid rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 8px;
-      padding: 0.65rem 0.85rem;
+      padding: 0.75rem 1rem;
       color: #38BDF8;
-      margin-top: 0.5rem;
-      line-height: 1.4;
+      margin-top: 0.75rem;
+      line-height: 1.45;
     }
 
     /* Cover Slide Specifics */
@@ -334,7 +339,7 @@
     }
 
     .hero-title {
-      font-size: 3.8rem;
+      font-size: 4rem;
       font-weight: 800;
       letter-spacing: -0.03em;
       background: linear-gradient(135deg, #60A5FA 0%, #3B82F6 50%, #1D4ED8 100%);
@@ -344,7 +349,7 @@
     }
 
     .hero-subtitle {
-      font-size: 1.5rem;
+      font-size: 1.55rem;
       font-weight: 700;
       color: var(--text-main);
       margin-bottom: 0.75rem;
@@ -353,8 +358,8 @@
     .hero-desc {
       font-size: 1.05rem;
       color: var(--accent-green-light);
-      max-width: 800px;
-      line-height: 1.5;
+      max-width: 850px;
+      line-height: 1.55;
       margin-bottom: 2rem;
     }
 
@@ -363,13 +368,13 @@
       flex-wrap: wrap;
       justify-content: center;
       gap: 0.6rem;
-      max-width: 900px;
+      max-width: 950px;
     }
 
     .flow-pill {
-      font-size: 0.8rem;
+      font-size: 0.82rem;
       font-weight: 600;
-      padding: 0.4rem 0.85rem;
+      padding: 0.45rem 0.9rem;
       border-radius: 30px;
       background: rgba(255, 255, 255, 0.05);
       border: 1px solid rgba(255, 255, 255, 0.1);
@@ -446,8 +451,8 @@
       position: fixed;
       bottom: 4rem;
       right: 2rem;
-      width: 480px;
-      max-height: 320px;
+      width: 500px;
+      max-height: 340px;
       background: rgba(15, 23, 42, 0.95);
       backdrop-filter: blur(20px);
       border: 1px solid var(--accent-blue);
@@ -488,8 +493,8 @@
     }
 
     .notes-content {
-      font-size: 0.84rem;
-      line-height: 1.5;
+      font-size: 0.85rem;
+      line-height: 1.55;
       color: var(--text-main);
       overflow-y: auto;
       padding-right: 0.5rem;
@@ -546,9 +551,9 @@
           <div class="flow-pill">2. AI Sàng lọc CV</div> <span class="flow-arrow">→</span>
           <div class="flow-pill">3. Phỏng vấn 2 Vòng</div> <span class="flow-arrow">→</span>
           <div class="flow-pill">4. Offer & Suất tuyển</div> <span class="flow-arrow">→</span>
-          <div class="flow-pill">5. Pre-boarding</div> <span class="flow-arrow">→</span>
+          <div class="flow-pill">5. Chuẩn bị Tiếp nhận</div> <span class="flow-arrow">→</span>
           <div class="flow-pill">6. Xác nhận Đi làm</div> <span class="flow-arrow">→</span>
-          <div class="flow-pill" style="border-color: var(--accent-green);">7. Telegram Bot</div>
+          <div class="flow-pill" style="border-color: var(--accent-green);">7. Điều hành Telegram</div>
         </div>
       </div>
       <div class="slide-page-badge">1 / 10</div>
@@ -564,11 +569,11 @@
             <span>⚠️</span> Thách thức Quy trình Truyền thống
           </div>
           <ul class="card-list">
-            <li><span class="bullet-icon bullet-amber"></span><strong>Nhập liệu thủ công:</strong> CV gửi qua nhiều kênh, HR tốn nhiều giờ đọc và nhập dữ liệu thủ công.</li>
-            <li><span class="bullet-icon bullet-amber"></span><strong>Tiêu chí không thống nhất:</strong> HR và bộ phận chuyên môn chưa đồng bộ bộ tiêu chí đánh giá ứng viên.</li>
-            <li><span class="bullet-icon bullet-amber"></span><strong>Tuyển vượt chỉ tiêu:</strong> Thiếu cơ chế giữ suất tuyển (Seat Ledger) real-time khi gửi Offer.</li>
-            <li><span class="bullet-icon bullet-amber"></span><strong>Đứt gãy dữ liệu:</strong> Sau khi chấp nhận offer, dữ liệu chưa nối liền mạch với hồ sơ nhân viên.</li>
-            <li><span class="bullet-icon bullet-amber"></span><strong>Lãnh đạo thiếu công cụ:</strong> Phụ thuộc báo cáo thủ công, khó tra cứu & duyệt nhanh khi di chuyển.</li>
+            <li><span class="bullet-icon bullet-amber"></span><strong>Nhập liệu thủ công:</strong> Hồ sơ nộp qua nhiều kênh, nhân sự tốn nhiều giờ đọc và nhập liệu thủ công.</li>
+            <li><span class="bullet-icon bullet-amber"></span><strong>Tiêu chí thiếu nhất quán:</strong> Đánh giá ứng viên không đồng bộ giữa bộ phận Nhân sự và Chuyên môn.</li>
+            <li><span class="bullet-icon bullet-amber"></span><strong>Tuyển vượt chỉ tiêu:</strong> Thiếu sổ quản lý suất tuyển thời gian thực khi phát hành Offer.</li>
+            <li><span class="bullet-icon bullet-amber"></span><strong>Đứt gãy dữ liệu:</strong> Hồ sơ ứng viên trúng tuyển không tự động nối liền với hồ sơ Nhân viên.</li>
+            <li><span class="bullet-icon bullet-amber"></span><strong>Lãnh đạo thiếu công cụ:</strong> Phụ thuộc báo cáo chậm, khó tra cứu & duyệt nhanh khi di chuyển.</li>
           </ul>
         </div>
 
@@ -577,11 +582,11 @@
             <span>🚀</span> Giải pháp HRM AI Nổi bật
           </div>
           <ul class="card-list">
-            <li><span class="bullet-icon bullet-green"></span><strong>Nhanh hơn:</strong> Gemini AI tự động cấu trúc hóa CV & tính Fit Score theo bằng chứng trong vài giây.</li>
-            <li><span class="bullet-icon bullet-green"></span><strong>Đúng hơn:</strong> Kiểm soát chặt chẽ bằng State Machine, tự động giữ suất tuyển (Seat Ledger).</li>
-            <li><span class="bullet-icon bullet-green"></span><strong>Minh bạch hơn:</strong> Lưu vết Audit Log đầy đủ, AI cảnh báo sao chép JD, người quyết định cuối.</li>
-            <li><span class="bullet-icon bullet-green"></span><strong>Nối liền mạch:</strong> Tự động chuyển Offer Accepted → Pre-boarding → Kích hoạt tài khoản.</li>
-            <li><span class="bullet-icon bullet-green"></span><strong>Lãnh đạo đồng hành:</strong> Telegram Bot tra cứu dữ liệu real-time và phê duyệt tức thì.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Nhanh hơn:</strong> AI Gemini tự động phân tích CV & tính Điểm phù hợp theo bằng chứng trong vài giây.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Đúng hơn:</strong> Kiểm soát qua luồng quy trình nghiêm ngặt, tự động giữ suất tuyển (Sổ suất tuyển).</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Minh bạch hơn:</strong> Nhật ký kiểm toán đầy đủ, cảnh báo sao chép mô tả công việc, người quyết định cuối.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Nối liền mạch:</strong> Tự động chuyển từ Chấp nhận Offer → Chuẩn bị tiếp nhận → Kích hoạt tài khoản.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Lãnh đạo đồng hành:</strong> Telegram Bot tra cứu dữ liệu thời gian thực và phê duyệt tức thì.</li>
           </ul>
         </div>
       </div>
@@ -595,63 +600,63 @@
       <div class="grid-steps">
         <div class="step-card">
           <div class="step-num">BƯỚC 1</div>
-          <div class="step-title">Tạo Nhu cầu</div>
-          <div class="step-desc">Trưởng phòng lập Job Requisition ở trạng thái DRAFT</div>
+          <div class="step-title">Tạo nhu cầu tuyển dụng</div>
+          <div class="step-desc">Trưởng phòng lập Yêu cầu tuyển dụng (Bản nháp)</div>
         </div>
         <div class="step-card">
           <div class="step-num">BƯỚC 2</div>
-          <div class="step-title">Duyệt Nhu cầu</div>
-          <div class="step-desc">CEO/Quản lý duyệt → Tự động cấp Hiring Seats (AVAILABLE)</div>
+          <div class="step-title">Phê duyệt Nhu cầu</div>
+          <div class="step-desc">Lãnh đạo duyệt → Cấp suất tuyển sẵn có</div>
         </div>
         <div class="step-card">
           <div class="step-num">BƯỚC 3</div>
-          <div class="step-title">Đăng tin Tuyển dụng</div>
-          <div class="step-desc">HR tạo Posting & khóa cặp Version Tiêu chí + AI Profile</div>
+          <div class="step-title">Đăng tin tuyển dụng</div>
+          <div class="step-desc">Tạo Tin tuyển dụng, khóa phiên bản Tiêu chí & Cấu hình AI</div>
         </div>
         <div class="step-card">
           <div class="step-num">BƯỚC 4</div>
-          <div class="step-title">Ứng viên Nộp CV</div>
-          <div class="step-desc">Form nộp trực tuyến an toàn (Không thu thập CCCD)</div>
+          <div class="step-title">Ứng viên nộp CV</div>
+          <div class="step-desc">Nộp trực tuyến qua Biểu mẫu công khai (Không thu CCCD)</div>
         </div>
         <div class="step-card">
           <div class="step-num">BƯỚC 5</div>
           <div class="step-title">AI Phân tích CV</div>
-          <div class="step-desc">PDFBox text extract + Gemini AI chấm Fit Score bằng chứng</div>
+          <div class="step-desc">Trích xuất PDF + AI Gemini chấm Điểm phù hợp bằng chứng</div>
         </div>
         <div class="step-card">
           <div class="step-num">BƯỚC 6</div>
           <div class="step-title">Duyệt CV 2 Cấp</div>
-          <div class="step-desc">HR duyệt cơ bản → Phòng chuyên môn duyệt chuyên sâu</div>
+          <div class="step-desc">Nhân sự duyệt sơ bộ → Phòng chuyên môn duyệt chuyên sâu</div>
         </div>
         <div class="step-card">
           <div class="step-num">BƯỚC 7</div>
           <div class="step-title">Phỏng vấn 2 Vòng</div>
-          <div class="step-desc">Vòng 1 Kỹ thuật & Vòng 2 Quản lý/HR đánh giá</div>
+          <div class="step-desc">Vòng 1 Kỹ thuật & Vòng 2 Quản lý/Nhân sự đánh giá</div>
         </div>
         <div class="step-card">
           <div class="step-num">BƯỚC 8</div>
           <div class="step-title">Duyệt & Gửi Offer</div>
-          <div class="step-desc">Lập Offer, duyệt ngân sách & GIỮ SUẤT TUYỂN (RESERVED)</div>
+          <div class="step-desc">Lập Offer, duyệt ngân sách, gửi ứng viên & GIỮ SUẤT TUYỂN</div>
         </div>
         <div class="step-card">
           <div class="step-num">BƯỚC 9</div>
           <div class="step-title">Ứng viên Chấp nhận</div>
-          <div class="step-desc">Ứng viên click OFFER_ACCEPTED → Phát Outbox Bridge Event</div>
+          <div class="step-desc">Ứng viên đồng ý Offer → Tự động kích hoạt luồng tiếp nhận</div>
         </div>
         <div class="step-card">
           <div class="step-num">BƯỚC 10</div>
-          <div class="step-title">Pre-boarding & Checklist</div>
-          <div class="step-desc">Tạo Employee (PRE_BOARDING), checklist CCCD, account DISABLED</div>
+          <div class="step-title">Chuẩn bị Tiếp nhận</div>
+          <div class="step-desc">Khởi tạo hồ sơ nhân viên, checklist giấy tờ & tài khoản Chưa kích hoạt</div>
         </div>
         <div class="step-card">
           <div class="step-num">BƯỚC 11</div>
-          <div class="step-title">HR Xác nhận Đi làm</div>
-          <div class="step-desc">Ngày đầu tiên đi làm: HR bấm xác nhận JOINED</div>
+          <div class="step-title">Xác nhận Đi làm</div>
+          <div class="step-desc">Ngày đầu đi làm: Nhân sự bấm "Xác nhận đã đi làm"</div>
         </div>
         <div class="step-card">
           <div class="step-num">BƯỚC 12</div>
           <div class="step-title">Kích hoạt Nhân viên</div>
-          <div class="step-desc">Employee → EMPLOYED, Seat → JOINED, Account → ACTIVE</div>
+          <div class="step-desc">Hồ sơ chuyển Chính thức, Suất tuyển hoàn tất, Tài khoản Kích hoạt</div>
         </div>
       </div>
       <div class="slide-page-badge">3 / 10</div>
@@ -665,27 +670,27 @@
         <div class="card">
           <div class="card-title title-blue">1. Yêu cầu Tuyển dụng</div>
           <ul class="card-list">
-            <li><span class="bullet-icon bullet-blue"></span><strong>Khởi tạo Requisition:</strong> Trưởng phòng lập yêu cầu theo vị trí, headcount, khung lương.</li>
-            <li><span class="bullet-icon bullet-blue"></span><strong>Duyệt đa cấp:</strong> Phê duyệt theo ma trận phân quyền backend (DRAFT → APPROVED).</li>
-            <li><span class="bullet-icon bullet-blue"></span><strong>Ràng buộc ngân sách:</strong> Ngăn chặn tuyển ngoài kế hoạch hoặc vượt định mức lương.</li>
+            <li><span class="bullet-icon bullet-blue"></span><strong>Khởi tạo yêu cầu:</strong> Trưởng phòng lập yêu cầu theo vị trí, phòng ban, số lượng, khung lương.</li>
+            <li><span class="bullet-icon bullet-blue"></span><strong>Duyệt đa cấp:</strong> Phê duyệt theo ma trận phân quyền hệ thống (Bản nháp → Đã duyệt).</li>
+            <li><span class="bullet-icon bullet-blue"></span><strong>Ràng buộc ngân sách:</strong> Ngăn chặn tuyển ngoài kế hoạch hoặc vượt định mức lương quy định.</li>
           </ul>
         </div>
 
         <div class="card">
-          <div class="card-title title-green">2. Quản lý Suất tuyển (Seat Ledger)</div>
+          <div class="card-title title-green">2. Sổ quản lý Suất tuyển</div>
           <ul class="card-list">
-            <li><span class="bullet-icon bullet-green"></span><strong>Cấp Suất tự động:</strong> Khi Requisition APPROVED, tự sinh các bản ghi hiring_seats (AVAILABLE).</li>
-            <li><span class="bullet-icon bullet-green"></span><strong>Ràng buộc nghiêm ngặt:</strong> Mọi đợt gửi Offer đều phải gắn với 1 Suất tuyển cụ thể.</li>
-            <li><span class="bullet-icon bullet-green"></span><strong>Chống overbook:</strong> Không bao giờ có tình trạng ứng viên đồng ý nhưng báo hết chỉ tiêu.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Cấp Suất tự động:</strong> Khi yêu cầu được duyệt, tự động sinh các bản ghi suất tuyển sẵn có.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Ràng buộc nghiêm ngặt:</strong> Mọi đợt gửi Offer đều phải gắn với 1 suất tuyển cụ thể.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Chống tuyển vượt:</strong> Không bao giờ xảy ra tình trạng ứng viên đồng ý nhưng báo hết chỉ tiêu.</li>
           </ul>
         </div>
 
         <div class="card">
           <div class="card-title title-purple">3. Đóng băng Tiêu chí AI</div>
           <ul class="card-list">
-            <li><span class="bullet-icon bullet-purple"></span><strong>Posting Open:</strong> HR tạo Posting & phải chốt bộ tiêu chí và AI Scoring Profile.</li>
-            <li><span class="bullet-icon bullet-purple"></span><strong>Version bất biến:</strong> Khóa cặp (criteria_version, scoring_profile_version) bất biến khi đăng tin.</li>
-            <li><span class="bullet-icon bullet-purple"></span><strong>Audit re-run:</strong> Khi sửa tiêu chí, chỉ chạy lại AI cho các hồ sơ đang ở giai đoạn đánh giá.</li>
+            <li><span class="bullet-icon bullet-purple"></span><strong>Mở tin công khai:</strong> Nhân sự tạo Tin tuyển dụng & xác nhận bộ tiêu chí chấm và Cấu hình AI.</li>
+            <li><span class="bullet-icon bullet-purple"></span><strong>Phiên bản bất biến:</strong> Khóa cặp phiên bản (Tiêu chí, Cấu hình AI) bất biến khi đăng tin.</li>
+            <li><span class="bullet-icon bullet-purple"></span><strong>Đánh giá lại an toàn:</strong> Khi sửa tiêu chí, chỉ tính toán lại cho các hồ sơ đang ở khâu đánh giá.</li>
           </ul>
         </div>
       </div>
@@ -700,20 +705,20 @@
         <div class="card">
           <div class="card-title title-blue">Quy trình Xử lý CV & AI Gemini</div>
           <ul class="card-list">
-            <li><span class="bullet-icon bullet-blue"></span><strong>Form nộp trực tuyến:</strong> Ứng viên nộp CV (PDF/DOCX). Tuyệt đối KHÔNG thu thập CCCD ở bước này.</li>
-            <li><span class="bullet-icon bullet-blue"></span><strong>Kiểm tra An toàn File:</strong> Xác minh mime-type, dung lượng, số trang, chặn virus/macro và file mã hóa.</li>
-            <li><span class="bullet-icon bullet-blue"></span><strong>PDFBox Text Extraction:</strong> Trích xuất toàn bộ văn bản thô từ tệp PDF CV chuẩn xác.</li>
-            <li><span class="bullet-icon bullet-blue"></span><strong>Gemini AI Parsing:</strong> Cấu trúc hóa: Học vấn, Kinh nghiệm, Kỹ năng & Thành tựu thực tế.</li>
+            <li><span class="bullet-icon bullet-blue"></span><strong>Nộp Form trực tuyến:</strong> Ứng viên nộp CV trực tuyến (PDF/Word). Tuyệt đối KHÔNG thu thập CCCD ở bước này.</li>
+            <li><span class="bullet-icon bullet-blue"></span><strong>Kiểm tra An toàn File:</strong> Xác minh định dạng thực tế, dung lượng, số trang, chặn mã độc và file mã hóa.</li>
+            <li><span class="bullet-icon bullet-blue"></span><strong>Trích xuất văn bản:</strong> Trích xuất chuẩn xác toàn bộ nội dung văn bản thô từ tệp CV.</li>
+            <li><span class="bullet-icon bullet-blue"></span><strong>AI Phân tích dữ liệu:</strong> Phân tích cấu trúc: Học vấn, Kinh nghiệm, Kỹ năng & Thành tựu thực tế.</li>
           </ul>
         </div>
 
         <div class="card" style="border-color: rgba(245, 158, 11, 0.3);">
-          <div class="card-title title-amber">Fit Score theo Bằng chứng & Safety</div>
+          <div class="card-title title-amber">Điểm Phù hợp theo Bằng chứng</div>
           <ul class="card-list">
-            <li><span class="bullet-icon bullet-amber"></span><strong>Evidence-Based Scoring:</strong> Chấm theo BẰNG CHỨNG thực tế thay vì từ khóa suông. Phân biệt Khai báo vs Thực chứng.</li>
-            <li><span class="bullet-icon bullet-amber"></span><strong>AI Fraud Flag:</strong> Phát hiện & cảnh báo ứng viên sao chép nguyên văn mô tả công việc (JD Mirroring).</li>
-            <li><span class="bullet-icon bullet-amber"></span><strong>Interview Questions:</strong> AI tự động sinh danh sách câu hỏi phỏng vấn xoáy vào các điểm cần xác minh.</li>
-            <li><span class="bullet-icon bullet-amber"></span><strong>Nguyên tắc bất biến:</strong> AI chỉ gợi ý. HR & Chuyên môn luôn là người giữ quyền quyết định cuối cùng!</li>
+            <li><span class="bullet-icon bullet-amber"></span><strong>Chấm điểm Bằng chứng:</strong> Chấm theo BẰNG CHỨNG thực tế thay vì từ khóa suông. Phân biệt Khai báo vs Thực chứng.</li>
+            <li><span class="bullet-icon bullet-amber"></span><strong>Cảnh báo Gian lận AI:</strong> Phát hiện & cảnh báo ứng viên sao chép nguyên văn mô tả công việc (JD).</li>
+            <li><span class="bullet-icon bullet-amber"></span><strong>Gợi ý Hỏi phỏng vấn:</strong> AI tự động sinh danh sách câu hỏi phỏng vấn xoáy vào các điểm cần xác minh.</li>
+            <li><span class="bullet-icon bullet-amber"></span><strong>Nguyên tắc bất biến:</strong> AI chỉ gợi ý. Nhân sự & Phòng chuyên môn luôn giữ quyền quyết định cuối cùng!</li>
           </ul>
         </div>
       </div>
@@ -728,20 +733,20 @@
         <div class="card">
           <div class="card-title title-blue">Quy trình Phỏng vấn 2 Vòng</div>
           <ul class="card-list">
-            <li><span class="bullet-icon bullet-blue"></span><strong>Duyệt CV 2 cấp:</strong> HR duyệt cơ bản (PENDING_HR_CV_REVIEW) → Phòng chuyên môn duyệt (PENDING_TECH_CV_REVIEW).</li>
-            <li><span class="bullet-icon bullet-blue"></span><strong>Phỏng vấn Vòng 1:</strong> Đánh giá năng lực chuyên môn thực hành & giải quyết bài toán.</li>
-            <li><span class="bullet-icon bullet-blue"></span><strong>Phỏng vấn Vòng 2:</strong> Đánh giá sự phù hợp văn hóa & định hướng từ Quản lý/HR.</li>
-            <li><span class="bullet-icon bullet-blue"></span><strong>Hỗ trợ Revert:</strong> Cho phép trả hồ sơ về bước trước có lý do kèm theo nếu cần đánh giá lại.</li>
+            <li><span class="bullet-icon bullet-blue"></span><strong>Duyệt CV 2 cấp:</strong> Nhân sự duyệt sơ bộ → Phòng chuyên môn duyệt đánh giá chi tiết.</li>
+            <li><span class="bullet-icon bullet-blue"></span><strong>Phỏng vấn Vòng 1:</strong> Đánh giá năng lực chuyên môn thực hành & tư duy giải quyết bài toán.</li>
+            <li><span class="bullet-icon bullet-blue"></span><strong>Phỏng vấn Vòng 2:</strong> Đánh giá sự phù hợp văn hóa & định hướng phát triển cùng Quản lý/Nhân sự.</li>
+            <li><span class="bullet-icon bullet-blue"></span><strong>Hỗ trợ Trả về:</strong> Cho phép trả hồ sơ về bước trước kèm lý do nếu cần đánh giá lại.</li>
           </ul>
         </div>
 
         <div class="card" style="border-color: rgba(16, 185, 129, 0.3);">
           <div class="card-title title-green">Tạo & Phê duyệt Offer An toàn</div>
           <ul class="card-list">
-            <li><span class="bullet-icon bullet-green"></span><strong>Tách biệt Offer & Dispatch:</strong> Tách điều khoản Offer (bất biến) và Lần gửi Dispatch (token, deadline).</li>
-            <li><span class="bullet-icon bullet-green"></span><strong>Phê duyệt Nội bộ:</strong> Duyệt theo chính sách ngân sách. Cảnh báo cờ vượt khung lương Requisition.</li>
-            <li><span class="bullet-icon bullet-green"></span><strong>Giữ Suất tuyển (Seat Reserved):</strong> Nối từ OFFER_SENT: Suất tuyển chuyển từ AVAILABLE → RESERVED.</li>
-            <li><span class="bullet-icon bullet-green"></span><strong>Link Phản hồi Bảo mật:</strong> Ứng viên nhận link bảo mật có token phản hồi (Accept / Decline / Negotiate).</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Tách biệt Điều khoản & Lần gửi:</strong> Tách điều khoản Offer (bất biến) và Lần gửi thực tế (mã bảo mật, hạn chót).</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Phê duyệt Nội bộ:</strong> Duyệt theo ngân sách. Cảnh báo cờ vượt khung lương Yêu cầu tuyển dụng.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Giữ Suất tuyển an toàn:</strong> Ngay khi gửi Offer: Suất tuyển chuyển từ Sẵn có → Đã giữ chỗ.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Liên kết Bảo mật:</strong> Ứng viên nhận liên kết bảo mật để bấm Chấp nhận, Từ chối hoặc Thương lượng.</li>
           </ul>
         </div>
       </div>
@@ -754,22 +759,22 @@
     <div class="slide-body" id="slide-7">
       <div class="grid-2">
         <div class="card" style="border-color: rgba(139, 92, 246, 0.3);">
-          <div class="card-title title-purple">Cầu nối Idempotent & Pre-boarding</div>
+          <div class="card-title title-purple">Cầu nối Dữ liệu & Chuẩn bị Tiếp nhận</div>
           <ul class="card-list">
-            <li><span class="bullet-icon bullet-purple"></span><strong>Event OFFER_ACCEPTED:</strong> Ứng viên bấm chấp nhận offer → Phát event Outbox với conversion_key chống trùng.</li>
-            <li><span class="bullet-icon bullet-purple"></span><strong>Tạo Person & Employee:</strong> Khởi tạo Person (PROVISIONAL) & Employee ở trạng thái PRE_BOARDING.</li>
-            <li><span class="bullet-icon bullet-purple"></span><strong>Checklist & Hồ sơ:</strong> Tự động sinh Pre-boarding Checklist: Thu thập CCCD, Bằng cấp, Ngân hàng.</li>
-            <li><span class="bullet-icon bullet-purple"></span><strong>Hợp đồng & Lương ban đầu:</strong> Tạo employment_record & compensation_record ở trạng thái SCHEDULED.</li>
+            <li><span class="bullet-icon bullet-purple"></span><strong>Sự kiện Ứng viên Đồng ý:</strong> Ứng viên bấm chấp nhận offer → Kích hoạt sự kiện dữ liệu an toàn chống trùng.</li>
+            <li><span class="bullet-icon bullet-purple"></span><strong>Tạo Hồ sơ Tiếp nhận:</strong> Khởi tạo Hồ sơ cá nhân & Hồ sơ nhân viên ở trạng thái Chuẩn bị tiếp nhận.</li>
+            <li><span class="bullet-icon bullet-purple"></span><strong>Danh mục Hồ sơ:</strong> Tự động sinh danh mục tiếp nhận: Thu thập CCCD, Bằng cấp, Ngân hàng.</li>
+            <li><span class="bullet-icon bullet-purple"></span><strong>Hợp đồng & Lương ban đầu:</strong> Tạo bản ghi hợp đồng & bản ghi lương ban đầu ở trạng thái Chờ hiệu lực.</li>
           </ul>
         </div>
 
         <div class="card" style="border-color: rgba(16, 185, 129, 0.3);">
-          <div class="card-title title-green">Tài khoản DISABLED & Xác nhận JOINED</div>
+          <div class="card-title title-green">Tài khoản Chưa kích hoạt & Xác nhận Đi làm</div>
           <ul class="card-list">
-            <li><span class="bullet-icon bullet-green"></span><strong>Tài khoản An toàn:</strong> Gửi yêu cầu cấp tài khoản hệ thống. Tạo trước ngày đi làm ở trạng thái DISABLED.</li>
-            <li><span class="bullet-icon bullet-green"></span><strong>Xác nhận Đi làm (JOINED):</strong> Vào ngày nhận việc, HR bấm "Xác nhận đã đi làm" trên hệ thống.</li>
-            <li><span class="bullet-icon bullet-green"></span><strong>Kích hoạt Đồng bộ:</strong> Employee → EMPLOYED, Hiring Seat → JOINED, Account → ACTIVE.</li>
-            <li><span class="bullet-icon bullet-green"></span><strong>Hủy nhận việc:</strong> Nếu ứng viên không đến → ONBOARD_CANCELLED, hủy tài khoản & nhả lại Suất tuyển.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Tài khoản An toàn:</strong> Gửi yêu cầu cấp tài khoản. Tạo trước ngày đi làm ở trạng thái Chưa kích hoạt.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Xác nhận Đi làm:</strong> Vào ngày nhận việc, Nhân sự bấm 'Xác nhận đã đi làm' trên hệ thống.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Kích hoạt Đồng bộ:</strong> Hồ sơ chuyển Chính thức, Suất tuyển hoàn tất, Tài khoản chuyển Đã kích hoạt.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Hủy nhận việc:</strong> Nếu ứng viên không đến → Hủy tiếp nhận, hủy tài khoản & nhả lại Suất tuyển sẵn có.</li>
           </ul>
         </div>
       </div>
@@ -784,25 +789,25 @@
         <div class="card">
           <div class="card-title title-blue">Bộ Lệnh Tra cứu & Duyệt nhanh</div>
           <ul class="card-list">
-            <li><span class="bullet-icon bullet-blue"></span><strong>/dashboard:</strong> Xem tổng quan chỉ số nhân sự toàn công ty real-time.</li>
+            <li><span class="bullet-icon bullet-blue"></span><strong>/dashboard:</strong> Xem tổng quan chỉ số nhân sự toàn công ty thời gian thực.</li>
             <li><span class="bullet-icon bullet-blue"></span><strong>/nhanvien & /tuyendung:</strong> Thống kê quy mô nhân sự, phòng ban & đợt tuyển dụng.</li>
             <li><span class="bullet-icon bullet-blue"></span><strong>/chamcong & /luong:</strong> Kiểm tra tình hình đi làm trong ngày & tổng chi phí lương.</li>
-            <li><span class="bullet-icon bullet-blue"></span><strong>/request, /duyet, /tuchoi:</strong> Duyệt hoặc từ chối yêu cầu tuyển dụng, offer theo ID tức thì.</li>
+            <li><span class="bullet-icon bullet-blue"></span><strong>/duyet & /tuchoi:</strong> Duyệt hoặc từ chối yêu cầu tuyển dụng, offer theo ID tức thì.</li>
           </ul>
           <div class="code-box">
-            Command Example:<br>
+            Ví dụ câu lệnh:<br>
             /duyet 105<br>
-            -> [SUCCESS] Requisition #105 đã được APPROVED bởi CEO.
+            -> [THÀNH CÔNG] Yêu cầu tuyển dụng #105 đã được ĐÃ DUYỆT bởi CEO.
           </div>
         </div>
 
         <div class="card" style="border-color: rgba(16, 185, 129, 0.3);">
-          <div class="card-title title-green">Hỏi đáp Tiếng Việt & Keyword Fallback</div>
+          <div class="card-title title-green">Hỏi đáp Tiếng Việt & Cơ chế Dự phòng</div>
           <ul class="card-list">
             <li><span class="bullet-icon bullet-green"></span><strong>Truy vấn Tự nhiên:</strong> Hỏi câu tiếng Việt: "Hiện công ty có bao nhiêu nhân viên?", "Hôm nay ai đi muộn?"</li>
-            <li><span class="bullet-icon bullet-green"></span><strong>Gemini Intent Recognition:</strong> Gemini AI phân tích ý định câu hỏi → gọi API HRM lấy dữ liệu thực.</li>
-            <li><span class="bullet-icon bullet-green"></span><strong>Cơ chế Fallback An toàn:</strong> Nếu ngắt kết nối AI, Bot tự chuyển sang nhận diện Keyword phục vụ liên tục.</li>
-            <li><span class="bullet-icon bullet-green"></span><strong>Bảo mật Phân quyền:</strong> Bot xác thực theo Telegram Chat ID và SĐT chỉ dành cho Lãnh đạo được cấp quyền.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>AI Phân tích Ý định:</strong> AI Gemini phân tích ý định câu hỏi → gọi dữ liệu thực tế hệ thống trả về.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Cơ chế Dự phòng:</strong> Nếu ngắt kết nối AI, Bot tự chuyển sang nhận diện Từ khóa phục vụ liên tục.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Bảo mật Phân quyền:</strong> Bot xác thực theo Mã trò chuyện và Số điện thoại chỉ dành cho Lãnh đạo được cấp quyền.</li>
           </ul>
         </div>
       </div>
@@ -815,22 +820,22 @@
     <div class="slide-body" id="slide-9">
       <div class="grid-2">
         <div class="card">
-          <div class="card-title title-blue">Kiến trúc Multi-Tier Modern</div>
+          <div class="card-title title-blue">Kiến trúc Đa tầng Hiện đại</div>
           <ul class="card-list">
-            <li><span class="bullet-icon bullet-blue"></span><strong>Frontend Modern:</strong> React 19 + Vite + Tailwind CSS + Recharts + WebSocket (STOMP) real-time.</li>
-            <li><span class="bullet-icon bullet-blue"></span><strong>Backend Enterprise:</strong> Java 17 + Spring Boot + Spring Security (JWT) + Approval Engine.</li>
-            <li><span class="bullet-icon bullet-blue"></span><strong>Data & Event Storage:</strong> MySQL + Flyway DB Migration + Outbox Event Pattern có retry.</li>
-            <li><span class="bullet-icon bullet-blue"></span><strong>AI & File Engine:</strong> Google Gemini API + Apache PDFBox xử lý trích xuất văn bản CV.</li>
+            <li><span class="bullet-icon bullet-blue"></span><strong>Giao diện Modern:</strong> React 19 + Vite + Tailwind CSS + Biểu đồ Recharts + WebSocket thông báo thời gian thực.</li>
+            <li><span class="bullet-icon bullet-blue"></span><strong>Backend Chuẩn Doanh nghiệp:</strong> Java 17 + Spring Boot + Spring Security + Mô hình Phê duyệt Đa cấp.</li>
+            <li><span class="bullet-icon bullet-blue"></span><strong>Lưu trữ & Sự kiện:</strong> MySQL + Flyway quản lý phiên bản cơ sở dữ liệu + Outbox Event có tự động xử lý lại.</li>
+            <li><span class="bullet-icon bullet-blue"></span><strong>AI & Xử lý File:</strong> Google Gemini API + Trích xuất văn bản tệp PDF chuyên dụng.</li>
           </ul>
         </div>
 
         <div class="card" style="border-color: rgba(139, 92, 246, 0.3);">
-          <div class="card-title title-purple">Nguyên tắc "Không Hardcode" (No-Hardcode)</div>
+          <div class="card-title title-purple">Cấu hình Động (Không gán cứng trong code)</div>
           <ul class="card-list">
-            <li><span class="bullet-icon bullet-purple"></span><strong>Database-Driven Config:</strong> Toàn bộ tham số nghiệp vụ nằm trong system_configurations & scoring_parameters.</li>
-            <li><span class="bullet-icon bullet-purple"></span><strong>Thay đổi tức thì:</strong> HR Head/Admin sửa hệ số điểm AI, SLA, dung lượng file trên UI → Đổi ngay không re-deploy.</li>
-            <li><span class="bullet-icon bullet-purple"></span><strong>Version bất biến:</strong> Profile chấm điểm AI được đánh version bất biến, đảm bảo tính nhất quán audit.</li>
-            <li><span class="bullet-icon bullet-purple"></span><strong>Bảo mật & Phân quyền:</strong> Phân quyền chi tiết (RBAC), Audit log append-only cho mọi thao tác chuyển trạng thái.</li>
+            <li><span class="bullet-icon bullet-purple"></span><strong>Quản lý Tham số ở Database:</strong> Toàn bộ hệ số điểm AI, ngưỡng cảnh báo, ma trận duyệt lưu ở Database.</li>
+            <li><span class="bullet-icon bullet-purple"></span><strong>Thay đổi tức thì:</strong> Quản trị viên sửa hệ số điểm AI, thời hạn xử lý trên UI → Đổi ngay không re-deploy.</li>
+            <li><span class="bullet-icon bullet-purple"></span><strong>Phiên bản Bất biến:</strong> Cấu hình chấm điểm AI được lưu phiên bản bất biến, đảm bảo tính nhất quán kiểm toán.</li>
+            <li><span class="bullet-icon bullet-purple"></span><strong>Bảo mật & Phân quyền:</strong> Phân quyền theo vai trò chi tiết, Nhật ký kiểm toán lưu vết mọi thao tác.</li>
           </ul>
         </div>
       </div>
@@ -845,20 +850,20 @@
         <div class="card" style="border-color: rgba(16, 185, 129, 0.3);">
           <div class="card-title title-green">Giá trị mang lại cho Doanh nghiệp</div>
           <ul class="card-list">
-            <li><span class="bullet-icon bullet-green"></span><strong>Cho HR:</strong> Tự động hóa 80% thao tác đọc/nhập CV, loại bỏ bỏ sót hồ sơ, quản lý luồng tập trung.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Cho Nhân sự (HR):</strong> Tự động hóa 80% thao tác đọc/nhập CV, loại bỏ bỏ sót hồ sơ, quản lý luồng tập trung.</li>
             <li><span class="bullet-icon bullet-green"></span><strong>Cho Quản lý:</strong> Đánh giá ứng viên theo tiêu chí đồng nhất, nắm chính xác tiến độ từng hồ sơ.</li>
-            <li><span class="bullet-icon bullet-green"></span><strong>Cho Lãnh đạo:</strong> Kiểm soát ngân sách & chỉ tiêu (Seat Ledger), tra cứu & phê duyệt 24/7 qua Telegram.</li>
-            <li><span class="bullet-icon bullet-green"></span><strong>Toàn vẹn Dữ liệu:</strong> Nối liền mạch Tuyển dụng → Nhân viên, lưu vết Lịch sử (Audit Log) đầy đủ.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Cho Lãnh đạo:</strong> Kiểm soát ngân sách & chỉ tiêu (Sổ suất tuyển), tra cứu & phê duyệt 24/7 qua Telegram.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Toàn vẹn Dữ liệu:</strong> Nối liền mạch Tuyển dụng → Nhân viên, lưu vết Nhật ký kiểm toán đầy đủ.</li>
           </ul>
         </div>
 
         <div class="card" style="border-color: rgba(245, 158, 11, 0.3);">
-          <div class="card-title title-amber">Kịch bản Demo Thực tế (3 - 5 Phút)</div>
+          <div class="card-title title-amber">Kịch bản Trình diễn Thực tế (3 - 5 Phút)</div>
           <ul class="card-list">
-            <li><span class="bullet-icon bullet-amber"></span><strong>B1. Đăng tin & CV List:</strong> Mở Tin tuyển dụng đang OPEN & danh sách ứng viên nộp CV.</li>
-            <li><span class="bullet-icon bullet-amber"></span><strong>B2. AI Fit Score Detail:</strong> Xem Fit Score (chấm bằng chứng), Cảnh báo Fraud & Đề xuất câu hỏi phỏng vấn.</li>
-            <li><span class="bullet-icon bullet-amber"></span><strong>B3. Offer & Seat Reserve:</strong> Chuyển phỏng vấn → Duyệt Offer → Suất tuyển chuyển RESERVED.</li>
-            <li><span class="bullet-icon bullet-amber"></span><strong>B4. Accept & Joined Flow:</strong> Ứng viên click Accept → Hồ sơ vào Pre-boarding → HR bấm JOINED → Account ACTIVE.</li>
+            <li><span class="bullet-icon bullet-amber"></span><strong>B1. Đăng tin & Danh sách CV:</strong> Mở Tin tuyển dụng đang mở & danh sách ứng viên nộp CV.</li>
+            <li><span class="bullet-icon bullet-amber"></span><strong>B2. Chi tiết AI Chấm bằng chứng:</strong> Xem Điểm phù hợp (chấm bằng chứng), Cảnh báo gian lận & Gợi ý hỏi phỏng vấn.</li>
+            <li><span class="bullet-icon bullet-amber"></span><strong>B3. Offer & Giữ Suất tuyển:</strong> Chuyển phỏng vấn → Duyệt Offer → Suất tuyển chuyển trạng thái Đã giữ chỗ.</li>
+            <li><span class="bullet-icon bullet-amber"></span><strong>B4. Đồng ý & Đi làm:</strong> Ứng viên bấm Đồng ý → Hồ sơ vào Tiếp nhận → Nhân sự bấm Đi làm → Tài khoản Đã kích hoạt.</li>
             <li><span class="bullet-icon bullet-amber"></span><strong>B5. Telegram Live Query:</strong> Mở Telegram hỏi "Đang tuyển bao nhiêu vị trí?" & gõ /dashboard kết thúc.</li>
           </ul>
         </div>
@@ -896,57 +901,57 @@
 </div>
 
 <script>
-  // Slide Metadata & Speaker Notes
+  // Slide Metadata & Speaker Notes (Pure Vietnamese)
   const slidesData = [
     {
       title: "HRM AI",
       subtitle: "Hệ thống Tuyển dụng & Quản trị Nhân sự Tích hợp AI",
-      notes: `Kính chào thầy cô và các bạn! Hôm nay nhóm chúng em xin được giới thiệu hệ thống HRM AI — Nền tảng Tuyển dụng và Quản trị Nhân sự Tích hợp Trí tuệ Nhân tạo.\n\nĐược thiết kế nhằm giải quyết bài toán đứt gãy dữ liệu phổ biến trong các doanh nghiệp hiện nay, HRM AI không chỉ là một công cụ lọc CV tự động, mà là một quy trình kiểm soát toàn diện xuyên suốt — bắt đầu từ khoảnh khắc phòng ban phát sinh nhu cầu tuyển người, qua các vòng phỏng vấn, phê duyệt offer, chuẩn bị pre-boarding, cho tới ngày đầu tiên nhân viên bước vào công ty. Đồng thời, hệ thống trao quyền cho Ban Lãnh đạo tra cứu và phê duyệt dữ liệu nhân sự real-time ngay trên Telegram.`
+      notes: `Kính chào thầy cô và các bạn! Hôm nay nhóm chúng em xin được giới thiệu hệ thống HRM AI — Nền tảng Tuyển dụng và Quản trị Nhân sự Tích hợp Trí tuệ Nhân tạo.\n\nĐược thiết kế nhằm giải quyết bài toán đứt gãy dữ liệu phổ biến trong các doanh nghiệp hiện nay, HRM AI không chỉ là một công cụ lọc CV tự động, mà là một quy trình kiểm soát toàn diện xuyên suốt — bắt đầu từ khoảnh khắc phòng ban phát sinh nhu cầu tuyển người, qua các vòng phỏng vấn, phê duyệt offer, chuẩn bị tiếp nhận, cho tới ngày đầu tiên nhân viên bước vào công ty. Đồng thời, hệ thống trao quyền cho Ban Lãnh đạo tra cứu và phê duyệt dữ liệu nhân sự thời gian thực ngay trên Telegram.`
     },
     {
       title: "Bài toán thực tế & Giải pháp HRM AI",
       subtitle: "Chuyển đổi quy trình thủ công đứt gãy thành Nền tảng hợp nhất Nhanh - Đúng - Minh bạch",
-      notes: `Kính thưa hội đồng, trong thực tế vận hành doanh nghiệp, vấn đề tuyển dụng không chỉ nằm ở việc đọc CV chậm, mà nghiêm trọng hơn là sự đứt gãy dữ liệu giữa tuyển dụng, phê duyệt và tiếp nhận nhân viên.\n\nDoanh nghiệp thường gặp 3 nỗi đau chính: Một là HR mất rất nhiều thời gian đọc CV thủ công nhưng tiêu chí lại không thống nhất với phòng chuyên môn. Hai là tình trạng 'tuyển vượt chỉ tiêu' hoặc ứng viên nhận offer xong đến công ty lại bị báo hết vị trí do không quản lý được suất tuyển. Và ba là khi ứng viên đồng ý nhận việc, HR lại phải gõ tay toàn bộ thông tin để tạo hồ sơ nhân viên mới.\n\nHRM AI ra đời để giải quyết triệt để bài toán này với thông điệp: Nhanh hơn - Đúng hơn - Minh bạch hơn.`
+      notes: `Kính thưa hội đồng, trong thực tế vận hành doanh nghiệp, vấn đề tuyển dụng không chỉ nằm ở việc đọc CV chậm, mà nghiêm trọng hơn là sự đứt gãy dữ liệu giữa tuyển dụng, phê duyệt và tiếp nhận nhân viên.\n\nDoanh nghiệp thường gặp 3 nỗi đau chính: Một là Nhân sự mất rất nhiều thời gian đọc CV thủ công nhưng tiêu chí lại không thống nhất với phòng chuyên môn. Hai là tình trạng 'tuyển vượt chỉ tiêu' hoặc ứng viên nhận offer xong đến công ty lại bị báo hết vị trí do không quản lý được suất tuyển. Và ba là khi ứng viên đồng ý nhận việc, Nhân sự lại phải gõ tay toàn bộ thông tin để tạo hồ sơ nhân viên mới.\n\nHRM AI ra đời để giải quyết triệt để bài toán này với thông điệp: Nhanh hơn - Đúng hơn - Minh bạch hơn.`
     },
     {
       title: "Luồng Tuyển dụng & Tiếp nhận Nhân sự Tổng thể",
       subtitle: "Quy trình 12 bước xuyên suốt từ Nhu cầu tuyển dụng đến Ngày đi làm đầu tiên của Nhân viên",
-      notes: `Đây là Slide trung tâm biểu diễn toàn bộ luồng nghiệp vụ 12 bước của HRM AI.\n\nLuồng bắt đầu từ Bước 1 khi Trưởng phòng tạo yêu cầu tuyển dụng. Ngay khi yêu cầu được duyệt ở Bước 2, hệ thống tự động sinh các bản ghi Suất tuyển (Hiring Seats). Tại Bước 5, AI Gemini đảm nhận vai trò trích xuất và chấm Fit Score theo bằng chứng. Trải qua 2 vòng phỏng vấn, ở Bước 8 khi Offer được gửi đi, hệ thống lập tức khóa và giữ suất tuyển ở trạng thái RESERVED.\n\nĐặc biệt, tại Bước 9 khi ứng viên bấm Chấp nhận Offer, hệ thống kích hoạt Cầu nối tự động (Idempotent Bridge) chuyển ứng viên sang trạng thái Pre-boarding ở Bước 10. Tài khoản làm việc được chuẩn bị ở trạng thái Tắt (DISABLED) và chỉ chính thức kích hoạt sang ACTIVE ở Bước 12 khi HR xác nhận nhân viên đã thực sự có mặt làm việc (JOINED).`
+      notes: `Đây là Slide trung tâm biểu diễn toàn bộ luồng nghiệp vụ 12 bước của HRM AI.\n\nLuồng bắt đầu từ Bước 1 khi Trưởng phòng tạo yêu cầu tuyển dụng. Ngay khi yêu cầu được duyệt ở Bước 2, hệ thống tự động sinh các bản ghi Suất tuyển sẵn có. Tại Bước 5, AI Gemini đảm nhận vai trò trích xuất và chấm Điểm phù hợp theo bằng chứng. Trải qua 2 vòng phỏng vấn, ở Bước 8 khi Offer được gửi đi, hệ thống lập tức khóa và giữ suất tuyển ở trạng thái Đã giữ chỗ.\n\nĐặc biệt, tại Bước 9 khi ứng viên bấm Chấp nhận Offer, hệ thống kích hoạt Cầu nối dữ liệu an toàn tự động chuyển ứng viên sang trạng thái Chuẩn bị tiếp nhận ở Bước 10. Tài khoản làm việc được chuẩn bị ở trạng thái Chưa kích hoạt và chỉ chính thức chuyển sang Đã kích hoạt ở Bước 12 khi Nhân sự xác nhận nhân viên đã thực sự có mặt làm việc (Xác nhận đã đi làm).`
     },
     {
       title: "Khởi tạo Nhu cầu & Đăng tin Tuyển dụng",
-      subtitle: "Quản lý Requisition, Sổ kế toán Suất tuyển (Seat Ledger) và Khóa tiêu chí AI Profile",
-      notes: `Ở giai đoạn đầu tiên, HRM AI giải quyết triệt để bài toán quản lý chỉ tiêu và ngân sách.\n\nKhi Trưởng phòng gửi Requisition, quy trình phê duyệt backend sẽ kiểm tra quyền hạn và định mức lương. Ngay khi được cấp duyệt, hệ thống áp dụng cơ chế Sổ kế toán Suất tuyển (Hiring Seat Ledger) — tự động sinh ra đúng số lượng suất tuyển khả dụng.\n\nĐồng thời, trước khi đăng tin công khai, HR và Trưởng phòng phải chốt bộ tiêu chí chấm điểm. Hệ thống sẽ đóng băng bộ tiêu chí và version AI thành một cặp snapshot bất biến. Điều này đảm bảo tính công bằng và minh bạch: mọi ứng viên nộp trong cùng một đợt đều được chấm theo đúng một thước đo chuẩn mực.`
+      subtitle: "Quản lý Yêu cầu tuyển dụng, Sổ quản lý Suất tuyển và Khóa tiêu chí AI",
+      notes: `Ở giai đoạn đầu tiên, HRM AI giải quyết triệt để bài toán quản lý chỉ tiêu và ngân sách.\n\nKhi Trưởng phòng gửi Yêu cầu tuyển dụng, quy trình phê duyệt backend sẽ kiểm tra quyền hạn và định mức lương. Ngay khi được cấp duyệt, hệ thống áp dụng cơ chế Sổ quản lý Suất tuyển — tự động sinh ra đúng số lượng suất tuyển sẵn có.\n\nĐồng thời, trước khi đăng tin công khai, Nhân sự và Trưởng phòng phải chốt bộ tiêu chí chấm điểm. Hệ thống sẽ đóng băng bộ tiêu chí và cấu hình AI thành một cặp phiên bản bất biến. Điều này đảm bảo tính công bằng và minh bạch: mọi ứng viên nộp trong cùng một đợt đều được chấm theo đúng một thước đo chuẩn mực.`
     },
     {
       title: "AI Phân tích, Sàng lọc & Chấm CV theo Bằng chứng",
-      subtitle: "Bảo mật tải lên, Trích xuất PDFBox, Gemini AI Fit Score & Cảnh báo bất thường",
-      notes: `Điểm sáng đột phá của HRM AI nằm ở mô hình đánh giá CV theo Bằng chứng (Evidence-Based Scoring).\n\nCác hệ thống ATS thông thường chỉ quét từ khóa (keywords) đơn thuần, dẫn đến việc ứng viên cố tình chèn từ khóa trong JD để lấy điểm cao. HRM AI xử lý qua Apache PDFBox và Google Gemini AI để phân tích sâu: Phân biệt rõ giữa việc 'chỉ khai báo kỹ năng' và 'có dự án/bằng chứng thực tế chứng minh kỹ năng đó'.\n\nHệ thống tự động bật cờ AI Fraud Flag nếu phát hiện ứng viên sao chép nguyên văn JD (JD Mirroring), đồng thời sinh sẵn các câu hỏi phỏng vấn chuyên sâu để Hội đồng phỏng vấn xoáy vào kiểm tra. Quan trọng nhất, chúng em quán triệt nguyên tắc: AI không bao giờ tự loại ứng viên, người có thẩm quyền luôn là người đưa ra quyết định chuyển bước.`
+      subtitle: "Bảo mật tải lên, Trích xuất PDF, AI Gemini chấm Điểm phù hợp & Cảnh báo bất thường",
+      notes: `Điểm sáng đột phá của HRM AI nằm ở mô hình đánh giá CV theo Bằng chứng.\n\nCác hệ thống thông thường chỉ quét từ khóa đơn thuần, dẫn đến việc ứng viên cố tình chèn từ khóa trong mô tả công việc để lấy điểm cao. HRM AI xử lý trích xuất tệp PDF và sử dụng AI Gemini để phân tích sâu: Phân biệt rõ giữa việc 'chỉ khai báo kỹ năng' và 'có dự án/bằng chứng thực tế chứng minh kỹ năng đó'.\n\nHệ thống tự động bật Cảnh báo Gian lận AI nếu phát hiện ứng viên sao chép nguyên văn mô tả công việc (JD), đồng thời sinh sẵn các câu hỏi phỏng vấn chuyên sâu để Hội đồng phỏng vấn xoáy vào kiểm tra. Quan trọng nhất, chúng em quán triệt nguyên tắc: AI không bao giờ tự loại ứng viên, người có thẩm quyền luôn là người đưa ra quyết định chuyển bước.`
     },
     {
       title: "Phỏng vấn có kiểm soát & Phê duyệt Offer an toàn",
-      subtitle: "Quy trình phỏng vấn 2 vòng, Duyệt Offer nội bộ và Cơ chế Giữ suất tuyển (Seat Reservation)",
-      notes: `Sau khi vượt qua vòng duyệt CV, ứng viên bước vào quy trình Phỏng vấn 2 Vòng có kiểm soát chặt chẽ.\n\nKhi Hội đồng phỏng vấn thống nhất tuyển dụng, HR sẽ tạo dự thảo Offer. Tại đây, backend kiểm tra chính sách lương: nếu lương đề xuất vượt khung đã phê duyệt, hệ thống tự động cảnh báo cờ 'Vượt ngân sách' để CEO duyệt bổ sung.\n\nĐiểm khác biệt quan trọng: Ngay khi Offer được gửi đi (OFFER_SENT), suất tuyển tương ứng trong Seat Ledger lập tức chuyển từ AVAILABLE sang RESERVED (Đã giữ suất). Nhờ cơ chế này, ứng viên nhận được offer hợp lệ sẽ không bao giờ gặp tình trạng bấm chấp nhận mà hệ thống báo hết chỉ tiêu.`
+      subtitle: "Quy trình phỏng vấn 2 vòng, Duyệt Offer nội bộ và Cơ chế Giữ suất tuyển",
+      notes: `Sau khi vượt qua vòng duyệt CV, ứng viên bước vào quy trình Phỏng vấn 2 Vòng có kiểm soát chặt chẽ.\n\nKhi Hội đồng phỏng vấn thống nhất tuyển dụng, Nhân sự sẽ tạo dự thảo Offer. Tại đây, hệ thống kiểm tra chính sách lương: nếu lương đề xuất vượt khung đã phê duyệt, hệ thống tự động cảnh báo cờ 'Vượt ngân sách' để CEO duyệt bổ sung.\n\nĐiểm khác biệt quan trọng: Ngay khi Offer được gửi đi, suất tuyển tương ứng trong Sổ quản lý suất tuyển lập tức chuyển từ Sẵn có sang Đã giữ chỗ. Nhờ cơ chế này, ứng viên nhận được offer hợp lệ sẽ không bao giờ gặp tình trạng bấm chấp nhận mà hệ thống báo hết chỉ tiêu.`
     },
     {
       title: "Từ Offer Chấp nhận đến Nhân viên Chính thức",
-      subtitle: "Cầu nối Tuyển dụng - Nhân sự (Idempotent Bridge), Pre-boarding, Cấp tài khoản và JOINED",
-      notes: `Kính thưa hội đồng, đây chính là tính năng cập nhật mới nhất và quan trọng nhất nối liền Tuyển dụng với Vòng đời Nhân sự.\n\nNgay khi ứng viên bấm OFFER_ACCEPTED, hệ thống tự động kích hoạt Cầu nối dữ liệu Idempotent: Tạo bản ghi Nhân viên ở trạng thái PRE_BOARDING, tự động giao Pre-boarding Checklist để thu thập thông tin CCCD, tài khoản ngân hàng và bằng cấp.\n\nVề mặt an toàn thông tin: Tài khoản công ty của nhân viên mới được tạo ở trạng thái DISABLED (Chưa kích hoạt) trước ngày đi làm. Chỉ đến đúng ngày nhân viên đến công ty và HR bấm 'Xác nhận đã đi làm' (JOINED), tài khoản mới chính thức chuyển sang ACTIVE, hồ sơ chuyển sang EMPLOYED, và suất tuyển chuyển sang JOINED.\n\nTrong trường hợp ứng viên đổi ý không đến, HR chuyển trạng thái ONBOARD_CANCELLED, hệ thống tự động nhả lại Suất tuyển về AVAILABLE để tiếp tục tuyển dụng.`
+      subtitle: "Cầu nối dữ liệu an toàn, Giai đoạn Chuẩn bị tiếp nhận, Cấp tài khoản và Đi làm",
+      notes: `Kính thưa hội đồng, đây chính là tính năng cập nhật mới nhất và quan trọng nhất nối liền Tuyển dụng với Vòng đời Nhân sự.\n\nNgay khi ứng viên bấm Chấp nhận Offer, hệ thống tự động kích hoạt Cầu nối dữ liệu an toàn: Tạo bản ghi Nhân viên ở trạng thái Chuẩn bị tiếp nhận, tự động giao Danh mục tiếp nhận để thu thập thông tin CCCD, tài khoản ngân hàng và bằng cấp.\n\nVề mặt an toàn thông tin: Tài khoản công ty của nhân viên mới được tạo ở trạng thái Chưa kích hoạt trước ngày đi làm. Chỉ đến đúng ngày nhân viên đến công ty và Nhân sự bấm 'Xác nhận đã đi làm', tài khoản mới chính thức chuyển sang Đã kích hoạt, hồ sơ chuyển sang Chính thức, và suất tuyển hoàn tất.\n\nTrong trường hợp ứng viên đổi ý không đến, Nhân sự chuyển trạng thái Hủy tiếp nhận, hệ thống tự động nhả lại Suất tuyển về Sẵn có để tiếp tục tuyển dụng.`
     },
     {
       title: "Telegram HRM AI Bot: Điều hành & Phê duyệt Tức thì",
-      subtitle: "Trợ lý thông minh dành cho CEO & Giám đốc — Tra cứu dữ liệu real-time và Phê duyệt nhanh 24/7",
-      notes: `Chiếm 20% thời lượng của bài giới thiệu là Telegram HRM AI Bot — công cụ đắc lực dành riêng cho Ban Lãnh đạo.\n\nCEO và các Giám đốc thường xuyên bận rộn hoặc di chuyển ngoài văn phòng. Thông qua Telegram Bot, Lãnh đạo có thể gõ các lệnh nhanh như /dashboard, /nhanvien, /tuyendung để nắm bắt số liệu nhân sự tức thì.\n\nĐặc biệt hơn, Bot tích hợp Google Gemini AI để hiểu câu hỏi tiếng Việt tự nhiên. Lãnh đạo chỉ cần nhắn: 'Hôm nay công ty có bao nhiêu người đi muộn?' hay 'Có đơn tuyển dụng nào đang chờ duyệt không?', AI sẽ tự nhận diện ý định và truy vấn dữ liệu thực tế trả về kết quả trong 1 giây.\n\nLãnh đạo cũng có thể gõ lệnh /duyet 105 để phê duyệt ngay một yêu cầu tuyển dụng hay offer mà không cần mở máy tính đăng nhập vào hệ thống Web.`
+      subtitle: "Trợ lý thông minh dành cho CEO & Giám đốc — Tra cứu dữ liệu thời gian thực và Phê duyệt nhanh 24/7",
+      notes: `Chiếm 20% thời lượng của bài giới thiệu là Telegram HRM AI Bot — công cụ đắc lực dành riêng cho Ban Lãnh đạo.\n\nCEO và các Giám đốc thường xuyên bận rộn hoặc di chuyển ngoài văn phòng. Thông qua Telegram Bot, Lãnh đạo có thể gõ các lệnh nhanh như /dashboard, /nhanvien, /tuyendung để nắm bắt số liệu nhân sự tức thì.\n\nĐặc biệt hơn, Bot tích hợp AI Gemini để hiểu câu hỏi tiếng Việt tự nhiên. Lãnh đạo chỉ cần nhắn: 'Hôm nay công ty có bao nhiêu người đi muộn?' hay 'Có đơn tuyển dụng nào đang chờ duyệt không?', AI sẽ tự nhận diện ý định và truy vấn dữ liệu thực tế trả về kết quả trong 1 giây.\n\nLãnh đạo cũng có thể gõ lệnh /duyet 105 để phê duyệt ngay một yêu cầu tuyển dụng hay offer mà không cần mở máy tính đăng nhập vào hệ thống Web.`
     },
     {
-      title: "Kiến trúc Công nghệ & Cấu hình Động (No-Hardcode)",
-      subtitle: "Hệ thống chuẩn Enterprise: React 19, Spring Boot, MySQL Flyway, Outbox Pattern & Dynamic Config",
-      notes: `Về khía cạnh kỹ thuật, HRM AI được xây dựng theo chuẩn Enterprise Architecture.\n\nFrontend sử dụng React 19 và Vite cho tốc độ phản hồi cực nhanh, kết hợp WebSocket cập nhật trạng thái real-time. Backend sử dụng Java 17, Spring Boot và mô hình Outbox Event Pattern đảm bảo mọi sự kiện gửi Email hay Telegram đều được retry an toàn nếu gặp sự cố mạng.\n\nMột điểm nhấn kiến trúc quan trọng là Nguyên tắc Không Hardcode (No-Hardcode): Toàn bộ các con số nghiệp vụ như hệ số chấm điểm AI, ngưỡng cảnh báo gian lận, dung lượng file tối đa, ma trận người duyệt... đều được quản lý tập trung trong Database. Quản trị viên có thể điều chỉnh trực tiếp trên UI và hệ thống sẽ đổi hành vi ngay lập tức mà không cần phải sửa code hay khởi động lại server.`
+      title: "Kiến trúc Công nghệ & Cấu hình Động (Không hardcode)",
+      subtitle: "Hệ thống chuẩn Doanh nghiệp: React 19, Spring Boot, MySQL Flyway, Outbox Pattern & Dynamic Config",
+      notes: `Về khía cạnh kỹ thuật, HRM AI được xây dựng theo chuẩn Kiến trúc Đa tầng Hiện đại.\n\nFrontend sử dụng React 19 và Vite cho tốc độ phản hồi cực nhanh, kết hợp WebSocket cập nhật trạng thái thời gian thực. Backend sử dụng Java 17, Spring Boot và mô hình Outbox Event Pattern đảm bảo mọi sự kiện gửi Email hay Telegram đều được tự động xử lý lại an toàn nếu gặp sự cố mạng.\n\nMột điểm nhấn kiến trúc quan trọng là Cấu hình Động (Không gán cứng trong code): Toàn bộ các con số nghiệp vụ như hệ số chấm điểm AI, ngưỡng cảnh báo gian lận, dung lượng file tối đa, ma trận người duyệt... đều được quản lý tập trung trong Database. Quản trị viên có thể điều chỉnh trực tiếp trên UI và hệ thống sẽ đổi hành vi ngay lập tức mà không cần phải sửa code hay khởi động lại server.`
     },
     {
       title: "Giá trị Doanh nghiệp & Kịch bản Demo 3-5 Phút",
       subtitle: "Tối ưu vận hành nhân sự toàn diện và Kịch bản trình diễn trực quan tính năng sản phẩm",
-      notes: `Tóm lại, HRM AI mang lại giá trị thiết thực cho cả ba tầng người dùng: Giải phóng sức lao động cho HR, chuẩn hóa đánh giá cho Quản lý chuyên môn, và trao quyền kiểm soát toàn diện cho Ban Lãnh đạo.\n\nSau đây, em xin phép trình diễn Demo trực tiếp hệ thống trong 4 phút theo kịch bản 5 bước:\nĐầu tiên, mở tin tuyển dụng đang mở. Thứ hai, xem màn hình AI đánh giá CV với điểm Fit Score theo bằng chứng và câu hỏi phỏng vấn gợi ý. Thứ ba, thực hiện duyệt Offer và xem suất tuyển tự động khóa ở trạng thái RESERVED. Thứ tư, đóng vai ứng viên chấp nhận Offer để thấy hồ sơ tự động chuyển sang Pre-boarding, và khi HR bấm xác nhận JOINED, tài khoản sẽ được kích hoạt ACTIVE. Cuối cùng, mở Telegram tương tác hỏi đáp tự nhiên với Bot để hội đồng cùng theo dõi.\n\nEm xin trân trọng cảm ơn hội đồng đã lắng nghe!`
+      notes: `Tóm lại, HRM AI mang lại giá trị thiết thực cho cả ba tầng người dùng: Giải phóng sức lao động cho Nhân sự, chuẩn hóa đánh giá cho Quản lý chuyên môn, và trao quyền kiểm soát toàn diện cho Ban Lãnh đạo.\n\nSau đây, em xin phép trình diễn Demo trực tiếp hệ thống trong 4 phút theo kịch bản 5 bước:\nĐầu tiên, mở tin tuyển dụng đang mở. Thứ hai, xem màn hình AI đánh giá CV với điểm Điểm phù hợp theo bằng chứng và câu hỏi phỏng vấn gợi ý. Thứ ba, thực hiện duyệt Offer và xem suất tuyển tự động khóa ở trạng thái Đã giữ chỗ. Thứ tư, đóng vai ứng viên chấp nhận Offer để thấy hồ sơ tự động chuyển sang Chuẩn bị tiếp nhận, và khi Nhân sự bấm xác nhận Đi làm, tài khoản sẽ được kích hoạt Đã kích hoạt. Cuối cùng, mở Telegram tương tác hỏi đáp tự nhiên với Bot để hội đồng cùng theo dõi.\n\nEm xin trân trọng cảm ơn hội đồng đã lắng nghe!`
     }
   ];
 
@@ -964,7 +969,7 @@
     const activeEl = document.getElementById(`slide-${currentSlide}`);
     if (activeEl) activeEl.classList.add('active');
 
-    // Update Header Title (Without "Slide X — ")
+    // Update Header Title (Centered)
     const data = slidesData[currentSlide - 1];
     document.getElementById('slideTitle').textContent = data.title;
     document.getElementById('slideSubtitle').textContent = data.subtitle;
