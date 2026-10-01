@@ -1,928 +1,1055 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="vi">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#0f4fd8" />
-  <title>HRM AI | Slide thuyết trình</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HRM AI — Hệ thống Tuyển dụng & Quản trị Nhân sự Tích hợp AI</title>
+
+  <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
   <style>
+    /* =========================================================
+       CSS RESET & DESIGN SYSTEM TOKENS
+       ========================================================= */
     :root {
-      --blue-950: #071a43;
-      --blue-900: #0b2a68;
-      --blue-800: #123f98;
-      --blue-700: #1555d8;
-      --blue-600: #2168f3;
-      --blue-100: #dce9ff;
-      --blue-50: #f2f7ff;
-      --cyan: #65d7ff;
-      --ink: #10213e;
-      --muted: #61708c;
-      --line: #d8e2f1;
-      --white: #ffffff;
-      --canvas: #eef3fa;
-      --shadow: 0 28px 90px rgba(6, 25, 63, 0.22);
+      --bg-dark: #0B0F19;
+      --bg-surface: #111827;
+      --card-bg: rgba(17, 24, 39, 0.75);
+      --card-bg-solid: #161F32;
+      --card-border: rgba(255, 255, 255, 0.08);
+      --card-border-hover: rgba(59, 130, 246, 0.3);
+      
+      --text-main: #F9FAFB;
+      --text-muted: #9CA3AF;
+      --text-dim: #6B7280;
+
+      --accent-blue: #3B82F6;
+      --accent-blue-light: #60A5FA;
+      --accent-blue-bg: rgba(59, 130, 246, 0.12);
+      
+      --accent-green: #10B981;
+      --accent-green-light: #34D399;
+      --accent-green-bg: rgba(16, 185, 129, 0.12);
+
+      --accent-purple: #8B5CF6;
+      --accent-purple-light: #A78BFA;
+      --accent-purple-bg: rgba(139, 92, 246, 0.12);
+
+      --accent-amber: #F59E0B;
+      --accent-amber-light: #FBBF24;
+      --accent-amber-bg: rgba(245, 158, 11, 0.12);
+
+      --shadow-lg: 0 20px 50px rgba(0, 0, 0, 0.5);
+      --shadow-glow-blue: 0 0 30px rgba(59, 130, 246, 0.2);
     }
 
     * {
       box-sizing: border-box;
-    }
-
-    html,
-    body {
-      width: 100%;
-      height: 100%;
       margin: 0;
-      overflow: hidden;
-      background: var(--canvas);
-      color: var(--ink);
-      font-family: "Segoe UI", "Noto Sans", Arial, sans-serif;
+      padding: 0;
     }
 
-    button {
-      font: inherit;
-    }
-
-    .deck {
+    html, body {
       width: 100%;
       height: 100%;
-      display: grid;
-      place-items: center;
-      padding: 18px;
+      overflow: hidden;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-font-smoothing: antialiased;
     }
 
+    /* Presentation Layout */
+    .deck-container {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      background: radial-gradient(circle at 50% 20%, #172554 0%, var(--bg-dark) 70%);
+      position: relative;
+    }
+
+    /* Widescreen 16:9 Stage */
     .stage {
       position: relative;
-      width: min(calc((100vh - 36px) * 16 / 9), calc(100vw - 36px));
+      width: min(calc((100vh - 5rem) * 16 / 9), calc(100vw - 3rem));
       aspect-ratio: 16 / 9;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      box-shadow: var(--shadow-lg), var(--shadow-glow-blue);
       overflow: hidden;
-      border-radius: 18px;
-      background: var(--white);
-      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
     }
 
-    .slide {
-      position: absolute;
-      inset: 0;
-      display: none;
-      overflow: hidden;
-      padding: 6.2% 6.8% 5.4%;
-      background: var(--white);
-    }
-
-    .slide.active {
-      display: block;
-      animation: slideIn 380ms ease-out both;
-    }
-
-    @keyframes slideIn {
-      from {
-        opacity: 0;
-        transform: translateX(18px);
-      }
-      to {
-        opacity: 1;
-        transform: translateX(0);
-      }
-    }
-
-    .slide::before {
-      content: "";
+    /* Top Progress Bar */
+    .progress-bar-container {
+      width: 100%;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.05);
       position: absolute;
       top: 0;
       left: 0;
-      width: 100%;
-      height: 8px;
-      background: linear-gradient(90deg, var(--blue-700), var(--cyan));
+      z-index: 50;
     }
 
-    .slide-number {
-      position: absolute;
-      right: 3.2%;
-      bottom: 3.2%;
-      color: #8795ad;
-      font-size: clamp(10px, 1.02vw, 16px);
-      font-weight: 700;
-      letter-spacing: 0.08em;
+    .progress-bar {
+      height: 100%;
+      width: 10%;
+      background: linear-gradient(90deg, var(--accent-blue), var(--accent-green));
+      transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
-    .eyebrow {
-      margin: 0 0 1.25%;
-      color: var(--blue-700);
-      font-size: clamp(11px, 1.05vw, 17px);
-      font-weight: 800;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-    }
-
-    h1,
-    h2,
-    h3,
-    p {
-      margin-top: 0;
-    }
-
-    h1 {
-      margin-bottom: 2.1%;
-      font-size: clamp(34px, 5.35vw, 82px);
-      line-height: 0.98;
-      letter-spacing: -0.045em;
-    }
-
-    h2 {
-      margin-bottom: 3.4%;
-      max-width: 95%;
-      font-size: clamp(28px, 3.5vw, 54px);
-      line-height: 1.08;
-      letter-spacing: -0.035em;
-    }
-
-    h3 {
-      margin-bottom: 1.2%;
-      font-size: clamp(16px, 1.55vw, 24px);
-      line-height: 1.22;
-    }
-
-    .lead {
-      max-width: 72%;
-      color: var(--muted);
-      font-size: clamp(14px, 1.5vw, 23px);
-      line-height: 1.5;
-    }
-
-    .brand {
-      position: absolute;
-      top: 5.2%;
-      left: 6.8%;
+    /* Header Bar */
+    .slide-header {
+      padding: 1.5rem 2.25rem 0.5rem 2.25rem;
       display: flex;
-      align-items: center;
-      gap: 12px;
-      color: inherit;
-      font-size: clamp(12px, 1.35vw, 21px);
-      font-weight: 800;
-      letter-spacing: 0.02em;
-    }
-
-    .brand-mark {
-      display: grid;
-      width: clamp(30px, 3.2vw, 48px);
-      aspect-ratio: 1;
-      place-items: center;
-      border: 1px solid rgba(255, 255, 255, 0.35);
-      border-radius: 12px;
-      background: rgba(255, 255, 255, 0.13);
-      font-size: 0.78em;
-      letter-spacing: -0.03em;
-    }
-
-    .cover {
-      display: none;
-      padding: 0;
-      color: var(--white);
-      background: linear-gradient(125deg, var(--blue-950) 0%, var(--blue-800) 58%, var(--blue-600) 100%);
-    }
-
-    .cover.active {
-      display: grid;
-      grid-template-columns: 1.12fr 0.88fr;
-    }
-
-    .cover::before {
-      display: none;
-    }
-
-    .cover-copy {
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      padding: 12% 4% 8% 12.2%;
-    }
-
-    .cover .eyebrow {
-      color: #a9c8ff;
-    }
-
-    .cover h1 {
-      max-width: 720px;
-    }
-
-    .cover .lead {
-      max-width: 670px;
-      color: #d9e8ff;
-    }
-
-    .cover-meta {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px 18px;
-      margin-top: 4.5%;
-      color: #bed5fb;
-      font-size: clamp(11px, 1.05vw, 16px);
-    }
-
-    .cover-visual {
-      position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-      background: rgba(5, 22, 58, 0.2);
-    }
-
-    .signal {
-      position: relative;
-      z-index: 2;
-      display: grid;
-      width: 64%;
-      aspect-ratio: 1;
-      place-items: center;
-      border: 1px solid rgba(255, 255, 255, 0.24);
-      border-radius: 50%;
-      background: rgba(255, 255, 255, 0.09);
-      box-shadow: inset 0 0 0 28px rgba(255, 255, 255, 0.035);
-    }
-
-    .signal::before,
-    .signal::after {
-      content: "";
-      position: absolute;
-      border: 1px solid rgba(129, 216, 255, 0.32);
-      border-radius: 50%;
-    }
-
-    .signal::before {
-      inset: -16%;
-    }
-
-    .signal::after {
-      inset: -35%;
-    }
-
-    .signal strong {
-      font-size: clamp(42px, 6vw, 90px);
-      letter-spacing: -0.07em;
-    }
-
-    .signal span {
-      position: absolute;
-      bottom: 24%;
-      color: #bcecff;
-      font-size: clamp(10px, 1vw, 15px);
-      font-weight: 700;
-      letter-spacing: 0.16em;
-      text-transform: uppercase;
-    }
-
-    .cover .slide-number {
-      color: rgba(255, 255, 255, 0.58);
-    }
-
-    .problem-layout {
-      display: grid;
-      grid-template-columns: 0.72fr 1.28fr;
-      gap: 5.2%;
-      align-items: start;
-    }
-
-    .problem-statement {
-      padding: 6% 8%;
-      border-left: 6px solid var(--blue-600);
-      background: var(--blue-50);
-    }
-
-    .problem-statement strong {
-      display: block;
-      margin-bottom: 8%;
-      color: var(--blue-700);
-      font-size: clamp(34px, 5.2vw, 78px);
-      line-height: 0.92;
-      letter-spacing: -0.06em;
-    }
-
-    .problem-statement p {
-      margin-bottom: 0;
-      color: var(--muted);
-      font-size: clamp(13px, 1.3vw, 20px);
-      line-height: 1.5;
-    }
-
-    .issue-list {
-      display: grid;
-      gap: 0;
-      border-top: 1px solid var(--line);
-    }
-
-    .issue {
-      display: grid;
-      grid-template-columns: 54px 1fr;
-      gap: 2.2%;
-      align-items: start;
-      padding: 3.4% 0;
-      border-bottom: 1px solid var(--line);
-    }
-
-    .issue-index {
-      color: var(--blue-600);
-      font-size: clamp(16px, 1.55vw, 24px);
-      font-weight: 900;
-    }
-
-    .issue p {
-      margin: 0;
-      color: var(--muted);
-      font-size: clamp(12px, 1.16vw, 18px);
-      line-height: 1.46;
-    }
-
-    .solution-flow {
-      position: relative;
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 2.2%;
-      margin-top: 4%;
-    }
-
-    .solution-flow::before {
-      content: "";
-      position: absolute;
-      top: 42px;
-      left: 8%;
-      right: 8%;
-      height: 2px;
-      background: #b7cdf4;
-    }
-
-    .flow-step {
-      position: relative;
-      z-index: 1;
-      min-height: 250px;
-      padding: 0 6% 7%;
-      background: var(--white);
-    }
-
-    .flow-node {
-      display: grid;
-      width: 84px;
-      max-width: 38%;
-      aspect-ratio: 1;
-      margin: 0 0 12%;
-      place-items: center;
-      border: 8px solid var(--white);
-      border-radius: 50%;
-      background: var(--blue-700);
-      box-shadow: 0 0 0 2px #b7cdf4;
-      color: var(--white);
-      font-size: clamp(15px, 1.4vw, 22px);
-      font-weight: 900;
-    }
-
-    .flow-step p {
-      margin: 0;
-      color: var(--muted);
-      font-size: clamp(12px, 1.12vw, 17px);
-      line-height: 1.46;
-    }
-
-    .solution-note {
-      display: flex;
-      align-items: center;
       justify-content: space-between;
-      gap: 4%;
-      margin-top: 3.5%;
-      padding: 2.2% 3%;
-      border-radius: 14px;
-      background: var(--blue-950);
-      color: var(--white);
+      align-items: flex-start;
+      z-index: 10;
     }
 
-    .solution-note strong {
-      font-size: clamp(14px, 1.42vw, 22px);
-    }
-
-    .solution-note span {
-      max-width: 54%;
-      color: #c7d9f8;
-      font-size: clamp(11px, 1.02vw, 16px);
-      line-height: 1.4;
-      text-align: right;
-    }
-
-    .architecture {
-      display: grid;
-      gap: 2.4%;
-      margin-top: 2.2%;
-    }
-
-    .tech-layer {
-      display: grid;
-      grid-template-columns: 18% 1fr;
-      align-items: center;
-      min-height: 102px;
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      overflow: hidden;
-      background: var(--white);
-    }
-
-    .layer-title {
-      align-self: stretch;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      padding: 10%;
-      background: var(--blue-50);
-    }
-
-    .layer-title small {
-      color: var(--blue-700);
-      font-size: clamp(9px, 0.82vw, 13px);
+    .title-group h2 {
+      font-size: 1.65rem;
       font-weight: 800;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-    }
-
-    .layer-title strong {
-      margin-top: 4px;
-      font-size: clamp(14px, 1.4vw, 22px);
-    }
-
-    .tech-items {
+      color: var(--text-main);
+      letter-spacing: -0.02em;
+      line-height: 1.25;
       display: flex;
       align-items: center;
-      flex-wrap: wrap;
-      gap: 9px;
-      padding: 2.2% 3%;
+      gap: 0.75rem;
     }
 
-    .tech-pill {
-      padding: 8px 13px;
-      border: 1px solid #c9d8ee;
-      border-radius: 999px;
-      color: #29405f;
-      font-size: clamp(10px, 0.98vw, 15px);
+    .title-badge {
+      font-size: 0.75rem;
       font-weight: 700;
-      white-space: nowrap;
+      padding: 0.25rem 0.6rem;
+      border-radius: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
     }
 
-    .tech-layer.primary {
-      border-color: #9abbf6;
-      box-shadow: 0 8px 24px rgba(21, 85, 216, 0.08);
+    .badge-blue { background: var(--accent-blue-bg); color: var(--accent-blue-light); border: 1px solid rgba(59, 130, 246, 0.3); }
+    .badge-green { background: var(--accent-green-bg); color: var(--accent-green-light); border: 1px solid rgba(16, 185, 129, 0.3); }
+    .badge-purple { background: var(--accent-purple-bg); color: var(--accent-purple-light); border: 1px solid rgba(139, 92, 246, 0.3); }
+    .badge-amber { background: var(--accent-amber-bg); color: var(--accent-amber-light); border: 1px solid rgba(245, 158, 11, 0.3); }
+
+    .subtitle {
+      font-size: 0.92rem;
+      color: var(--accent-blue-light);
+      margin-top: 0.35rem;
+      font-weight: 500;
     }
 
-    .tech-layer.primary .layer-title {
-      background: var(--blue-700);
-      color: var(--white);
-    }
-
-    .tech-layer.primary .layer-title small {
-      color: #bcd4ff;
-    }
-
-    .ai-layout {
-      display: grid;
-      grid-template-columns: 0.82fr 1.18fr;
-      gap: 6%;
-      align-items: center;
-      margin-top: 1.6%;
-    }
-
-    .ai-core {
-      position: relative;
-      display: grid;
-      aspect-ratio: 1;
-      place-items: center;
-      border-radius: 50%;
-      color: var(--white);
-      background: radial-gradient(circle at 35% 30%, #48a5ff, var(--blue-700) 52%, var(--blue-950));
-      box-shadow: 0 28px 70px rgba(13, 70, 170, 0.28);
-    }
-
-    .ai-core::before {
-      content: "";
-      position: absolute;
-      inset: 10%;
-      border: 1px solid rgba(255, 255, 255, 0.34);
-      border-radius: 50%;
-    }
-
-    .ai-core strong {
-      font-size: clamp(48px, 6vw, 92px);
-      letter-spacing: -0.08em;
-    }
-
-    .ai-core span {
-      position: absolute;
-      bottom: 25%;
-      color: #d9f4ff;
-      font-size: clamp(10px, 1.02vw, 16px);
+    .brand-tag {
+      font-size: 0.85rem;
       font-weight: 700;
+      color: var(--text-muted);
       letter-spacing: 0.1em;
       text-transform: uppercase;
-    }
-
-    .ai-usecases {
-      border-top: 1px solid var(--line);
-    }
-
-    .ai-case {
-      display: grid;
-      grid-template-columns: 25% 1fr;
-      gap: 4%;
-      padding: 4.2% 0;
-      border-bottom: 1px solid var(--line);
-    }
-
-    .ai-case strong {
-      color: var(--blue-700);
-      font-size: clamp(13px, 1.2vw, 19px);
-      line-height: 1.3;
-    }
-
-    .ai-case p {
-      margin: 0;
-      color: var(--muted);
-      font-size: clamp(11px, 1.03vw, 16px);
-      line-height: 1.48;
-    }
-
-    .closing {
-      color: var(--white);
-      background: linear-gradient(135deg, var(--blue-950), var(--blue-800));
-    }
-
-    .closing::before {
-      background: var(--cyan);
-    }
-
-    .closing .eyebrow {
-      color: #9edfff;
-    }
-
-    .closing h2 {
-      max-width: 88%;
-      margin-bottom: 2.6%;
-      font-size: clamp(30px, 4.15vw, 64px);
-    }
-
-    .outcomes {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 2.6%;
-      margin: 3.7% 0 4.5%;
-    }
-
-    .outcome {
-      min-height: 155px;
-      padding: 6%;
-      border-top: 3px solid var(--cyan);
-      background: rgba(255, 255, 255, 0.085);
-    }
-
-    .outcome strong {
-      display: block;
-      margin-bottom: 8%;
-      color: #8fe3ff;
-      font-size: clamp(19px, 2.25vw, 35px);
-    }
-
-    .outcome p {
-      margin: 0;
-      color: #d2e2fa;
-      font-size: clamp(12px, 1.08vw, 17px);
-      line-height: 1.48;
-    }
-
-    .next-step {
-      display: flex;
-      align-items: flex-end;
-      justify-content: space-between;
-      gap: 5%;
-    }
-
-    .next-step p {
-      max-width: 72%;
-      margin: 0;
-      color: #bcd0ef;
-      font-size: clamp(11px, 1.05vw, 16px);
-      line-height: 1.45;
-    }
-
-    .thanks {
-      color: var(--white);
-      font-size: clamp(14px, 1.45vw, 22px);
-      font-weight: 800;
-      white-space: nowrap;
-    }
-
-    .closing .slide-number {
-      color: rgba(255, 255, 255, 0.56);
-    }
-
-    .controls {
-      position: fixed;
-      left: 50%;
-      bottom: 24px;
-      z-index: 20;
       display: flex;
       align-items: center;
-      gap: 8px;
-      padding: 8px;
-      border: 1px solid rgba(163, 181, 208, 0.56);
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.92);
-      box-shadow: 0 12px 36px rgba(8, 31, 72, 0.17);
-      backdrop-filter: blur(14px);
-      transform: translateX(-50%);
-      transition: opacity 160ms ease;
+      gap: 0.4rem;
+    }
+    .brand-tag span {
+      color: var(--accent-blue);
     }
 
-    .control-button {
+    /* Slide Content Area */
+    .slide-body {
+      flex: 1;
+      padding: 1rem 2.25rem 1.75rem 2.25rem;
+      display: none;
+      animation: fadeIn 0.4s ease-out forwards;
+      overflow-y: auto;
+    }
+
+    .slide-body.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Card System */
+    .grid-2 {
       display: grid;
-      width: 34px;
-      height: 34px;
-      place-items: center;
-      border: 0;
-      border-radius: 50%;
-      background: transparent;
-      color: var(--ink);
-      cursor: pointer;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem;
+      height: 100%;
     }
 
-    .control-button:hover,
-    .control-button:focus-visible {
-      outline: none;
-      background: var(--blue-100);
-      color: var(--blue-700);
+    .grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 1.25rem;
+      height: 100%;
     }
 
-    .dots {
+    .grid-steps {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      gap: 0.75rem;
+      height: 100%;
+    }
+
+    .card {
+      background: var(--card-bg-solid);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 1.25rem;
       display: flex;
-      gap: 7px;
-      padding: 0 4px;
+      flex-direction: column;
+      transition: all 0.25s ease;
+      position: relative;
     }
 
-    .dot {
-      width: 7px;
-      height: 7px;
-      padding: 0;
-      border: 0;
-      border-radius: 999px;
-      background: #c4cfdf;
+    .card:hover {
+      border-color: var(--card-border-hover);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    }
+
+    .card-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .title-blue { color: var(--accent-blue-light); }
+    .title-green { color: var(--accent-green-light); }
+    .title-purple { color: var(--accent-purple-light); }
+    .title-amber { color: var(--accent-amber-light); }
+
+    .card-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.7rem;
+    }
+
+    .card-list li {
+      font-size: 0.88rem;
+      line-height: 1.45;
+      color: var(--text-main);
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+
+    .card-list li strong {
+      color: #FFFFFF;
+      font-weight: 600;
+      min-width: fit-content;
+    }
+
+    .bullet-icon {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      margin-top: 0.45rem;
+      flex-shrink: 0;
+    }
+    .bullet-blue { background: var(--accent-blue); }
+    .bullet-green { background: var(--accent-green); }
+    .bullet-purple { background: var(--accent-purple); }
+    .bullet-amber { background: var(--accent-amber); }
+
+    /* Step Item inside Grid-12 */
+    .step-card {
+      background: rgba(22, 31, 50, 0.9);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 0.65rem 0.85rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .step-card.active-step {
+      border-color: rgba(59, 130, 246, 0.4);
+      background: rgba(30, 58, 138, 0.25);
+    }
+    .step-card.onboard-step {
+      border-color: rgba(16, 185, 129, 0.4);
+      background: rgba(6, 78, 59, 0.25);
+    }
+    .step-num {
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 0.2rem;
+    }
+    .step-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #FFF;
+      line-height: 1.2;
+    }
+    .step-desc {
+      font-size: 0.74rem;
+      color: var(--text-muted);
+      margin-top: 0.2rem;
+      line-height: 1.25;
+    }
+
+    /* Code Snippet Box */
+    .code-box {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      background: #090D16;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 8px;
+      padding: 0.65rem 0.85rem;
+      color: #38BDF8;
+      margin-top: 0.5rem;
+      line-height: 1.4;
+    }
+
+    /* Cover Slide Specifics */
+    .hero-box {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      padding: 2rem;
+      background: radial-gradient(circle at center, rgba(30, 58, 138, 0.3) 0%, transparent 70%);
+    }
+
+    .hero-title {
+      font-size: 3.8rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      background: linear-gradient(135deg, #60A5FA 0%, #3B82F6 50%, #1D4ED8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 0.5rem;
+    }
+
+    .hero-subtitle {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 0.75rem;
+    }
+
+    .hero-desc {
+      font-size: 1.05rem;
+      color: var(--accent-green-light);
+      max-width: 800px;
+      line-height: 1.5;
+      margin-bottom: 2rem;
+    }
+
+    .flow-badge-group {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.6rem;
+      max-width: 900px;
+    }
+
+    .flow-pill {
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 0.4rem 0.85rem;
+      border-radius: 30px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .flow-arrow {
+      color: var(--accent-blue);
+      font-weight: 800;
+    }
+
+    /* Bottom Control Bar */
+    .controls-bar {
+      height: 3.5rem;
+      border-top: 1px solid var(--card-border);
+      background: rgba(11, 15, 25, 0.8);
+      padding: 0 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 20;
+    }
+
+    .nav-btns {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .btn {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: var(--text-main);
+      font-family: inherit;
+      font-size: 0.82rem;
+      font-weight: 600;
+      padding: 0.45rem 0.9rem;
+      border-radius: 8px;
       cursor: pointer;
-      transition: width 180ms ease, background 180ms ease;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: all 0.2s ease;
     }
 
-    .dot.active {
-      width: 22px;
-      background: var(--blue-600);
+    .btn:hover {
+      background: rgba(59, 130, 246, 0.2);
+      border-color: var(--accent-blue);
+      color: #FFF;
     }
 
-    .hint {
+    .btn-primary {
+      background: var(--accent-blue);
+      border-color: var(--accent-blue);
+      color: #FFF;
+    }
+    .btn-primary:hover {
+      background: #2563EB;
+    }
+
+    .counter-display {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: var(--accent-blue-light);
+    }
+
+    /* Speaker Notes Modal / Drawer */
+    .notes-modal {
       position: fixed;
-      right: 24px;
-      bottom: 24px;
-      color: #6c7b92;
-      font-size: 12px;
+      bottom: 4rem;
+      right: 2rem;
+      width: 480px;
+      max-height: 320px;
+      background: rgba(15, 23, 42, 0.95);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--accent-blue);
+      border-radius: 14px;
+      padding: 1.25rem;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+      z-index: 100;
+      display: none;
+      flex-direction: column;
+      animation: slideUp 0.3s ease-out;
     }
 
-    @media (max-width: 760px) {
-      .deck {
-        padding: 0;
-      }
-
-      .stage {
-        width: 100vw;
-        border-radius: 0;
-      }
-
-      .controls {
-        bottom: 12px;
-      }
-
-      .hint {
-        display: none;
-      }
+    .notes-modal.show {
+      display: flex;
     }
 
-    @media print {
-      @page {
-        size: 13.333in 7.5in;
-        margin: 0;
-      }
+    @keyframes slideUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
 
-      html,
-      body {
-        height: auto;
-        overflow: visible;
-        background: #fff;
-        print-color-adjust: exact;
-        -webkit-print-color-adjust: exact;
-      }
+    .notes-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--card-border);
+    }
 
-      .deck {
-        display: block;
-        width: auto;
-        height: auto;
-        padding: 0;
-      }
+    .notes-title {
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: var(--accent-amber-light);
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
 
-      .stage {
-        width: auto;
-        height: auto;
-        aspect-ratio: auto;
-        overflow: visible;
-        border-radius: 0;
-        box-shadow: none;
-      }
+    .notes-content {
+      font-size: 0.84rem;
+      line-height: 1.5;
+      color: var(--text-main);
+      overflow-y: auto;
+      padding-right: 0.5rem;
+    }
 
-      .slide,
-      .slide.active,
-      .cover,
-      .cover.active {
-        position: relative;
-        display: block;
-        width: 13.333in;
-        height: 7.5in;
-        page-break-after: always;
-        animation: none;
-      }
-
-      .cover,
-      .cover.active {
-        display: grid;
-      }
-
-      .controls,
-      .hint {
-        display: none;
-      }
+    /* Key Hint */
+    .key-hint {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      display: flex;
+      gap: 0.75rem;
+    }
+    .key-cap {
+      background: rgba(255,255,255,0.08);
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+      color: var(--text-muted);
+      font-weight: 600;
     }
   </style>
 </head>
 <body>
-  <main class="deck" aria-label="Bộ slide thuyết trình HRM AI">
-    <div class="stage">
-      <section class="slide cover active" aria-labelledby="slide-1-title">
-        <div class="brand"><span class="brand-mark">HR</span> HRM AI</div>
-        <div class="cover-copy">
-          <p class="eyebrow">Tên đề tài</p>
-          <h1 id="slide-1-title">Hệ thống quản trị nhân sự thông minh</h1>
-          <p class="lead">Nền tảng web hợp nhất tuyển dụng, quản lý nhân sự, chấm công, tính lương và hỗ trợ ra quyết định bằng AI.</p>
-          <div class="cover-meta">
-            <span>Đồ án phát triển hệ thống doanh nghiệp</span>
-            <span>Nhóm thực hiện: Mạnh · Tường · Toàn</span>
-          </div>
-        </div>
-        <div class="cover-visual" aria-hidden="true">
-          <div class="signal"><strong>AI</strong><span>Human Resource</span></div>
-        </div>
-        <span class="slide-number">01 / 06</span>
-      </section>
 
-      <section class="slide" aria-labelledby="slide-2-title">
-        <p class="eyebrow">Bối cảnh</p>
-        <h2 id="slide-2-title">Vấn đề cần giải quyết trong quản trị nhân sự</h2>
-        <div class="problem-layout">
-          <div class="problem-statement">
-            <strong>01</strong>
-            <p>Dữ liệu nằm rải rác ở nhiều quy trình khiến bộ phận nhân sự khó theo dõi, đối soát và ra quyết định kịp thời.</p>
-          </div>
-          <div class="issue-list">
-            <article class="issue">
-              <span class="issue-index">01</span>
-              <div><h3>Tuyển dụng mất nhiều thời gian</h3><p>CV phải đọc thủ công, tiêu chí đánh giá chưa đồng nhất và khó sàng lọc nhanh ứng viên phù hợp.</p></div>
-            </article>
-            <article class="issue">
-              <span class="issue-index">02</span>
-              <div><h3>Chấm công dễ phát sinh sai lệch</h3><p>Thiếu cơ chế xác minh trực tiếp, dữ liệu vào ra khó liên kết với bảng công và tính lương.</p></div>
-            </article>
-            <article class="issue">
-              <span class="issue-index">03</span>
-              <div><h3>Phê duyệt và phối hợp còn chậm</h3><p>Đơn từ, yêu cầu tuyển dụng và trao đổi nội bộ đi qua nhiều cấp nhưng thiếu trạng thái tập trung.</p></div>
-            </article>
-          </div>
-        </div>
-        <span class="slide-number">02 / 06</span>
-      </section>
-
-      <section class="slide" aria-labelledby="slide-3-title">
-        <p class="eyebrow">Giải pháp đề xuất</p>
-        <h2 id="slide-3-title">Một nền tảng xuyên suốt vòng đời nhân sự</h2>
-        <div class="solution-flow">
-          <article class="flow-step"><div class="flow-node">01</div><h3>Tuyển dụng</h3><p>Tạo yêu cầu, quản lý chiến dịch, hồ sơ ứng viên và quy trình phê duyệt nhiều cấp.</p></article>
-          <article class="flow-step"><div class="flow-node">02</div><h3>Hồ sơ nhân sự</h3><p>Quản lý nhân viên, phòng ban, chức vụ, phân quyền và lịch sử công tác trên một hệ thống.</p></article>
-          <article class="flow-step"><div class="flow-node">03</div><h3>Chấm công và lương</h3><p>Ghi nhận giờ vào ra, xử lý ngoại lệ và đồng bộ dữ liệu phục vụ tính lương.</p></article>
-          <article class="flow-step"><div class="flow-node">04</div><h3>Trao đổi và báo cáo</h3><p>Chat thời gian thực, thông báo, dashboard và dữ liệu hỗ trợ quản lý ra quyết định.</p></article>
-        </div>
-        <div class="solution-note"><strong>HRM AI kết nối dữ liệu, quy trình và con người</strong><span>Phân quyền rõ ràng theo Tổng Giám đốc, Giám đốc phòng ban, Trưởng phòng và Nhân viên.</span></div>
-        <span class="slide-number">03 / 06</span>
-      </section>
-
-      <section class="slide" aria-labelledby="slide-4-title">
-        <p class="eyebrow">Công nghệ xây dựng</p>
-        <h2 id="slide-4-title">Kiến trúc web hiện đại, tách lớp và dễ mở rộng</h2>
-        <div class="architecture">
-          <article class="tech-layer primary">
-            <div class="layer-title"><small>Giao diện</small><strong>Frontend</strong></div>
-            <div class="tech-items"><span class="tech-pill">React 19</span><span class="tech-pill">Vite 8</span><span class="tech-pill">Tailwind CSS 4</span><span class="tech-pill">React Router</span><span class="tech-pill">Axios</span><span class="tech-pill">Recharts</span></div>
-          </article>
-          <article class="tech-layer">
-            <div class="layer-title"><small>Nghiệp vụ</small><strong>Backend</strong></div>
-            <div class="tech-items"><span class="tech-pill">Java 17</span><span class="tech-pill">Spring Boot 3</span><span class="tech-pill">Spring Security</span><span class="tech-pill">JWT</span><span class="tech-pill">Spring Data JPA</span><span class="tech-pill">PDFBox</span></div>
-          </article>
-          <article class="tech-layer">
-            <div class="layer-title"><small>Dữ liệu</small><strong>Hạ tầng</strong></div>
-            <div class="tech-items"><span class="tech-pill">MySQL 8</span><span class="tech-pill">Redis</span><span class="tech-pill">WebSocket / STOMP</span><span class="tech-pill">Cloudinary</span><span class="tech-pill">Docker</span></div>
-          </article>
-        </div>
-        <span class="slide-number">04 / 06</span>
-      </section>
-
-      <section class="slide" aria-labelledby="slide-5-title">
-        <p class="eyebrow">Phần có AI</p>
-        <h2 id="slide-5-title">AI hỗ trợ phân tích và xác minh nghiệp vụ</h2>
-        <div class="ai-layout">
-          <div class="ai-core" aria-hidden="true"><strong>AI</strong><span>Gemini + Face AI</span></div>
-          <div class="ai-usecases">
-            <article class="ai-case"><strong>Phân tích CV</strong><p>Trích xuất học vấn, kinh nghiệm và kỹ năng từ CV. Hệ thống đánh giá mức độ phù hợp, cảnh báo dấu hiệu bất thường và gợi ý câu hỏi phỏng vấn.</p></article>
-            <article class="ai-case"><strong>Nhận diện khuôn mặt</strong><p>Trích xuất đặc trưng khuôn mặt trên trình duyệt, đối chiếu dữ liệu đã đăng ký và hỗ trợ xác minh khi chấm công.</p></article>
-            <article class="ai-case"><strong>Trợ lý nhân sự</strong><p>Gemini API hỗ trợ chatbot nội bộ, tổng hợp thông tin và cung cấp gợi ý trong các nghiệp vụ cần ra quyết định.</p></article>
-          </div>
-        </div>
-        <span class="slide-number">05 / 06</span>
-      </section>
-
-      <section class="slide closing" aria-labelledby="slide-6-title">
-        <p class="eyebrow">Kết luận</p>
-        <h2 id="slide-6-title">HRM AI hướng đến một quy trình nhân sự liền mạch, minh bạch và có dữ liệu</h2>
-        <div class="outcomes">
-          <article class="outcome"><strong>01</strong><p>Tập trung quy trình tuyển dụng, hồ sơ, chấm công, lương và trao đổi nội bộ.</p></article>
-          <article class="outcome"><strong>02</strong><p>Hỗ trợ sàng lọc và xác minh bằng AI tại đúng điểm phát sinh nghiệp vụ.</p></article>
-          <article class="outcome"><strong>03</strong><p>Tạo nền tảng để mở rộng báo cáo, quản trị hiệu suất và trải nghiệm trên thiết bị di động.</p></article>
-        </div>
-        <div class="next-step"><p>Hướng phát triển: tăng cường bảo vệ dữ liệu cá nhân, theo dõi chất lượng mô hình AI và hoàn thiện hệ thống báo cáo quản trị.</p><span class="thanks">Cảm ơn!</span></div>
-        <span class="slide-number">06 / 06</span>
-      </section>
+<div class="deck-container">
+  <!-- Widescreen Stage -->
+  <div class="stage" id="stage">
+    
+    <!-- Top Progress Bar -->
+    <div class="progress-bar-container">
+      <div class="progress-bar" id="progressBar"></div>
     </div>
-  </main>
 
-  <nav class="controls" aria-label="Điều khiển trình chiếu">
-    <button class="control-button" id="prev" type="button" aria-label="Slide trước">‹</button>
-    <div class="dots" id="dots" aria-label="Danh sách slide"></div>
-    <button class="control-button" id="next" type="button" aria-label="Slide tiếp theo">›</button>
-    <button class="control-button" id="fullscreen" type="button" aria-label="Toàn màn hình">⛶</button>
-  </nav>
-  <div class="hint">← → chuyển slide · F toàn màn hình</div>
+    <!-- Slide Header -->
+    <div class="slide-header">
+      <div class="title-group">
+        <h2 id="slideTitle">HRM AI <span class="title-badge badge-blue" id="slideBadge">BÀI THUYẾT TRÌNH</span></h2>
+        <div class="subtitle" id="slideSubtitle">Từ nhu cầu tuyển dụng đến ngày đầu tiên của nhân viên</div>
+      </div>
+      <div class="brand-tag">HRM <span>AI</span> SYSTEM</div>
+    </div>
 
-  <script>
-    const slides = [...document.querySelectorAll('.slide')];
-    const dotsRoot = document.getElementById('dots');
-    let current = 0;
+    <!-- =========================================================
+         SLIDE 1: COVER SLIDE
+         ========================================================= -->
+    <div class="slide-body active" id="slide-1">
+      <div class="hero-box">
+        <div class="hero-title">HRM AI</div>
+        <div class="hero-subtitle">Hệ thống Tuyển dụng & Quản trị Nhân sự Tích hợp AI</div>
+        <div class="hero-desc">
+          Giải pháp quản trị toàn vẹn xuyên suốt — Từ khi phát sinh nhu cầu tuyển dụng, AI đánh giá CV theo bằng chứng, phỏng vấn, gửi offer cho đến khi ứng viên trở thành nhân viên đi làm; Lãnh đạo điều hành trực tiếp qua Telegram.
+        </div>
+        <div class="flow-badge-group">
+          <div class="flow-pill">1. Khởi tạo Nhu cầu</div> <span class="flow-arrow">→</span>
+          <div class="flow-pill">2. AI Sàng lọc CV</div> <span class="flow-arrow">→</span>
+          <div class="flow-pill">3. Phỏng vấn 2 Vòng</div> <span class="flow-arrow">→</span>
+          <div class="flow-pill">4. Offer & Suất tuyển</div> <span class="flow-arrow">→</span>
+          <div class="flow-pill">5. Pre-boarding</div> <span class="flow-arrow">→</span>
+          <div class="flow-pill">6. Xác nhận Đi làm</div> <span class="flow-arrow">→</span>
+          <div class="flow-pill" style="border-color: var(--accent-green);">7. Telegram Bot</div>
+        </div>
+      </div>
+    </div>
 
-    const dots = slides.map((_, index) => {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'dot';
-      button.setAttribute('aria-label', `Mở slide ${index + 1}`);
-      button.addEventListener('click', () => show(index));
-      dotsRoot.appendChild(button);
-      return button;
-    });
+    <!-- =========================================================
+         SLIDE 2: BÀI TOÁN THỰC TẾ & GIẢI PHÁP HRM AI
+         ========================================================= -->
+    <div class="slide-body" id="slide-2">
+      <div class="grid-2">
+        <div class="card" style="border-color: rgba(245, 158, 11, 0.3);">
+          <div class="card-title title-amber">
+            <span>⚠️</span> Thách thức Quy trình Truyền thống
+          </div>
+          <ul class="card-list">
+            <li><span class="bullet-icon bullet-amber"></span><strong>Nhập liệu thủ công:</strong> CV gửi qua nhiều kênh, HR tốn nhiều giờ đọc và nhập dữ liệu thủ công.</li>
+            <li><span class="bullet-icon bullet-amber"></span><strong>Tiêu chí không thống nhất:</strong> HR và bộ phận chuyên môn chưa đồng bộ bộ tiêu chí đánh giá ứng viên.</li>
+            <li><span class="bullet-icon bullet-amber"></span><strong>Tuyển vượt chỉ tiêu:</strong> Thiếu cơ chế giữ suất tuyển (Seat Ledger) real-time khi gửi Offer.</li>
+            <li><span class="bullet-icon bullet-amber"></span><strong>Đứt gãy dữ liệu:</strong> Sau khi chấp nhận offer, dữ liệu chưa nối liền mạch với hồ sơ nhân viên.</li>
+            <li><span class="bullet-icon bullet-amber"></span><strong>Lãnh đạo thiếu công cụ:</strong> Phụ thuộc báo cáo thủ công, khó tra cứu & duyệt nhanh khi di chuyển.</li>
+          </ul>
+        </div>
 
-    function show(index) {
-      current = (index + slides.length) % slides.length;
-      slides.forEach((slide, i) => slide.classList.toggle('active', i === current));
-      dots.forEach((dot, i) => dot.classList.toggle('active', i === current));
-      document.title = `HRM AI | Slide ${current + 1}/${slides.length}`;
+        <div class="card" style="border-color: rgba(16, 185, 129, 0.3);">
+          <div class="card-title title-green">
+            <span>🚀</span> Giải pháp HRM AI Nổi bật
+          </div>
+          <ul class="card-list">
+            <li><span class="bullet-icon bullet-green"></span><strong>Nhanh hơn:</strong> Gemini AI tự động cấu trúc hóa CV & tính Fit Score theo bằng chứng trong vài giây.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Đúng hơn:</strong> Kiểm soát chặt chẽ bằng State Machine, tự động giữ suất tuyển (Seat Ledger).</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Minh bạch hơn:</strong> Lưu vết Audit Log đầy đủ, AI cảnh báo sao chép JD, người quyết định cuối.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Nối liền mạch:</strong> Tự động chuyển Offer Accepted → Pre-boarding → Kích hoạt tài khoản.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Lãnh đạo đồng hành:</strong> Telegram Bot tra cứu dữ liệu real-time và phê duyệt tức thì.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================================
+         SLIDE 3: LUỒNG TUYỂN DỤNG & TIẾP NHẬN TỔNG THỂ (12 BƯỚC)
+         ========================================================= -->
+    <div class="slide-body" id="slide-3">
+      <div class="grid-steps">
+        <div class="step-card active-step">
+          <div class="step-num title-blue">BƯỚC 1</div>
+          <div class="step-title">Tạo Nhu cầu</div>
+          <div class="step-desc">Trưởng phòng lập Job Requisition ở trạng thái DRAFT</div>
+        </div>
+        <div class="step-card active-step">
+          <div class="step-num title-blue">BƯỚC 2</div>
+          <div class="step-title">Duyệt Nhu cầu</div>
+          <div class="step-desc">CEO/Quản lý duyệt → Tự động cấp Hiring Seats (AVAILABLE)</div>
+        </div>
+        <div class="step-card active-step">
+          <div class="step-num title-blue">BƯỚC 3</div>
+          <div class="step-title">Đăng tin Tuyển dụng</div>
+          <div class="step-desc">HR tạo Posting & khóa cặp Version Tiêu chí + AI Profile</div>
+        </div>
+        <div class="step-card active-step">
+          <div class="step-num title-blue">BƯỚC 4</div>
+          <div class="step-title">Ứng viên Nộp CV</div>
+          <div class="step-desc">Form nộp trực tuyến an toàn (Không thu thập CCCD)</div>
+        </div>
+        <div class="step-card active-step">
+          <div class="step-num title-blue">BƯỚC 5</div>
+          <div class="step-title">AI Phân tích CV</div>
+          <div class="step-desc">PDFBox text extract + Gemini AI chấm Fit Score bằng chứng</div>
+        </div>
+        <div class="step-card active-step">
+          <div class="step-num title-blue">BƯỚC 6</div>
+          <div class="step-title">Duyệt CV 2 Cấp</div>
+          <div class="step-desc">HR duyệt cơ bản → Phòng chuyên môn duyệt chuyên sâu</div>
+        </div>
+        <div class="step-card active-step">
+          <div class="step-num title-blue">BƯỚC 7</div>
+          <div class="step-title">Phỏng vấn 2 Vòng</div>
+          <div class="step-desc">Vòng 1 Kỹ thuật & Vòng 2 Quản lý/HR đánh giá</div>
+        </div>
+        <div class="step-card active-step">
+          <div class="step-num title-blue">BƯỚC 8</div>
+          <div class="step-title">Duyệt & Gửi Offer</div>
+          <div class="step-desc">Lập Offer, duyệt ngân sách & GIỮ SUẤT TUYỂN (RESERVED)</div>
+        </div>
+        <div class="step-card onboard-step">
+          <div class="step-num title-green">BƯỚC 9</div>
+          <div class="step-title">Ứng viên Chấp nhận</div>
+          <div class="step-desc">Ứng viên click OFFER_ACCEPTED → Phát Outbox Bridge Event</div>
+        </div>
+        <div class="step-card onboard-step">
+          <div class="step-num title-green">BƯỚC 10</div>
+          <div class="step-title">Pre-boarding & Checklist</div>
+          <div class="step-desc">Tạo Employee (PRE_BOARDING), checklist CCCD, account DISABLED</div>
+        </div>
+        <div class="step-card onboard-step">
+          <div class="step-num title-green">BƯỚC 11</div>
+          <div class="step-title">HR Xác nhận Đi làm</div>
+          <div class="step-desc">Ngày đầu tiên đi làm: HR bấm xác nhận JOINED</div>
+        </div>
+        <div class="step-card onboard-step">
+          <div class="step-num title-green">BƯỚC 12</div>
+          <div class="step-title">Kích hoạt Nhân viên</div>
+          <div class="step-desc">Employee → EMPLOYED, Seat → JOINED, Account → ACTIVE</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================================
+         SLIDE 4: KHỞI TẠO NHU CẦU & STRATEGY
+         ========================================================= -->
+    <div class="slide-body" id="slide-4">
+      <div class="grid-3">
+        <div class="card">
+          <div class="card-title title-blue">1. Yêu cầu Tuyển dụng</div>
+          <ul class="card-list">
+            <li><span class="bullet-icon bullet-blue"></span><strong>Khởi tạo Requisition:</strong> Trưởng phòng lập yêu cầu theo vị trí, headcount, khung lương.</li>
+            <li><span class="bullet-icon bullet-blue"></span><strong>Duyệt đa cấp:</strong> Phê duyệt theo ma trận phân quyền backend (DRAFT → APPROVED).</li>
+            <li><span class="bullet-icon bullet-blue"></span><strong>Ràng buộc ngân sách:</strong> Ngăn chặn tuyển ngoài kế hoạch hoặc vượt định mức lương.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <div class="card-title title-green">2. Quản lý Suất tuyển (Seat Ledger)</div>
+          <ul class="card-list">
+            <li><span class="bullet-icon bullet-green"></span><strong>Cấp Suất tự động:</strong> Khi Requisition APPROVED, tự sinh các bản ghi hiring_seats (AVAILABLE).</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Ràng buộc nghiêm ngặt:</strong> Mọi đợt gửi Offer đều phải gắn với 1 Suất tuyển cụ thể.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Chống overbook:</strong> Không bao giờ có tình trạng ứng viên đồng ý nhưng báo hết chỉ tiêu.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <div class="card-title title-purple">3. Đóng băng Tiêu chí AI</div>
+          <ul class="card-list">
+            <li><span class="bullet-icon bullet-purple"></span><strong>Posting Open:</strong> HR tạo Posting & phải chốt bộ tiêu chí và AI Scoring Profile.</li>
+            <li><span class="bullet-icon bullet-purple"></span><strong>Version bất biến:</strong> Khóa cặp (criteria_version, scoring_profile_version) bất biến khi đăng tin.</li>
+            <li><span class="bullet-icon bullet-purple"></span><strong>Audit re-run:</strong> Khi sửa tiêu chí, chỉ chạy lại AI cho các hồ sơ đang ở giai đoạn đánh giá.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================================
+         SLIDE 5: AI PHÂN TÍCH & CHẤM CV
+         ========================================================= -->
+    <div class="slide-body" id="slide-5">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title title-blue">Quy trình Xử lý CV & AI Gemini</div>
+          <ul class="card-list">
+            <li><span class="bullet-icon bullet-blue"></span><strong>Form nộp trực tuyến:</strong> Ứng viên nộp CV (PDF/DOCX). Tuyệt đối KHÔNG thu thập CCCD ở bước này.</li>
+            <li><span class="bullet-icon bullet-blue"></span><strong>Kiểm tra An toàn File:</strong> Xác minh mime-type, dung lượng, số trang, chặn virus/macro và file mã hóa.</li>
+            <li><span class="bullet-icon bullet-blue"></span><strong>PDFBox Text Extraction:</strong> Trích xuất toàn bộ văn bản thô từ tệp PDF CV chuẩn xác.</li>
+            <li><span class="bullet-icon bullet-blue"></span><strong>Gemini AI Parsing:</strong> Cấu trúc hóa: Học vấn, Kinh nghiệm, Kỹ năng & Thành tựu thực tế.</li>
+          </ul>
+        </div>
+
+        <div class="card" style="border-color: rgba(245, 158, 11, 0.3);">
+          <div class="card-title title-amber">Fit Score theo Bằng chứng & Safety</div>
+          <ul class="card-list">
+            <li><span class="bullet-icon bullet-amber"></span><strong>Evidence-Based Scoring:</strong> Chấm theo BẰNG CHỨNG thực tế thay vì từ khóa suông. Phân biệt Khai báo vs Thực chứng.</li>
+            <li><span class="bullet-icon bullet-amber"></span><strong>AI Fraud Flag:</strong> Phát hiện & cảnh báo ứng viên sao chép nguyên văn mô tả công việc (JD Mirroring).</li>
+            <li><span class="bullet-icon bullet-amber"></span><strong>Interview Questions:</strong> AI tự động sinh danh sách câu hỏi phỏng vấn xoáy vào các điểm cần xác minh.</li>
+            <li><span class="bullet-icon bullet-amber"></span><strong>Nguyên tắc bất biến:</strong> AI chỉ gợi ý. HR & Chuyên môn luôn là người giữ quyền quyết định cuối cùng!</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================================
+         SLIDE 6: PHỎNG VẤN & PHÊ DUYỆT OFFER
+         ========================================================= -->
+    <div class="slide-body" id="slide-6">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title title-blue">Quy trình Phỏng vấn 2 Vòng</div>
+          <ul class="card-list">
+            <li><span class="bullet-icon bullet-blue"></span><strong>Duyệt CV 2 cấp:</strong> HR duyệt cơ bản (PENDING_HR_CV_REVIEW) → Phòng chuyên môn duyệt (PENDING_TECH_CV_REVIEW).</li>
+            <li><span class="bullet-icon bullet-blue"></span><strong>Phỏng vấn Vòng 1:</strong> Đánh giá năng lực chuyên môn thực hành & giải quyết bài toán.</li>
+            <li><span class="bullet-icon bullet-blue"></span><strong>Phỏng vấn Vòng 2:</strong> Đánh giá sự phù hợp văn hóa & định hướng từ Quản lý/HR.</li>
+            <li><span class="bullet-icon bullet-blue"></span><strong>Hỗ trợ Revert:</strong> Cho phép trả hồ sơ về bước trước có lý do kèm theo nếu cần đánh giá lại.</li>
+          </ul>
+        </div>
+
+        <div class="card" style="border-color: rgba(16, 185, 129, 0.3);">
+          <div class="card-title title-green">Tạo & Phê duyệt Offer An toàn</div>
+          <ul class="card-list">
+            <li><span class="bullet-icon bullet-green"></span><strong>Tách biệt Offer & Dispatch:</strong> Tách điều khoản Offer (bất biến) và Lần gửi Dispatch (token, deadline).</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Phê duyệt Nội bộ:</strong> Duyệt theo chính sách ngân sách. Cảnh báo cờ vượt khung lương Requisition.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Giữ Suất tuyển (Seat Reserved):</strong> Nối từ OFFER_SENT: Suất tuyển chuyển từ AVAILABLE → RESERVED.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Link Phản hồi Bảo mật:</strong> Ứng viên nhận link bảo mật có token phản hồi (Accept / Decline / Negotiate).</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================================
+         SLIDE 7: TỪ OFFER CHẤP NHẬN ĐẾN NHÂN VIÊN
+         ========================================================= -->
+    <div class="slide-body" id="slide-7">
+      <div class="grid-2">
+        <div class="card" style="border-color: rgba(139, 92, 246, 0.3);">
+          <div class="card-title title-purple">Cầu nối Idempotent & Pre-boarding</div>
+          <ul class="card-list">
+            <li><span class="bullet-icon bullet-purple"></span><strong>Event OFFER_ACCEPTED:</strong> Ứng viên bấm chấp nhận offer → Phát event Outbox với conversion_key chống trùng.</li>
+            <li><span class="bullet-icon bullet-purple"></span><strong>Tạo Person & Employee:</strong> Khởi tạo Person (PROVISIONAL) & Employee ở trạng thái PRE_BOARDING.</li>
+            <li><span class="bullet-icon bullet-purple"></span><strong>Checklist & Hồ sơ:</strong> Tự động sinh Pre-boarding Checklist: Thu thập CCCD, Bằng cấp, Ngân hàng.</li>
+            <li><span class="bullet-icon bullet-purple"></span><strong>Hợp đồng & Lương ban đầu:</strong> Tạo employment_record & compensation_record ở trạng thái SCHEDULED.</li>
+          </ul>
+        </div>
+
+        <div class="card" style="border-color: rgba(16, 185, 129, 0.3);">
+          <div class="card-title title-green">Tài khoản DISABLED & Xác nhận JOINED</div>
+          <ul class="card-list">
+            <li><span class="bullet-icon bullet-green"></span><strong>Tài khoản An toàn:</strong> Gửi yêu cầu cấp tài khoản hệ thống. Tạo trước ngày đi làm ở trạng thái DISABLED.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Xác nhận Đi làm (JOINED):</strong> Vào ngày nhận việc, HR bấm "Xác nhận đã đi làm" trên hệ thống.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Kích hoạt Đồng bộ:</strong> Employee → EMPLOYED, Hiring Seat → JOINED, Account → ACTIVE.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Hủy nhận việc:</strong> Nếu ứng viên không đến → ONBOARD_CANCELLED, hủy tài khoản & nhả lại Suất tuyển.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================================
+         SLIDE 8: TELEGRAM BOT FOR MANAGEMENT
+         ========================================================= -->
+    <div class="slide-body" id="slide-8">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title title-blue">Bộ Lệnh Tra cứu & Duyệt nhanh</div>
+          <ul class="card-list">
+            <li><span class="bullet-icon bullet-blue"></span><strong>/dashboard:</strong> Xem tổng quan chỉ số nhân sự toàn công ty real-time.</li>
+            <li><span class="bullet-icon bullet-blue"></span><strong>/nhanvien & /tuyendung:</strong> Thống kê quy mô nhân sự, phòng ban & đợt tuyển dụng.</li>
+            <li><span class="bullet-icon bullet-blue"></span><strong>/chamcong & /luong:</strong> Kiểm tra tình hình đi làm trong ngày & tổng chi phí lương.</li>
+            <li><span class="bullet-icon bullet-blue"></span><strong>/request, /duyet, /tuchoi:</strong> Duyệt hoặc từ chối yêu cầu tuyển dụng, offer theo ID tức thì.</li>
+          </ul>
+          <div class="code-box">
+            Command Example:<br>
+            /duyet 105<br>
+            -> [SUCCESS] Requisition #105 đã được APPROVED bởi CEO.
+          </div>
+        </div>
+
+        <div class="card" style="border-color: rgba(16, 185, 129, 0.3);">
+          <div class="card-title title-green">Hỏi đáp Tiếng Việt & Keyword Fallback</div>
+          <ul class="card-list">
+            <li><span class="bullet-icon bullet-green"></span><strong>Truy vấn Tự nhiên:</strong> Hỏi câu tiếng Việt: "Hiện công ty có bao nhiêu nhân viên?", "Hôm nay ai đi muộn?"</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Gemini Intent Recognition:</strong> Gemini AI phân tích ý định câu hỏi → gọi API HRM lấy dữ liệu thực.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Cơ chế Fallback An toàn:</strong> Nếu ngắt kết nối AI, Bot tự chuyển sang nhận diện Keyword phục vụ liên tục.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Bảo mật Phân quyền:</strong> Bot xác thực theo Telegram Chat ID và SĐT chỉ dành cho Lãnh đạo được cấp quyền.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================================
+         SLIDE 9: KIẾN TRÚC CÔNG NGHỆ & SAFEGUARD
+         ========================================================= -->
+    <div class="slide-body" id="slide-9">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title title-blue">Kiến trúc Multi-Tier Modern</div>
+          <ul class="card-list">
+            <li><span class="bullet-icon bullet-blue"></span><strong>Frontend Modern:</strong> React 19 + Vite + Tailwind CSS + Recharts + WebSocket (STOMP) real-time.</li>
+            <li><span class="bullet-icon bullet-blue"></span><strong>Backend Enterprise:</strong> Java 17 + Spring Boot + Spring Security (JWT) + Approval Engine.</li>
+            <li><span class="bullet-icon bullet-blue"></span><strong>Data & Event Storage:</strong> MySQL + Flyway DB Migration + Outbox Event Pattern có retry.</li>
+            <li><span class="bullet-icon bullet-blue"></span><strong>AI & File Engine:</strong> Google Gemini API + Apache PDFBox xử lý trích xuất văn bản CV.</li>
+          </ul>
+        </div>
+
+        <div class="card" style="border-color: rgba(139, 92, 246, 0.3);">
+          <div class="card-title title-purple">Nguyên tắc "Không Hardcode" (No-Hardcode)</div>
+          <ul class="card-list">
+            <li><span class="bullet-icon bullet-purple"></span><strong>Database-Driven Config:</strong> Toàn bộ tham số nghiệp vụ nằm trong system_configurations & scoring_parameters.</li>
+            <li><span class="bullet-icon bullet-purple"></span><strong>Thay đổi tức thì:</strong> HR Head/Admin sửa hệ số điểm AI, SLA, dung lượng file trên UI → Đổi ngay không re-deploy.</li>
+            <li><span class="bullet-icon bullet-purple"></span><strong>Version bất biến:</strong> Profile chấm điểm AI được đánh version bất biến, đảm bảo tính nhất quán audit.</li>
+            <li><span class="bullet-icon bullet-purple"></span><strong>Bảo mật & Phân quyền:</strong> Phân quyền chi tiết (RBAC), Audit log append-only cho mọi thao tác chuyển trạng thái.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================================
+         SLIDE 10: GIÁ TRỊ DOANH NGHIỆP & DEMO
+         ========================================================= -->
+    <div class="slide-body" id="slide-10">
+      <div class="grid-2">
+        <div class="card" style="border-color: rgba(16, 185, 129, 0.3);">
+          <div class="card-title title-green">Giá trị mang lại cho Doanh nghiệp</div>
+          <ul class="card-list">
+            <li><span class="bullet-icon bullet-green"></span><strong>Cho HR:</strong> Tự động hóa 80% thao tác đọc/nhập CV, loại bỏ bỏ sót hồ sơ, quản lý luồng tập trung.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Cho Quản lý:</strong> Đánh giá ứng viên theo tiêu chí đồng nhất, nắm chính xác tiến độ từng hồ sơ.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Cho Lãnh đạo:</strong> Kiểm soát ngân sách & chỉ tiêu (Seat Ledger), tra cứu & phê duyệt 24/7 qua Telegram.</li>
+            <li><span class="bullet-icon bullet-green"></span><strong>Toàn vẹn Dữ liệu:</strong> Nối liền mạch Tuyển dụng → Nhân viên, lưu vết Lịch sử (Audit Log) đầy đủ.</li>
+          </ul>
+        </div>
+
+        <div class="card" style="border-color: rgba(245, 158, 11, 0.3);">
+          <div class="card-title title-amber">Kịch bản Demo Thực tế (3 - 5 Phút)</div>
+          <ul class="card-list">
+            <li><span class="bullet-icon bullet-amber"></span><strong>B1. Đăng tin & CV List:</strong> Mở Tin tuyển dụng đang OPEN & danh sách ứng viên nộp CV.</li>
+            <li><span class="bullet-icon bullet-amber"></span><strong>B2. AI Fit Score Detail:</strong> Xem Fit Score (chấm bằng chứng), Cảnh báo Fraud & Đề xuất câu hỏi phỏng vấn.</li>
+            <li><span class="bullet-icon bullet-amber"></span><strong>B3. Offer & Seat Reserve:</strong> Chuyển phỏng vấn → Duyệt Offer → Suất tuyển chuyển RESERVED.</li>
+            <li><span class="bullet-icon bullet-amber"></span><strong>B4. Accept & Joined Flow:</strong> Ứng viên click Accept → Hồ sơ vào Pre-boarding → HR bấm JOINED → Account ACTIVE.</li>
+            <li><span class="bullet-icon bullet-amber"></span><strong>B5. Telegram Live Query:</strong> Mở Telegram hỏi "Đang tuyển bao nhiêu vị trí?" & gõ /dashboard kết thúc.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Controls Bar -->
+    <div class="controls-bar">
+      <div class="nav-btns">
+        <button class="btn" id="prevBtn" onclick="prevSlide()">◀ Trước</button>
+        <button class="btn btn-primary" id="nextBtn" onclick="nextSlide()">Sau ▶</button>
+        <button class="btn" onclick="toggleNotes()">🎙️ Lời thuyết trình (N)</button>
+      </div>
+      
+      <div class="counter-display" id="slideCounter">SLIDE 01 / 10</div>
+
+      <div class="key-hint">
+        <span><span class="key-cap">←</span> <span class="key-cap">→</span> Chuyển slide</span>
+        <span><span class="key-cap">F</span> Toàn màn hình</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Speaker Notes Modal -->
+<div class="notes-modal" id="notesModal">
+  <div class="notes-header">
+    <div class="notes-title">🎙️ LỜI THUYẾT TRÌNH (SPEAKER NOTES)</div>
+    <button class="btn" style="padding: 0.2rem 0.5rem;" onclick="toggleNotes()">✕</button>
+  </div>
+  <div class="notes-content" id="notesText">
+    Kính chào thầy cô và các bạn! Hôm nay nhóm chúng em xin giới thiệu hệ thống HRM AI...
+  </div>
+</div>
+
+<script>
+  // Slide Metadata & Speaker Notes
+  const slidesData = [
+    {
+      title: "HRM AI",
+      badge: "TRANG BÌA",
+      badgeClass: "badge-blue",
+      subtitle: "Hệ thống Tuyển dụng & Quản trị Nhân sự Tích hợp AI",
+      notes: `Kính chào thầy cô và các bạn! Hôm nay nhóm chúng em xin được giới thiệu hệ thống HRM AI — Nền tảng Tuyển dụng và Quản trị Nhân sự Tích hợp Trí tuệ Nhân tạo.\n\nĐược thiết kế nhằm giải quyết bài toán đứt gãy dữ liệu phổ biến trong các doanh nghiệp hiện nay, HRM AI không chỉ là một công cụ lọc CV tự động, mà là một quy trình kiểm soát toàn diện xuyên suốt — bắt đầu từ khoảnh khắc phòng ban phát sinh nhu cầu tuyển người, qua các vòng phỏng vấn, phê duyệt offer, chuẩn bị pre-boarding, cho tới ngày đầu tiên nhân viên bước vào công ty. Đồng thời, hệ thống trao quyền cho Ban Lãnh đạo tra cứu và phê duyệt dữ liệu nhân sự real-time ngay trên Telegram.`
+    },
+    {
+      title: "Bài toán thực tế & Giải pháp HRM AI",
+      badge: "SLIDE 02",
+      badgeClass: "badge-amber",
+      subtitle: "Chuyển đổi quy trình thủ công đứt gãy thành Nền tảng hợp nhất Nhanh - Đúng - Minh bạch",
+      notes: `Kính thưa hội đồng, trong thực tế vận hành doanh nghiệp, vấn đề tuyển dụng không chỉ nằm ở việc đọc CV chậm, mà nghiêm trọng hơn là sự đứt gãy dữ liệu giữa tuyển dụng, phê duyệt và tiếp nhận nhân viên.\n\nDoanh nghiệp thường gặp 3 nỗi đau chính: Một là HR mất rất nhiều thời gian đọc CV thủ công nhưng tiêu chí lại không thống nhất với phòng chuyên môn. Hai là tình trạng 'tuyển vượt chỉ tiêu' hoặc ứng viên nhận offer xong đến công ty lại bị báo hết vị trí do không quản lý được suất tuyển. Và ba là khi ứng viên đồng ý nhận việc, HR lại phải gõ tay toàn bộ thông tin để tạo hồ sơ nhân viên mới.\n\nHRM AI ra đời để giải quyết triệt me bài toán này với thông điệp: Nhanh hơn - Đúng hơn - Minh bạch hơn.`
+    },
+    {
+      title: "Luồng Tuyển dụng & Tiếp nhận Nhân sự Tổng thể",
+      badge: "SLIDE 03 — TRUNG TÂM",
+      badgeClass: "badge-blue",
+      subtitle: "Quy trình 12 bước xuyên suốt từ Nhu cầu tuyển dụng đến Ngày đi làm đầu tiên của Nhân viên",
+      notes: `Đây là Slide trung tâm biểu diễn toàn bộ luồng nghiệp vụ 12 bước của HRM AI.\n\nLuồng bắt đầu từ Bước 1 khi Trưởng phòng tạo yêu cầu tuyển dụng. Ngay khi yêu cầu được duyệt ở Bước 2, hệ thống tự động sinh các bản ghi Suất tuyển (Hiring Seats). Tại Bước 5, AI Gemini đảm nhận vai trò trích xuất và chấm Fit Score theo bằng chứng. Trải qua 2 vòng phỏng vấn, ở Bước 8 khi Offer được gửi đi, hệ thống lập tức khóa và giữ suất tuyển ở trạng thái RESERVED.\n\nĐặc biệt, tại Bước 9 khi ứng viên bấm Chấp nhận Offer, hệ thống kích hoạt Cầu nối tự động (Idempotent Bridge) chuyển ứng viên sang trạng thái Pre-boarding ở Bước 10. Tài khoản làm việc được chuẩn bị ở trạng thái Tắt (DISABLED) và chỉ chính thức kích hoạt sang ACTIVE ở Bước 12 khi HR xác nhận nhân viên đã thực sự có mặt làm việc (JOINED).`
+    },
+    {
+      title: "Khởi tạo Nhu cầu & Đăng tin Tuyển dụng",
+      badge: "SLIDE 04",
+      badgeClass: "badge-purple",
+      subtitle: "Quản lý Requisition, Sổ kế toán Suất tuyển (Seat Ledger) và Khóa tiêu chí AI Profile",
+      notes: `Ở giai đoạn đầu tiên, HRM AI giải quyết triệt để bài toán quản lý chỉ tiêu và ngân sách.\n\nKhi Trưởng phòng gửi Requisition, quy trình phê duyệt backend sẽ kiểm tra quyền hạn và định mức lương. Ngay khi được cấp duyệt, hệ thống áp dụng cơ chế Sổ kế toán Suất tuyển (Hiring Seat Ledger) — tự động sinh ra đúng số lượng suất tuyển khả dụng.\n\nĐồng thời, trước khi đăng tin công khai, HR và Trưởng phòng phải chốt bộ tiêu chí chấm điểm. Hệ thống sẽ đóng băng bộ tiêu chí và version AI thành một cặp snapshot bất biến. Điều này đảm bảo tính công bằng và minh bạch: mọi ứng viên nộp trong cùng một đợt đều được chấm theo đúng một thước đo chuẩn mực.`
+    },
+    {
+      title: "AI Phân tích, Sàng lọc & Chấm CV theo Bằng chứng",
+      badge: "SLIDE 05",
+      badgeClass: "badge-amber",
+      subtitle: "Bảo mật tải lên, Trích xuất PDFBox, Gemini AI Fit Score & Cảnh báo bất thường",
+      notes: `Điểm sáng đột phá của HRM AI nằm ở mô hình đánh giá CV theo Bằng chứng (Evidence-Based Scoring).\n\nCác hệ thống ATS thông thường chỉ quét từ khóa (keywords) đơn thuần, dẫn đến việc ứng viên cố tình chèn từ khóa trong JD để lấy điểm cao. HRM AI xử lý qua Apache PDFBox và Google Gemini AI để phân tích sâu: Phân biệt rõ giữa việc 'chỉ khai báo kỹ năng' và 'có dự án/bằng chứng thực tế chứng minh kỹ năng đó'.\n\nHệ thống tự động bật cờ AI Fraud Flag nếu phát hiện ứng viên sao chép nguyên văn JD (JD Mirroring), đồng thời sinh sẵn các câu hỏi phỏng vấn chuyên sâu để Hội đồng phỏng vấn xoáy vào kiểm tra. Quan trọng nhất, chúng em quán triệt nguyên tắc: AI không bao giờ tự loại ứng viên, người có thẩm quyền luôn là người đưa ra quyết định chuyển bước.`
+    },
+    {
+      title: "Phỏng vấn có kiểm soát & Phê duyệt Offer an toàn",
+      badge: "SLIDE 06",
+      badgeClass: "badge-blue",
+      subtitle: "Quy trình phỏng vấn 2 vòng, Duyệt Offer nội bộ và Cơ chế Giữ suất tuyển (Seat Reservation)",
+      notes: `Sau khi vượt qua vòng duyệt CV, ứng viên bước vào quy trình Phỏng vấn 2 Vòng có kiểm soát chặt chẽ.\n\nKhi Hội đồng phỏng vấn thống nhất tuyển dụng, HR sẽ tạo dự thảo Offer. Tại đây, backend kiểm tra chính sách lương: nếu lương đề xuất vượt khung đã phê duyệt, hệ thống tự động cảnh báo cờ 'Vượt ngân sách' để CEO duyệt bổ sung.\n\nĐiểm khác biệt quan trọng: Ngay khi Offer được gửi đi (OFFER_SENT), suất tuyển tương ứng trong Seat Ledger lập tức chuyển từ AVAILABLE sang RESERVED (Đã giữ suất). Nhờ cơ chế này, ứng viên nhận được offer hợp lệ sẽ không bao giờ gặp tình trạng bấm chấp nhận mà hệ thống báo hết chỉ tiêu.`
+    },
+    {
+      title: "Từ Offer Chấp nhận đến Nhân viên Chính thức",
+      badge: "SLIDE 07 — NỐI LUỒNG",
+      badgeClass: "badge-green",
+      subtitle: "Cầu nối Tuyển dụng - Nhân sự (Idempotent Bridge), Pre-boarding, Cấp tài khoản và JOINED",
+      notes: `Kính thưa hội đồng, đây chính là tính năng cập nhật mới nhất và quan trọng nhất nối liền Tuyển dụng với Vòng đời Nhân sự.\n\nNgay khi ứng viên bấm OFFER_ACCEPTED, hệ thống tự động kích hoạt Cầu nối dữ liệu Idempotent: Tạo bản ghi Nhân viên ở trạng thái PRE_BOARDING, tự động giao Pre-boarding Checklist để thu thập thông tin CCCD, tài khoản ngân hàng và bằng cấp.\n\nVề mặt an toàn thông tin: Tài khoản công ty của nhân viên mới được tạo ở trạng thái DISABLED (Chưa kích hoạt) trước ngày đi làm. Chỉ đến đúng ngày nhân viên đến công ty và HR bấm 'Xác nhận đã đi làm' (JOINED), tài khoản mới chính thức chuyển sang ACTIVE, hồ sơ chuyển sang EMPLOYED, và suất tuyển chuyển sang JOINED.\n\nTrong trường hợp ứng viên đổi ý không đến, HR chuyển trạng thái ONBOARD_CANCELLED, hệ thống tự động nhả lại Suất tuyển về AVAILABLE để tiếp tục tuyển dụng.`
+    },
+    {
+      title: "Telegram HRM AI Bot: Điều hành & Phê duyệt Tức thì",
+      badge: "SLIDE 08 — BOT TELEGRAM",
+      badgeClass: "badge-green",
+      subtitle: "Trợ lý thông minh dành cho CEO & Giám đốc — Tra cứu dữ liệu real-time và Phê duyệt nhanh 24/7",
+      notes: `Chiếm 20% thời lượng của bài giới thiệu là Telegram HRM AI Bot — công cụ đắc lực dành riêng cho Ban Lãnh đạo.\n\nCEO và các Giám đốc thường xuyên bận rộn hoặc di chuyển ngoài văn phòng. Thông qua Telegram Bot, Lãnh đạo có thể gõ các lệnh nhanh như /dashboard, /nhanvien, /tuyendung để nắm bắt số liệu nhân sự tức thì.\n\nĐặc biệt hơn, Bot tích hợp Google Gemini AI để hiểu câu hỏi tiếng Việt tự nhiên. Lãnh đạo chỉ cần nhắn: 'Hôm nay công ty có bao nhiêu người đi muộn?' hay 'Có đơn tuyển dụng nào đang chờ duyệt không?', AI sẽ tự nhận diện ý định và truy vấn dữ liệu thực tế trả về kết quả trong 1 giây.\n\nLãnh đạo cũng có thể gõ lệnh /duyet 105 để phê duyệt ngay một yêu cầu tuyển dụng hay offer mà không cần mở máy tính đăng nhập vào hệ thống Web.`
+    },
+    {
+      title: "Kiến trúc Công nghệ & Cấu hình Động (No-Hardcode)",
+      badge: "SLIDE 09",
+      badgeClass: "badge-purple",
+      subtitle: "Hệ thống chuẩn Enterprise: React 19, Spring Boot, MySQL Flyway, Outbox Pattern & Dynamic Config",
+      notes: `Về khía cạnh kỹ thuật, HRM AI được xây dựng theo chuẩn Enterprise Architecture.\n\nFrontend sử dụng React 19 và Vite cho tốc độ phản hồi cực nhanh, kết hợp WebSocket cập nhật trạng thái real-time. Backend sử dụng Java 17, Spring Boot và mô hình Outbox Event Pattern đảm bảo mọi sự kiện gửi Email hay Telegram đều được retry an toàn nếu gặp sự cố mạng.\n\nMột điểm nhấn kiến trúc quan trọng là Nguyên tắc Không Hardcode (No-Hardcode): Toàn bộ các con số nghiệp vụ như hệ số chấm điểm AI, ngưỡng cảnh báo gian lận, dung lượng file tối đa, ma trận người duyệt... đều được quản lý tập trung trong Database. Quản trị viên có thể điều chỉnh trực tiếp trên UI và hệ thống sẽ đổi hành vi ngay lập tức mà không cần phải sửa code hay khởi động lại server.`
+    },
+    {
+      title: "Giá trị Doanh nghiệp & Kịch bản Demo 3-5 Phút",
+      badge: "SLIDE 10 — TỔNG KẾT",
+      badgeClass: "badge-amber",
+      subtitle: "Tối ưu vận hành nhân sự toàn diện và Kịch bản trình diễn trực quan tính năng sản phẩm",
+      notes: `Tóm lại, HRM AI mang lại giá trị thiết thực cho cả ba tầng người dùng: Giải phóng sức lao động cho HR, chuẩn hóa đánh giá cho Quản lý chuyên môn, và trao quyền kiểm soát toàn diện cho Ban Lãnh đạo.\n\nSau đây, em xin phép trình diễn Demo trực tiếp hệ thống trong 4 phút theo kịch bản 5 bước:\nĐầu tiên, mở tin tuyển dụng đang mở. Thứ hai, xem màn hình AI đánh giá CV với điểm Fit Score theo bằng chứng và câu hỏi phỏng vấn gợi ý. Thứ ba, thực hiện duyệt Offer và xem suất tuyển tự động khóa ở trạng thái RESERVED. Thứ tư, đóng vai ứng viên chấp nhận Offer để thấy hồ sơ tự động chuyển sang Pre-boarding, và khi HR bấm xác nhận JOINED, tài khoản sẽ được kích hoạt ACTIVE. Cuối cùng, mở Telegram tương tác hỏi đáp tự nhiên với Bot để hội đồng cùng theo dõi.\n\nEm xin trân trọng cảm ơn hội đồng đã lắng nghe!`
+    }
+  ];
+
+  let currentSlide = 1;
+  const totalSlides = 10;
+
+  function updateSlideDisplay() {
+    // Hide all slides
+    for (let i = 1; i <= totalSlides; i++) {
+      const el = document.getElementById(`slide-${i}`);
+      if (el) el.classList.remove('active');
     }
 
-    function toggleFullscreen() {
-      if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen?.();
-      } else {
-        document.exitFullscreen?.();
+    // Show current slide
+    const activeEl = document.getElementById(`slide-${currentSlide}`);
+    if (activeEl) activeEl.classList.add('active');
+
+    // Update Header
+    const data = slidesData[currentSlide - 1];
+    document.getElementById('slideTitle').childNodes[0].nodeValue = data.title + " ";
+    
+    const badgeEl = document.getElementById('slideBadge');
+    badgeEl.textContent = data.badge;
+    badgeEl.className = `title-badge ${data.badgeClass}`;
+
+    document.getElementById('slideSubtitle').textContent = data.subtitle;
+
+    // Update Progress Bar & Counter
+    const progress = (currentSlide / totalSlides) * 100;
+    document.getElementById('progressBar').style.width = `${progress}%`;
+    document.getElementById('slideCounter').textContent = `SLIDE ${String(currentSlide).padStart(2, '0')} / ${totalSlides}`;
+
+    // Update Speaker Notes Content
+    document.getElementById('notesText').innerText = data.notes;
+
+    // Update Nav Buttons State
+    document.getElementById('prevBtn').disabled = (currentSlide === 1);
+    document.getElementById('nextBtn').disabled = (currentSlide === totalSlides);
+  }
+
+  function nextSlide() {
+    if (currentSlide < totalSlides) {
+      currentSlide++;
+      updateSlideDisplay();
+    }
+  }
+
+  function prevSlide() {
+    if (currentSlide > 1) {
+      currentSlide--;
+      updateSlideDisplay();
+    }
+  }
+
+  function toggleNotes() {
+    const modal = document.getElementById('notesModal');
+    modal.classList.toggle('show');
+  }
+
+  function toggleFullScreen() {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(err => {
+        console.log(`Error attempting to enable fullscreen: ${err.message}`);
+      });
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
       }
     }
+  }
 
-    document.getElementById('prev').addEventListener('click', () => show(current - 1));
-    document.getElementById('next').addEventListener('click', () => show(current + 1));
-    document.getElementById('fullscreen').addEventListener('click', toggleFullscreen);
+  // Keyboard Navigation Listener
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown' || e.key === 'Enter') {
+      e.preventDefault();
+      nextSlide();
+    } else if (e.key === 'ArrowLeft' || e.key === 'PageUp' || e.key === 'Backspace') {
+      e.preventDefault();
+      prevSlide();
+    } else if (e.key.toLowerCase() === 'n') {
+      toggleNotes();
+    } else if (e.key.toLowerCase() === 'f') {
+      toggleFullScreen();
+    } else if (e.key === 'Home') {
+      currentSlide = 1;
+      updateSlideDisplay();
+    } else if (e.key === 'End') {
+      currentSlide = totalSlides;
+      updateSlideDisplay();
+    }
+  });
 
-    document.addEventListener('keydown', (event) => {
-      if (['ArrowRight', 'PageDown', ' '].includes(event.key)) {
-        event.preventDefault();
-        show(current + 1);
-      }
-      if (['ArrowLeft', 'PageUp'].includes(event.key)) {
-        event.preventDefault();
-        show(current - 1);
-      }
-      if (event.key === 'Home') show(0);
-      if (event.key === 'End') show(slides.length - 1);
-      if (event.key.toLowerCase() === 'f') toggleFullscreen();
-    });
+  // Initialize
+  updateSlideDisplay();
+</script>
 
-    const requestedSlide = Number(new URLSearchParams(window.location.search).get('slide')) - 1;
-    show(Number.isInteger(requestedSlide) && requestedSlide >= 0 && requestedSlide < slides.length ? requestedSlide : 0);
-  </script>
 </body>
 </html>
