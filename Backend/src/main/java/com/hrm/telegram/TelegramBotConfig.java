@@ -1,36 +1,49 @@
 package com.hrm.telegram;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
 import org.telegram.telegrambots.meta.TelegramBotsApi;
-import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
 
 import jakarta.annotation.PostConstruct;
 
 /**
  * Đăng ký HrmTelegramBot vào TelegramBotsApi để bắt đầu Long Polling.
- * Spring Boot Starter tự động tạo TelegramBotsApi nhưng không tự đăng ký bean —
- * cần @PostConstruct để gọi registerBot() sau khi Spring context sẵn sàng.
+ * Bọc try-catch và kiểm tra Token an toàn để không làm sập Spring Boot nếu Bot Token chưa được cấu hình.
  */
 @Slf4j
 @Configuration
 public class TelegramBotConfig {
 
     private final HrmTelegramBot hrmTelegramBot;
+    private final TelegramBotProperties properties;
 
-    public TelegramBotConfig(HrmTelegramBot hrmTelegramBot) {
+    public TelegramBotConfig(@Autowired(required = false) HrmTelegramBot hrmTelegramBot,
+                              TelegramBotProperties properties) {
         this.hrmTelegramBot = hrmTelegramBot;
+        this.properties = properties;
     }
 
     @PostConstruct
     public void registerBot() {
+        if (hrmTelegramBot == null) {
+            log.warn("⚠️ HrmTelegramBot bean is not present. Skipping Telegram bot registration.");
+            return;
+        }
+
+        String token = properties.getBotToken();
+        if (token == null || token.isBlank() || "YOUR_BOT_TOKEN_HERE".equalsIgnoreCase(token.trim())) {
+            log.warn("⚠️ Telegram Bot Token is missing or default placeholder. Skipping Telegram bot registration.");
+            return;
+        }
+
         try {
             TelegramBotsApi botsApi = new TelegramBotsApi(DefaultBotSession.class);
             botsApi.registerBot(hrmTelegramBot);
-            log.info("✅ @Hrmaii_bot registered and Long Polling started!");
-        } catch (TelegramApiException e) {
-            log.error("❌ Failed to register Telegram bot: {}", e.getMessage(), e);
+            log.info("✅ Telegram Bot @{} registered successfully and Long Polling started!", properties.getBotUsername());
+        } catch (Throwable e) {
+            log.error("⚠️ Unable to start Telegram bot (Backend will continue running normally): {}", e.getMessage());
         }
     }
 }
