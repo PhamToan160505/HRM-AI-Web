@@ -17,7 +17,7 @@ public class OfferTokenService {
 
     private final byte[] secret;
 
-    public OfferTokenService(@Value("${app.jwt.secret}") String base64Secret) {
+    public OfferTokenService(@Value("${app.jwt.secret:c3VwZXItc2VjcmV0LWtleS1kZXZlbG9wbWVudC1vbmx5LWhybS1haQ==}") String base64Secret) {
         this.secret = Base64.getDecoder().decode(base64Secret);
     }
 

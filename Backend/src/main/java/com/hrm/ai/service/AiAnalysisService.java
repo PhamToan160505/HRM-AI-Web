@@ -36,7 +36,7 @@ public class AiAnalysisService {
     private final ObjectMapper objectMapper;
     private final OutboxEventRepository outboxEventRepository;
 
-    @Value("${app.gemini.model}")
+    @Value("${app.gemini.model:gemini-3.5-flash-lite}")
     private String modelName;
 
     @Transactional

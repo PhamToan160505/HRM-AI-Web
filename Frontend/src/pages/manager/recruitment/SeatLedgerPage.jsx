@@ -53,7 +53,7 @@ export default function SeatLedgerPage() {
       const response = await api.get(`/api/recruitment/requisitions/${selectedId}/seats`);
       setSeats(response.data.data || []);
     } catch (error) {
-      showNotification('Không thể tải seat ledger', error.response?.data?.message || 'Vui lòng thử lại', 'error');
+      showNotification('Không thể tải số ghế ngồi', error.response?.data?.message || 'Vui lòng thử lại', 'error');
     } finally {
       setLoadingSeats(false);
     }
@@ -81,7 +81,7 @@ export default function SeatLedgerPage() {
       <header className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">Kiểm soát headcount</p>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950">Seat ledger</h1>
+          <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950">Số ghế ngồi</h1>
           <p className="mt-2 max-w-2xl text-sm text-slate-600">Theo dõi từng suất tuyển từ lúc khởi tạo, giữ cho offer, chấp nhận đến khi nhân viên nhận việc.</p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
@@ -108,7 +108,7 @@ export default function SeatLedgerPage() {
         ) : !selectedId ? (
           <div className="grid min-h-64 place-items-center px-6 text-center"><div><Armchair className="mx-auto text-slate-300" size={44} /><p className="mt-3 font-semibold text-slate-700">Chưa có requisition đã duyệt</p><p className="mt-1 text-sm text-slate-500">Seat được sinh sau khi yêu cầu tuyển dụng được duyệt.</p></div></div>
         ) : seats.length === 0 ? (
-          <div className="grid min-h-64 place-items-center px-6 text-center"><div><ShieldAlert className="mx-auto text-amber-400" size={42} /><p className="mt-3 font-semibold text-slate-700">Chưa có seat ledger</p><p className="mt-1 text-sm text-slate-500">Kiểm tra migration hoặc thao tác duyệt requisition.</p></div></div>
+          <div className="grid min-h-64 place-items-center px-6 text-center"><div><ShieldAlert className="mx-auto text-amber-400" size={42} /><p className="mt-3 font-semibold text-slate-700">Chưa có số ghế ngồi</p><p className="mt-1 text-sm text-slate-500">Kiểm tra migration hoặc thao tác duyệt requisition.</p></div></div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">

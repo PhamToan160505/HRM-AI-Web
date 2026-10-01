@@ -21,10 +21,10 @@ public class TelegramAiIntentService {
 
     private final WebClient.Builder webClientBuilder;
 
-    @Value("${app.gemini.api-key}")
+    @Value("${app.gemini.api-key:}")
     private String geminiApiKey;
 
-    @Value("${app.gemini.base-url}")
+    @Value("${app.gemini.base-url:https://generativelanguage.googleapis.com/v1beta}")
     private String geminiBaseUrl;
 
     @Value("${app.gemini.model:gemini-3.5-flash-lite}")

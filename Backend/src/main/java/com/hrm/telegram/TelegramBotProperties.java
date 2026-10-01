@@ -50,4 +50,12 @@ public class TelegramBotProperties {
      *     ceo_nguyen: 2
      */
     private Map<String, Long> userIdMap = new HashMap<>();
+
+    /**
+     * Chat ID của nhóm Telegram nhận thông báo tự động.
+     * Lấy bằng cách thêm @userinfobot vào nhóm và gõ /start,
+     * hoặc xem chatId trong log khi bot nhận tin nhắn từ nhóm.
+     * Ví dụ: -1001234567890
+     */
+    private String groupChatId = "";
 }

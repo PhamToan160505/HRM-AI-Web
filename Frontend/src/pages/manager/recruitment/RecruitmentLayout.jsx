@@ -22,7 +22,7 @@ export default function RecruitmentLayout() {
     { path: `${basePath}/pipeline`, label: 'Pipeline & Thống kê', icon: <Kanban size={18} /> },
   ];
   if (role === 'ceo' || isHrManagement) {
-    tabs.push({ path: `${basePath}/seats`, label: 'Seat ledger', icon: <Armchair size={18} /> });
+    tabs.push({ path: `${basePath}/seats`, label: 'Số ghế ngồi', icon: <Armchair size={18} /> });
   }
 
   return (

@@ -18,6 +18,7 @@ import com.hrm.request.service.EmployeeRequestService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -240,9 +241,10 @@ public class TelegramHrmDataService {
 
     // ─── ACTION: Liệt kê đơn chờ duyệt kèm ID ───────────────────────────────
 
+    @Transactional(readOnly = true)
     public String getPendingRequestsList() {
         try {
-            var pending = employeeRequestRepository.findAll().stream()
+            var pending = employeeRequestRepository.findAllWithUser().stream()
                     .filter(r -> r.getStatus() == RequestStatus.PENDING
                             || r.getStatus() == RequestStatus.FORWARDED)
                     .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
@@ -283,6 +285,7 @@ public class TelegramHrmDataService {
 
     // ─── ACTION: Duyệt đơn ───────────────────────────────────────────────────
 
+    @Transactional
     public String approveRequestById(Long managerId, Long requestId, String note) {
         try {
             ApproveRequestDto dto = new ApproveRequestDto();
@@ -303,6 +306,7 @@ public class TelegramHrmDataService {
 
     // ─── ACTION: Từ chối đơn ─────────────────────────────────────────────────
 
+    @Transactional
     public String rejectRequestById(Long managerId, Long requestId, String reason) {
         try {
             ApproveRequestDto dto = new ApproveRequestDto();

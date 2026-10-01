@@ -18,10 +18,10 @@ import org.springframework.web.reactive.function.client.WebClient;
 @Configuration
 public class GeminiConfig {
 
-    @Value("${app.gemini.api-key}")
+    @Value("${app.gemini.api-key:}")
     private String apiKey;
 
-    @Value("${app.gemini.base-url}")
+    @Value("${app.gemini.base-url:https://generativelanguage.googleapis.com/v1beta}")
     private String baseUrl;
 
     @Bean(name = "geminiWebClient")

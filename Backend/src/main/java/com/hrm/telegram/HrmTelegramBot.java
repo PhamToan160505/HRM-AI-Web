@@ -26,16 +26,16 @@ public class HrmTelegramBot extends TelegramLongPollingBot {
 
     private final TelegramBotProperties properties;
     private final TelegramHrmDataService dataService;
-    private final TelegramAiIntentService intentService;
+    private final TelegramAiConversationService aiConversation;
 
     // Telegrambots 6.x: phải truyền botToken vào super() constructor
     public HrmTelegramBot(TelegramBotProperties properties,
                           TelegramHrmDataService dataService,
-                          TelegramAiIntentService intentService) {
+                          TelegramAiConversationService aiConversation) {
         super(properties.getBotToken());
         this.properties = properties;
         this.dataService = dataService;
-        this.intentService = intentService;
+        this.aiConversation = aiConversation;
         log.info("✅ HRM Telegram Bot initialized! Username: @{}", properties.getBotUsername());
     }
 
@@ -76,6 +76,15 @@ public class HrmTelegramBot extends TelegramLongPollingBot {
 
         log.info("Telegram message from {} (chatId={}): {}", senderName, chatId, text);
 
+        // ─── Auto-detect group chatId ─────────────────────────────────────────
+        // chatId am = nhom/supergroup; luu lai de gui thong bao tu dong
+        if (message.getChatId() < 0
+                && (properties.getGroupChatId() == null || properties.getGroupChatId().isBlank())) {
+            properties.setGroupChatId(chatId);
+            log.info("[AutoDetect] Da tu dong phat hien groupChatId={}. " +
+                     "Hay cap nhat gia tri nay vao application.yml: group-chat-id: {}", chatId, chatId);
+        }
+
         // ─── Kiểm tra phân quyền ─────────────────────────────────────────
         if (!isAuthorized(username)) {
             log.warn("Unauthorized user: username='{}', firstName='{}'", username, firstName);
@@ -112,7 +121,7 @@ public class HrmTelegramBot extends TelegramLongPollingBot {
                 : null;
 
         String response = switch (baseCmd) {
-            case CMD_START      -> buildWelcomeMessage(sender);
+            case CMD_START      -> { aiConversation.clearHistory(chatId); yield buildWelcomeMessage(sender); }
             case CMD_HELP       -> buildHelpMessage();
             case CMD_NHANVIEN   -> dataService.getEmployeeSummary();
             case CMD_CHAMCONG   -> dataService.getTodayAttendance();
@@ -166,19 +175,10 @@ public class HrmTelegramBot extends TelegramLongPollingBot {
         // Gửi "typing..." indicator
         sendTypingAction(chatId);
 
-        TelegramAiIntentService.Intent intent = intentService.detectIntent(text);
-        log.info("Detected intent: {} for message: {}", intent, text);
+        log.info("[NaturalLanguage] Xử lý AI chat từ {} (chatId={}): {}", sender, chatId, text);
 
-        String response = switch (intent) {
-            case EMPLOYEE_SUMMARY  -> dataService.getEmployeeSummary();
-            case ATTENDANCE_TODAY  -> dataService.getTodayAttendance();
-            case PAYROLL_SUMMARY   -> dataService.getPayrollSummary();
-            case RECRUITMENT_SUMMARY -> dataService.getRecruitmentSummary();
-            case PENDING_REQUESTS  -> dataService.getPendingRequestsSummary();
-            case FULL_DASHBOARD    -> dataService.getFullDashboard();
-            case HELP              -> buildHelpMessage();
-            case UNKNOWN           -> buildUnknownResponse(text);
-        };
+        // Dùng full AI conversation engine — không còn intent detection đơn giản nữa
+        String response = aiConversation.chat(chatId, sender, text);
 
         sendReply(chatId, response, replyToMsgId);
     }
