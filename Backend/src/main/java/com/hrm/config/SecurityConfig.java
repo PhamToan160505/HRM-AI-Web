@@ -41,7 +41,7 @@ public class SecurityConfig {
     private final JwtAuthFilter jwtAuthFilter;
     private final UserRepository userRepository;
 
-    @Value("${app.cors.allowed-origins:http://localhost:5173}")
+    @Value("${app.cors.allowed-origins:*}")
     private String allowedOrigins;
 
     @Bean
@@ -77,9 +77,17 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        // Đọc từ env var, split nếu có nhiều origin cách nhau bởi dấu phẩy
-        List<String> origins = List.of(allowedOrigins.split(","));
-        config.setAllowedOrigins(origins);
+        List<String> origins = java.util.Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
+
+        if (origins.contains("*") || origins.isEmpty()) {
+            config.setAllowedOriginPatterns(List.of("*"));
+        } else {
+            config.setAllowedOriginPatterns(origins);
+        }
+
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
