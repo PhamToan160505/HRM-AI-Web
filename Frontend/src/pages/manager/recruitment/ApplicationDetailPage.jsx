@@ -23,6 +23,19 @@ import {
   validateOfferFields,
 } from '../../../utils/offer';
 
+const AI_FLAG_LABELS = {
+  IDENTITY_MISMATCH_CHECK: 'Xác minh thông tin cá nhân',
+  UNVERIFIED_CITATION: 'Trích dẫn chưa xác minh',
+  EVIDENCE_COPIED_FROM_JD: 'Bằng chứng sao chép từ JD',
+  JD_MIRRORING_SUSPECTED: 'Nghi vấn sao chép yêu cầu JD',
+  FUTURE_DATE: 'Thời gian tương lai bất thường',
+  CONSISTENCY_CHECK: 'Kiểm tra tính đồng nhất',
+  HIDDEN_TEXT_SUSPECTED: 'Nghi vấn chữ ẩn trong CV',
+  PROMPT_INJECTION_PATTERN: 'Nghi vấn chèn câu lệnh AI'
+};
+
+const formatAiClaim = (claim) => AI_FLAG_LABELS[claim] || claim;
+
 export default function ApplicationDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -796,7 +809,7 @@ export default function ApplicationDetailPage() {
                             <div className="mt-3 space-y-3">
                               {aiVerifyPoints.map((point, index) => (
                                 <div key={index} className="text-sm text-amber-900">
-                                  <p className="font-semibold">{point.claim}</p>
+                                  <p className="font-semibold">{formatAiClaim(point.claim)}</p>
                                   <p className="mt-0.5">{point.why}</p>
                                   {(point.suggested_questions || []).map((question, questionIndex) => (
                                     <p key={questionIndex} className="mt-1 text-xs italic text-amber-800">Gợi ý hỏi: {question}</p>
@@ -813,7 +826,7 @@ export default function ApplicationDetailPage() {
                             <div className="mt-3 space-y-3">
                               {aiFlags.map((flag, index) => (
                                 <div key={`${flag.code || 'flag'}-${index}`} className="rounded-lg bg-white p-3 text-sm">
-                                  <p className="font-semibold text-slate-800">{flag.code}</p>
+                                  <p className="font-semibold text-slate-800">{formatAiClaim(flag.code)}</p>
                                   <p className="mt-1 text-slate-600">{flag.detail}</p>
                                   {flag.suggested_question && <p className="mt-1 text-xs italic text-blue-700">Gợi ý hỏi: {flag.suggested_question}</p>}
                                 </div>

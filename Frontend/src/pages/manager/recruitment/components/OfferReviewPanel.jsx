@@ -11,6 +11,14 @@ function formatDiff(value, type) {
   return String(value);
 }
 
+const OFFER_STATUS_LABELS = {
+  PENDING_APPROVAL: 'Chờ duyệt',
+  APPROVED: 'Đã duyệt',
+  REJECTED: 'Đã từ chối',
+  SENT: 'Đã gửi ứng viên',
+  ACCEPTED: 'Ứng viên đã nhận'
+};
+
 export default function OfferReviewPanel({ offers, application }) {
   const [showPreview, setShowPreview] = useState(true);
   const current = offers.find(item => item.status === 'PENDING_APPROVAL')
@@ -26,7 +34,7 @@ export default function OfferReviewPanel({ offers, application }) {
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
         <div className="flex items-center gap-3">
           <span className="grid size-10 place-items-center rounded-xl bg-white text-blue-600 shadow-sm"><History size={19} /></span>
-          <div><p className="font-bold text-slate-900">Offer phiên bản {current.versionNumber}</p><p className="text-xs text-slate-500">{current.status} · không thể sửa trực tiếp sau khi duyệt</p></div>
+          <div><p className="font-bold text-slate-900">Offer phiên bản {current.versionNumber}</p><p className="text-xs text-slate-500">{OFFER_STATUS_LABELS[current.status] || current.status} · không thể sửa trực tiếp sau khi duyệt</p></div>
         </div>
         <button type="button" onClick={() => setShowPreview(value => !value)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">
           {showPreview ? <ChevronUp size={15} /> : <ChevronDown size={15} />}{showPreview ? 'Thu gọn' : 'Xem toàn bộ'}

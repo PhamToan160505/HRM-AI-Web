@@ -86,9 +86,9 @@ public class HrmTelegramBot extends TelegramLongPollingBot {
         }
 
         // ─── Kiểm tra phân quyền ─────────────────────────────────────────
-        if (!isAuthorized(username)) {
-            log.warn("Unauthorized user: username='{}', firstName='{}'", username, firstName);
-            sendReply(chatId, "Xin loi, ban khong co quyen su dung bot nay.", message.getMessageId());
+        if (!isAuthorized(chatId, username)) {
+            log.warn("Unauthorized user in chatId={}: username='{}', firstName='{}'", chatId, username, firstName);
+            sendReply(chatId, "Xin lỗi, bạn không có quyền sử dụng bot này.", message.getMessageId());
             return;
         }
         log.info("Authorized user: {}", senderName);
@@ -185,10 +185,15 @@ public class HrmTelegramBot extends TelegramLongPollingBot {
 
     // ─────────────────────────── Helpers ───────────────────────────────────
 
-    private boolean isAuthorized(String username) {
+    private boolean isAuthorized(String chatId, String username) {
+        // Cho phep tat ca thanh vien trong nhom Telegram Ban Giam Doc
+        if (properties.getGroupChatId() != null && !properties.getGroupChatId().isBlank()
+                && properties.getGroupChatId().equals(chatId)) {
+            return true;
+        }
+
         List<String> allowed = properties.getAllowedUsernames();
         if (allowed == null || allowed.isEmpty()) {
-            log.warn("No allowed usernames configured! Blocking all users.");
             return false;
         }
         if (username == null) return false;

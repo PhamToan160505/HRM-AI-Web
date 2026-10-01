@@ -31,6 +31,31 @@ public class AiInterviewQuestionService {
     private final ObjectMapper objectMapper;
 
     /**
+     * Tạo câu hỏi phỏng vấn sơ bộ vòng 1 (online) cho ứng viên dựa trên CV và JD.
+     *
+     * @param applicationId ID hồ sơ ứng tuyển
+     * @return Danh sách câu hỏi phỏng vấn vòng 1 (online)
+     */
+    public List<String> generateRound1Questions(Long applicationId) {
+        var application = applicationRepository.findById(applicationId)
+                .orElseThrow(() -> AppException.notFound("Không tìm thấy hồ sơ: " + applicationId));
+
+        String jdSummary = buildJdSummary(applicationId);
+        String cvSummary = buildCvSummary(application.getRawCvText());
+        String prompt = buildRound1Prompt(jdSummary, cvSummary);
+
+        try {
+            String response = geminiClientService.callGemini(prompt, 60, 1).block();
+            String text = geminiClientService.extractTextFromGeminiResponse(response);
+            return parseQuestions(text);
+        } catch (Exception e) {
+            log.error("[AiInterviewQuestion] Lỗi khi generate câu hỏi vòng 1 cho application {}: {}",
+                    applicationId, e.getMessage());
+            throw AppException.conflict("Không thể tạo câu hỏi phỏng vấn online: " + e.getMessage());
+        }
+    }
+
+    /**
      * Tạo câu hỏi phỏng vấn trực tiếp vòng 2 cho ứng viên.
      *
      * @param applicationId ID hồ sơ ứng tuyển
@@ -140,6 +165,31 @@ public class AiInterviewQuestionService {
     private String buildCvSummary(String rawCvText) {
         if (rawCvText == null || rawCvText.isBlank()) return "Không có dữ liệu CV";
         return truncate(rawCvText, 1000);
+    }
+
+    private String buildRound1Prompt(String jd, String cv) {
+        return """
+                Bạn là chuyên gia tuyển dụng giúp chuẩn bị câu hỏi phỏng vấn VÒNG 1 (phỏng vấn ONLINE sơ bộ).
+
+                Ngữ cảnh:
+                - Đây là buổi phỏng vấn vòng 1 sơ bộ qua Google Meet / Zoom.
+                - Mục tiêu: Kiểm tra kiến thức chuyên môn nền tảng, kinh nghiệm tổng quan trong CV, kỹ năng cốt lõi và mức độ phù hợp ban đầu với vị trí.
+
+                MÔ TẢ CÔNG VIỆC (JD):
+                %s
+
+                TÓM TẮT CV ỨNG VIÊN:
+                %s
+
+                Hãy tạo ĐÚNG 8 câu hỏi phỏng vấn online vòng 1. Yêu cầu:
+                1. Dành riêng cho phỏng vấn online sơ bộ, cô đọng, đi thẳng vào kiến thức nền tảng và kỹ năng chuyên môn cốt lõi.
+                2. Kiểm tra tính xác thực và làm rõ thông tin kinh nghiệm nổi bật ghi trong CV so với JD.
+                3. Đánh giá thái độ, phong cách giao tiếp trực tuyến và khả năng làm việc từ xa / độc lập (nếu vị trí yêu cầu).
+                4. Viết bằng tiếng Việt, ngắn gọn, dễ hỏi và trả lời qua Google Meet / Zoom.
+
+                Chỉ trả về danh sách 8 câu hỏi, mỗi câu trên một dòng, bắt đầu bằng số thứ tự (ví dụ: "1. Câu hỏi...").
+                Không giải thích, không thêm tiêu đề, chỉ trả về đúng 8 dòng câu hỏi.
+                """.formatted(jd, cv);
     }
 
     private String buildPrompt(String jd, String cv, String round1Context) {

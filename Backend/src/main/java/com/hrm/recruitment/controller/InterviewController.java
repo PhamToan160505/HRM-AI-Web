@@ -113,6 +113,19 @@ public class InterviewController {
     }
 
     /**
+     * Tạo câu hỏi phỏng vấn vòng 1 (online/sơ bộ) dựa trên CV và JD.
+     * Gọi Gemini AI — chỉ HR/manager có quyền tạo lịch mới được truy cập.
+     */
+    @GetMapping("/applications/{applicationId}/round1-questions")
+    @PreAuthorize("hasAnyRole('TRUONG_PHONG','GIAM_DOC_PHONG_BAN','CEO','ADMIN')")
+    public ResponseEntity<ApiResponse<List<String>>> round1Questions(
+            @PathVariable Long applicationId) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                aiInterviewQuestionService.generateRound1Questions(applicationId),
+                "Câu hỏi phỏng vấn vòng 1"));
+    }
+
+    /**
      * Tạo câu hỏi phỏng vấn vòng 2 (onsite/trực tiếp) dựa trên kết quả vòng 1 và JD.
      * Gọi Gemini AI — chỉ HR/manager có quyền tạo lịch mới được truy cập.
      */

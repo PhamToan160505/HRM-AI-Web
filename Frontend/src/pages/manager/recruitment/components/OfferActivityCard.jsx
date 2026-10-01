@@ -3,9 +3,18 @@ import { Clock3, Eye, MailCheck, MessageSquareText, Send } from 'lucide-react';
 import { parseJson } from '../../../../utils/offer';
 
 const STATUS_LABELS = {
-  ACTIVE: 'Đang chờ phản hồi', ACCEPTED: 'Đã chấp nhận', DECLINED: 'Đã từ chối',
-  NEGOTIATION_CLOSED: 'Yêu cầu thương lượng', SUPERSEDED: 'Đã thay thế',
-  EXPIRED: 'Đã hết hạn', REVOKED: 'Đã thu hồi',
+  ACTIVE: 'Đang chờ phản hồi',
+  ACCEPTED: 'Đã chấp nhận',
+  DECLINED: 'Đã từ chối',
+  NEGOTIATION_CLOSED: 'Yêu cầu thương lượng',
+  SUPERSEDED: 'Đã thay thế',
+  EXPIRED: 'Đã hết hạn',
+  REVOKED: 'Đã thu hồi',
+  PENDING_APPROVAL: 'Chờ phê duyệt',
+  APPROVED: 'Đã duyệt',
+  REJECTED: 'Đã từ chối',
+  DRAFT: 'Bản nháp',
+  SENT: 'Đã gửi ứng viên'
 };
 
 function formatDateTime(value) {
@@ -25,7 +34,7 @@ export default function OfferActivityCard({ activity }) {
           <p className="text-xs font-semibold uppercase tracking-wider text-blue-600">Theo dõi Offer-to-Contract</p>
           <h2 className="mt-1 text-lg font-bold text-slate-900">Offer phiên bản {latest.versionNumber}</h2>
         </div>
-        <span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700">{STATUS_LABELS[latest.dispatchStatus] || latest.offerStatus}</span>
+        <span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700">{STATUS_LABELS[latest.dispatchStatus] || STATUS_LABELS[latest.offerStatus] || latest.offerStatus}</span>
       </div>
       {latest.dispatchStatus ? (
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

@@ -158,11 +158,13 @@ public class TelegramAiConversationService {
         sb.append("\n=== HUONG DAN TRA LOI ===\n");
         sb.append("1. Tra loi bang tieng Viet co dau, ro rang, chuyen nghiep.\n");
         sb.append("2. Dung emoji phu hop de lam noi bat thong tin quan trong.\n");
-        sb.append("3. Khi can so lieu chi tiet hon (danh sach nhan vien phong ban cu the, so lieu luong chi tiet, danh sach don...), hay su dung Function Calling de truy van DB thay vi doan.\n");
-        sb.append("4. Voi cau hoi ve duyet don: nhac nguoi dung dung lenh /request roi /duyet [ID] hoac /tuchoi [ID].\n");
-        sb.append("5. Khong tra loi cac cau hoi hoan toan khong lien quan den cong ty/nhan su.\n");
-        sb.append("6. Tra loi ngan gon, suc tich - toi da 300 tu neu khong can thiet liet ke nhieu.\n");
-        sb.append("7. KHONG dung markdown (**, ##) - chi dung emoji va dau phan cach thuan text.\n");
+        sb.append("3. Khi nguoi dung hoi ve nhan vien moi gia nhap, nhan su moi, hoac ai moi vao: BAT BUOC goi ham 'get_recent_employees' de tra ve danh sach nhan vien moi nhat tu CSDL.\n");
+        sb.append("4. Khi nguoi dung tim kiem nhan vien (tim ten, tim ma nhan vien): BAT BUOC goi ham 'search_employee'.\n");
+        sb.append("5. Khi can so lieu chi tiet hon (phong ban, luong, don cho duyet, cham cong), hay su dung Function Calling de truy van CSDL thuc te.\n");
+        sb.append("6. Voi cau hoi ve duyet don: nhac nguoi dung dung lenh /request roi /duyet [ID] hoac /tuchoi [ID].\n");
+        sb.append("7. Khong tra loi cac cau hoi hoan toan khong lien quan den cong ty/nhan su.\n");
+        sb.append("8. Tra loi ngan gon, suc tich - toi da 300 tu neu khong can thiet liet ke nhieu.\n");
+        sb.append("9. KHONG dung markdown (**, ##) - chi dung emoji va dau phan cach thuan text.\n");
 
         return sb.toString();
     }
@@ -215,6 +217,21 @@ public class TelegramAiConversationService {
         f7.put("name", "get_today_attendance");
         f7.put("description", "Lay thong tin cham cong hom nay: so nguoi dung gio, di muon, vang mat, nghi phep.");
         f7.putObject("parameters").put("type", "OBJECT").putObject("properties");
+
+        ObjectNode f8 = funcDecls.addObject();
+        f8.put("name", "get_recent_employees");
+        f8.put("description", "Lay danh sach cac nhan vien moi gia nhập / moi duoc tao gan day nhat trong he thong.");
+        f8.putObject("parameters").put("type", "OBJECT").putObject("properties");
+
+        ObjectNode f9 = funcDecls.addObject();
+        f9.put("name", "search_employee");
+        f9.put("description", "Tim kiem thong tin nhan vien theo ten, ma nhan vien hoac email.");
+        ObjectNode p9 = f9.putObject("parameters");
+        p9.put("type", "OBJECT");
+        p9.putObject("properties").putObject("keyword")
+                .put("type", "STRING")
+                .put("description", "Tu khoa tim kiem (ten, ma nhan vien, email)");
+        p9.putArray("required").add("keyword");
 
         return tools;
     }
@@ -387,6 +404,58 @@ public class TelegramAiConversationService {
                     result.put("nghiPhep", onLeave);
                     result.put("tongNhanVienActive", totalActive);
                     result.put("chuaChamCong", Math.max(0, totalActive - present - late - absent - onLeave));
+                }
+                case "get_recent_employees" -> {
+                    var users = userRepository.findAll().stream()
+                            .filter(u -> EMPLOYEE_ROLES.contains(u.getRole()))
+                            .sorted((a, b) -> (b.getId() != null && a.getId() != null) ? b.getId().compareTo(a.getId()) : 0)
+                            .limit(10)
+                            .toList();
+
+                    result.put("status", "success");
+                    result.put("tongSoNhanVienMoiGoiY", users.size());
+                    ArrayNode arr = result.putArray("danhSachNhanVienMoiNhat");
+                    var deptMap = departmentRepository.findAll().stream()
+                            .collect(java.util.stream.Collectors.toMap(com.hrm.common.entity.Department::getId, com.hrm.common.entity.Department::getTenPhong, (a, b) -> a));
+
+                    users.forEach(u -> {
+                        ObjectNode item = arr.addObject();
+                        item.put("maNhanVien", u.getMaNhanVien() != null ? u.getMaNhanVien() : "NV" + u.getId());
+                        item.put("hoTen", u.getHoTen());
+                        item.put("chucVu", u.getChucVu() != null ? u.getChucVu() : u.getRole().name());
+                        item.put("phongBan", u.getDepartmentId() != null ? deptMap.getOrDefault(u.getDepartmentId(), "Chưa phân công") : "Ban Giám Đốc");
+                        item.put("email", u.getEmail());
+                        item.put("ngayTaoTaikhoan", u.getCreatedAt() != null ? u.getCreatedAt().format(DATE_FMT) : "Chưa ghi nhận");
+                        item.put("trangThai", u.getActive() ? "Đang làm việc" : "Đã nghỉ việc");
+                    });
+                }
+                case "search_employee" -> {
+                    String kw = args != null && args.has("keyword") ? args.get("keyword").asText().trim().toLowerCase() : "";
+                    var deptMap = departmentRepository.findAll().stream()
+                            .collect(java.util.stream.Collectors.toMap(com.hrm.common.entity.Department::getId, com.hrm.common.entity.Department::getTenPhong, (a, b) -> a));
+
+                    var matched = userRepository.findAll().stream()
+                            .filter(u -> EMPLOYEE_ROLES.contains(u.getRole()))
+                            .filter(u -> u.getHoTen().toLowerCase().contains(kw)
+                                    || (u.getMaNhanVien() != null && u.getMaNhanVien().toLowerCase().contains(kw))
+                                    || (u.getEmail() != null && u.getEmail().toLowerCase().contains(kw)))
+                            .limit(10)
+                            .toList();
+
+                    result.put("status", "success");
+                    result.put("tuKhoa", kw);
+                    result.put("soKetQua", matched.size());
+                    ArrayNode arr = result.putArray("danhSachKetQua");
+                    matched.forEach(u -> {
+                        ObjectNode item = arr.addObject();
+                        item.put("maNhanVien", u.getMaNhanVien() != null ? u.getMaNhanVien() : "NV" + u.getId());
+                        item.put("hoTen", u.getHoTen());
+                        item.put("chucVu", u.getChucVu() != null ? u.getChucVu() : u.getRole().name());
+                        item.put("phongBan", u.getDepartmentId() != null ? deptMap.getOrDefault(u.getDepartmentId(), "Chưa phân công") : "Ban Giám Đốc");
+                        item.put("email", u.getEmail());
+                        item.put("phone", u.getPhone() != null ? u.getPhone() : "N/A");
+                        item.put("trangThai", u.getActive() ? "Đang làm việc" : "Đã nghỉ việc");
+                    });
                 }
                 default -> {
                     result.put("status", "error");
