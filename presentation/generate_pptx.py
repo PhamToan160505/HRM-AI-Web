@@ -53,15 +53,26 @@ def build_presentation():
             p2.font.color.rgb = ACCENT_BLUE
             p2.space_before = Pt(4)
 
+    def add_footer(slide, slide_num, total_slides=10):
+        tb = slide.shapes.add_textbox(Inches(11.2), Inches(6.9), Inches(1.5), Inches(0.4))
+        tf = tb.text_frame
+        tf.word_wrap = False
+        tf.margin_left = tf.margin_top = tf.margin_right = tf.margin_bottom = 0
+        p = tf.paragraphs[0]
+        p.alignment = PP_ALIGN.RIGHT
+        p.text = f"{slide_num} / {total_slides}"
+        p.font.name = "Arial"
+        p.font.size = Pt(12)
+        p.font.bold = True
+        p.font.color.rgb = ACCENT_BLUE
+
     def add_card(slide, left, top, width, height, title, items, border_color=CARD_BORDER, header_color=ACCENT_BLUE):
-        # Card shape background
         card = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(left), Inches(top), Inches(width), Inches(height))
         card.fill.solid()
         card.fill.fore_color.rgb = CARD_BG
         card.line.color.rgb = border_color
         card.line.width = Pt(1.5)
 
-        # Text Frame
         tb = slide.shapes.add_textbox(Inches(left + 0.25), Inches(top + 0.25), Inches(width - 0.5), Inches(height - 0.5))
         tf = tb.text_frame
         tf.word_wrap = True
@@ -82,7 +93,6 @@ def build_presentation():
             p.font.color.rgb = TEXT_MAIN
             
             if isinstance(item, tuple):
-                # Bullet title + description
                 run1 = p.add_run()
                 run1.text = "• " + item[0] + ": "
                 run1.font.bold = True
@@ -101,6 +111,7 @@ def build_presentation():
     # ==========================================
     slide1 = prs.slides.add_slide(blank_layout)
     add_bg(slide1)
+    add_footer(slide1, 1)
     
     # Hero container
     hero = slide1.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(1.0), Inches(1.2), Inches(11.333), Inches(5.1))
@@ -154,9 +165,10 @@ def build_presentation():
     # ==========================================
     slide2 = prs.slides.add_slide(blank_layout)
     add_bg(slide2)
-    add_header(slide2, "Slide 2 — Bài toán thực tế & Giải pháp HRM AI", "Chuyển đổi quy trình thủ công đứt gãy thành Nền tảng hợp nhất Nhanh - Đúng - Minh bạch")
+    add_header(slide2, "Bài toán thực tế & Giải pháp HRM AI", "Chuyển đổi quy trình thủ công đứt gãy thành Nền tảng hợp nhất Nhanh - Đúng - Minh bạch")
+    add_footer(slide2, 2)
 
-    add_card(slide2, 0.8, 1.6, 5.7, 5.3, "Thách thức Quy trình Truyền thống", [
+    add_card(slide2, 0.8, 1.6, 5.7, 5.1, "Thách thức Quy trình Truyền thống", [
         ("Nhập liệu thủ công", "CV gửi qua nhiều kênh, HR mất nhiều giờ đọc và nhập dữ liệu."),
         ("Tiêu chí thiếu nhất quán", "Đánh giá ứng viên không đồng bộ giữa HR và bộ phận chuyên môn."),
         ("Tuyển vượt chỉ tiêu", "Thiếu cơ chế Seat Ledger giữ suất real-time khi phát hành Offer."),
@@ -164,7 +176,7 @@ def build_presentation():
         ("Lãnh đạo thiếu công cụ", "Phụ thuộc báo cáo chậm, khó tra cứu & duyệt nhanh khi di chuyển.")
     ], border_color=ACCENT_AMBER, header_color=ACCENT_AMBER)
 
-    add_card(slide2, 6.8, 1.6, 5.7, 5.3, "Giải pháp HRM AI Nổi bật", [
+    add_card(slide2, 6.8, 1.6, 5.7, 5.1, "Giải pháp HRM AI Nổi bật", [
         ("Nhanh hơn", "Gemini AI tự động cấu trúc hóa CV & tính Fit Score theo bằng chứng trong vài giây."),
         ("Đúng hơn", "Kiểm soát qua State Machine nghiêm ngặt, tự động giữ suất tuyển (Seat Ledger)."),
         ("Minh bạch hơn", "Audit Log đầy đủ, cờ cảnh báo sao chép JD, người có thẩm quyền quyết định cuối."),
@@ -177,7 +189,8 @@ def build_presentation():
     # ==========================================
     slide3 = prs.slides.add_slide(blank_layout)
     add_bg(slide3)
-    add_header(slide3, "Slide 3 — Luồng Tuyển dụng & Tiếp nhận Nhân sự Tổng thể", "Quy trình 12 bước xuyên suốt từ Nhu cầu tuyển dụng đến Ngày đi làm đầu tiên của Nhân viên")
+    add_header(slide3, "Luồng Tuyển dụng & Tiếp nhận Nhân sự Tổng thể", "Quy trình 12 bước xuyên suốt từ Nhu cầu tuyển dụng đến Ngày đi làm đầu tiên của Nhân viên")
+    add_footer(slide3, 3)
 
     col_w = 3.65
     gap_x = 0.35
@@ -208,8 +221,8 @@ def build_presentation():
         box = slide3.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(left), Inches(top), Inches(col_w), Inches(row_h))
         box.fill.solid()
         box.fill.fore_color.rgb = CARD_BG
-        box.line.color.rgb = ACCENT_BLUE if idx < 8 else ACCENT_GREEN
-        box.line.width = Pt(1)
+        box.line.color.rgb = ACCENT_BLUE
+        box.line.width = Pt(1.5)
 
         tf = box.text_frame
         tf.word_wrap = True
@@ -220,7 +233,7 @@ def build_presentation():
         p.font.name = "Arial"
         p.font.size = Pt(12)
         p.font.bold = True
-        p.font.color.rgb = ACCENT_BLUE if idx < 8 else ACCENT_GREEN
+        p.font.color.rgb = ACCENT_BLUE
 
         p2 = tf.add_paragraph()
         p2.text = sdesc
@@ -234,21 +247,22 @@ def build_presentation():
     # ==========================================
     slide4 = prs.slides.add_slide(blank_layout)
     add_bg(slide4)
-    add_header(slide4, "Slide 4 — Khởi tạo Nhu cầu & Đăng tin Tuyển dụng", "Quản lý Requisition, Sổ kế toán Suất tuyển (Seat Ledger) và Khóa tiêu chí AI")
+    add_header(slide4, "Khởi tạo Nhu cầu & Đăng tin Tuyển dụng", "Quản lý Requisition, Sổ kế toán Suất tuyển (Seat Ledger) và Khóa tiêu chí AI")
+    add_footer(slide4, 4)
 
-    add_card(slide4, 0.8, 1.6, 3.7, 5.3, "1. Yêu cầu Tuyển dụng", [
+    add_card(slide4, 0.8, 1.6, 3.7, 5.1, "1. Yêu cầu Tuyển dụng", [
         ("Khởi tạo Requisition", "Trưởng phòng lập yêu cầu theo vị trí, phòng ban, headcount, khung lương."),
         ("Duyệt đa cấp", "Phê duyệt theo ma trận phân quyền backend (DRAFT → APPROVED)."),
         ("Ràng buộc ngân sách", "Ngăn chặn tuyển dụng ngoài kế hoạch hoặc vượt định mức lương.")
     ], border_color=ACCENT_BLUE, header_color=ACCENT_BLUE)
 
-    add_card(slide4, 4.8, 1.6, 3.7, 5.3, "2. Quản lý Suất tuyển (Seat Ledger)", [
+    add_card(slide4, 4.8, 1.6, 3.7, 5.1, "2. Quản lý Suất tuyển (Seat Ledger)", [
         ("Cấp Suất tự động", "Khi Requisition APPROVED, tự động sinh các bản ghi hiring_seats ở AVAILABLE."),
         ("Ràng buộc nghiêm ngặt", "Mọi đợt gửi Offer đều phải gắn với 1 Suất tuyển cụ thể."),
         ("Chống overbook", "Không bao giờ xảy ra tình trạng ứng viên chấp nhận offer nhưng báo hết chỉ tiêu.")
     ], border_color=ACCENT_GREEN, header_color=ACCENT_GREEN)
 
-    add_card(slide4, 8.8, 1.6, 3.7, 5.3, "3. Đóng băng Tiêu chí AI", [
+    add_card(slide4, 8.8, 1.6, 3.7, 5.1, "3. Đóng băng Tiêu chí AI", [
         ("Posting Open", "HR tạo Posting & phải xác nhận bộ tiêu chí chấm và AI Scoring Profile."),
         ("Version bất biến", "Khóa cặp (criteria_version, scoring_profile_version) bất biến khi đăng tin."),
         ("Audit re-run", "Khi sửa tiêu chí, chỉ chạy lại AI cho các hồ sơ đang ở giai đoạn đánh giá.")
@@ -259,16 +273,17 @@ def build_presentation():
     # ==========================================
     slide5 = prs.slides.add_slide(blank_layout)
     add_bg(slide5)
-    add_header(slide5, "Slide 5 — AI Phân tích, Sàng lọc & Chấm CV theo Bằng chứng", "Bảo mật tải lên, Trích xuất PDFBox, Gemini AI Fit Score & Cảnh báo bất thường")
+    add_header(slide5, "AI Phân tích, Sàng lọc & Chấm CV theo Bằng chứng", "Bảo mật tải lên, Trích xuất PDFBox, Gemini AI Fit Score & Cảnh báo bất thường")
+    add_footer(slide5, 5)
 
-    add_card(slide5, 0.8, 1.6, 5.7, 5.3, "Quy trình Xử lý CV & AI Gemini", [
+    add_card(slide5, 0.8, 1.6, 5.7, 5.1, "Quy trình Xử lý CV & AI Gemini", [
         ("Nộp Form trực tuyến", "Ứng viên điền thông tin & nộp CV (PDF/DOCX). Tuyệt đối KHÔNG thu thập CCCD."),
         ("Kiểm tra An toàn File", "Xác minh mime-type, dung lượng, số trang, chặn virus/macro và file mã hóa."),
         ("PDFBox Text Extraction", "Trích xuất toàn bộ văn bản thô từ tệp PDF CV chuẩn xác."),
         ("Gemini AI Parsing", "Phân tích cấu trúc: Học vấn, Kinh nghiệm, Kỹ năng & Thành tựu thực tế.")
     ], border_color=ACCENT_BLUE, header_color=ACCENT_BLUE)
 
-    add_card(slide5, 6.8, 1.6, 5.7, 5.3, "Fit Score theo Bằng chứng & Safety", [
+    add_card(slide5, 6.8, 1.6, 5.7, 5.1, "Fit Score theo Bằng chứng & Safety", [
         ("Evidence-Based Scoring", "Chấm theo BẰNG CHỨNG thực tế thay vì từ khóa suông. Phân biệt Khai báo vs Thực chứng."),
         ("AI Fraud Flag", "Phát hiện & cảnh báo ứng viên sao chép nguyên văn mô tả công việc (JD Mirroring)."),
         ("Interview Questions", "AI tự động sinh danh sách câu hỏi phỏng vấn xoáy sâu vào các điểm cần xác minh."),
@@ -280,16 +295,17 @@ def build_presentation():
     # ==========================================
     slide6 = prs.slides.add_slide(blank_layout)
     add_bg(slide6)
-    add_header(slide6, "Slide 6 — Phỏng vấn có kiểm soát & Phê duyệt Offer an toàn", "Quy trình phỏng vấn 2 vòng, Duyệt Offer nội bộ và Cơ chế Giữ suất tuyển (Seat Reservation)")
+    add_header(slide6, "Phỏng vấn có kiểm soát & Phê duyệt Offer an toàn", "Quy trình phỏng vấn 2 vòng, Duyệt Offer nội bộ và Cơ chế Giữ suất tuyển (Seat Reservation)")
+    add_footer(slide6, 6)
 
-    add_card(slide6, 0.8, 1.6, 5.7, 5.3, "Quy trình Phỏng vấn 2 Vòng", [
+    add_card(slide6, 0.8, 1.6, 5.7, 5.1, "Quy trình Phỏng vấn 2 Vòng", [
         ("Duyệt CV 2 cấp", "HR duyệt CV cơ bản (PENDING_HR_CV_REVIEW) → Phòng chuyên môn duyệt (PENDING_TECH_CV_REVIEW)."),
         ("Phỏng vấn Vòng 1", "Đánh giá năng lực chuyên môn thực hành & giải quyết bài toán."),
         ("Phỏng vấn Vòng 2", "Đánh giá sự phù hợp văn hóa & định hướng phát triển từ Quản lý/HR."),
         ("Hỗ trợ Revert", "Cho phép trả hồ sơ về bước trước có lý do kèm theo nếu cần đánh giá lại.")
     ], border_color=ACCENT_BLUE, header_color=ACCENT_BLUE)
 
-    add_card(slide6, 6.8, 1.6, 5.7, 5.3, "Tạo & Phê duyệt Offer An toàn", [
+    add_card(slide6, 6.8, 1.6, 5.7, 5.1, "Tạo & Phê duyệt Offer An toàn", [
         ("Tách biệt Offer & Dispatch", "Tách điều khoản Offer (bất biến) và Lần gửi Dispatch (token, deadline)."),
         ("Phê duyệt Nội bộ", "Duyệt theo chính sách ngân sách Requisition. Cảnh báo cờ vượt khung lương."),
         ("Giữ Suất tuyển (Seat Reserved)", "Nối từ OFFER_SENT: Suất tuyển chuyển từ AVAILABLE → RESERVED."),
@@ -301,16 +317,17 @@ def build_presentation():
     # ==========================================
     slide7 = prs.slides.add_slide(blank_layout)
     add_bg(slide7)
-    add_header(slide7, "Slide 7 — Từ Offer Chấp nhận đến Nhân viên Chính thức", "Cầu nối Tuyển dụng - Nhân sự (Idempotent Bridge), Pre-boarding, Cấp tài khoản và JOINED")
+    add_header(slide7, "Từ Offer Chấp nhận đến Nhân viên Chính thức", "Cầu nối Tuyển dụng - Nhân sự (Idempotent Bridge), Pre-boarding, Cấp tài khoản và JOINED")
+    add_footer(slide7, 7)
 
-    add_card(slide7, 0.8, 1.6, 5.7, 5.3, "Cầu nối Idempotent & Pre-boarding", [
+    add_card(slide7, 0.8, 1.6, 5.7, 5.1, "Cầu nối Idempotent & Pre-boarding", [
         ("Event OFFER_ACCEPTED", "Ứng viên bấm chấp nhận offer → Phát event Outbox với conversion_key chống trùng."),
         ("Tạo Person & Employee", "Khởi tạo Person (PROVISIONAL) & Employee ở trạng thái PRE_BOARDING."),
         ("Checklist & Hồ sơ", "Tự động sinh Pre-boarding Checklist: Thu thập CCCD, Bằng cấp, Ngân hàng."),
         ("Hợp đồng & Lương ban đầu", "Tạo employment_record & compensation_record ở trạng thái SCHEDULED.")
     ], border_color=ACCENT_PURPLE, header_color=ACCENT_PURPLE)
 
-    add_card(slide7, 6.8, 1.6, 5.7, 5.3, "Tài khoản DISABLED & Xác nhận JOINED", [
+    add_card(slide7, 6.8, 1.6, 5.7, 5.1, "Tài khoản DISABLED & Xác nhận JOINED", [
         ("Tài khoản An toàn", "Gửi yêu cầu tạo tài khoản hệ thống. Tạo trước ngày đi làm ở trạng thái DISABLED."),
         ("Xác nhận Đi làm (JOINED)", "Vào ngày nhận việc, HR bấm 'Xác nhận đã đi làm' trên hệ thống."),
         ("Kích hoạt Đồng bộ", "Employee → EMPLOYED, Hiring Seat → JOINED, Account → ACTIVE."),
@@ -322,16 +339,17 @@ def build_presentation():
     # ==========================================
     slide8 = prs.slides.add_slide(blank_layout)
     add_bg(slide8)
-    add_header(slide8, "Slide 8 — Telegram HRM AI Bot: Điều hành & Phê duyệt Tức thì", "Trợ lý thông minh dành cho CEO & Giám đốc — Tra cứu dữ liệu real-time và Phê duyệt nhanh 24/7")
+    add_header(slide8, "Telegram HRM AI Bot: Điều hành & Phê duyệt Tức thì", "Trợ lý thông minh dành cho CEO & Giám đốc — Tra cứu dữ liệu real-time và Phê duyệt nhanh 24/7")
+    add_footer(slide8, 8)
 
-    add_card(slide8, 0.8, 1.6, 5.7, 5.3, "Bộ Lệnh Tra cứu & Duyệt nhanh", [
+    add_card(slide8, 0.8, 1.6, 5.7, 5.1, "Bộ Lệnh Tra cứu & Duyệt nhanh", [
         ("/dashboard", "Xem tổng quan chỉ số nhân sự toàn công ty real-time."),
         ("/nhanvien & /tuyendung", "Thống kê quy mô nhân sự, phòng ban & đợt tuyển dụng."),
         ("/chamcong & /luong", "Kiểm tra tình hình đi làm trong ngày & tổng chi phí lương."),
         ("/request, /duyet, /tuchoi", "Duyệt hoặc từ chối yêu cầu tuyển dụng, offer theo ID tức thì.")
     ], border_color=ACCENT_BLUE, header_color=ACCENT_BLUE)
 
-    add_card(slide8, 6.8, 1.6, 5.7, 5.3, "Hỏi đáp Tiếng Việt & Keyword Fallback", [
+    add_card(slide8, 6.8, 1.6, 5.7, 5.1, "Hỏi đáp Tiếng Việt & Keyword Fallback", [
         ("Truy vấn Tự nhiên", "Hỏi câu hỏi tiếng Việt: 'Hiện công ty có bao nhiêu nhân viên?', 'Hôm nay ai đi muộn?'"),
         ("Gemini Intent Recognition", "Gemini AI phân tích ý định câu hỏi → gọi API HRM lấy dữ liệu thực."),
         ("Cơ chế Fallback An toàn", "Nếu kết nối AI sự cố, Bot tự chuyển sang nhận diện Keyword phục vụ liên tục."),
@@ -343,16 +361,17 @@ def build_presentation():
     # ==========================================
     slide9 = prs.slides.add_slide(blank_layout)
     add_bg(slide9)
-    add_header(slide9, "Slide 9 — Kiến trúc Công nghệ & Cấu hình Động (No-Hardcode)", "Hệ thống chuẩn Enterprise: React 19, Spring Boot, MySQL Flyway, Outbox Pattern & Dynamic Config")
+    add_header(slide9, "Kiến trúc Công nghệ & Cấu hình Động (No-Hardcode)", "Hệ thống chuẩn Enterprise: React 19, Spring Boot, MySQL Flyway, Outbox Pattern & Dynamic Config")
+    add_footer(slide9, 9)
 
-    add_card(slide9, 0.8, 1.6, 5.7, 5.3, "Kiến trúc Multi-Tier Modern", [
+    add_card(slide9, 0.8, 1.6, 5.7, 5.1, "Kiến trúc Multi-Tier Modern", [
         ("Frontend Modern", "React 19 + Vite + Tailwind CSS + Recharts + WebSocket (STOMP) real-time notification."),
         ("Backend Enterprise", "Java 17 + Spring Boot + Spring Security (JWT) + Multi-step Approval Engine."),
         ("Data & Event Storage", "MySQL + Flyway DB Migration + Outbox Event Pattern có retry tự động."),
         ("AI & File Engine", "Google Gemini API + Apache PDFBox xử lý trích xuất văn bản CV.")
     ], border_color=ACCENT_BLUE, header_color=ACCENT_BLUE)
 
-    add_card(slide9, 6.8, 1.6, 5.7, 5.3, "Nguyên tắc 'Không Hardcode' (No-Hardcode)", [
+    add_card(slide9, 6.8, 1.6, 5.7, 5.1, "Nguyên tắc 'Không Hardcode' (No-Hardcode)", [
         ("Database-Driven Config", "Toàn bộ tham số nghiệp vụ nằm trong system_configurations & scoring_parameters."),
         ("Thay đổi tức thì", "HR Head/Admin sửa hệ số điểm AI, SLA, dung lượng file trên UI → Hệ thống đổi ngay không cần redeploy."),
         ("Version bất biến", "Profile chấm điểm AI được đánh version bất biến, đảm bảo tính nhất quán audit."),
@@ -364,16 +383,17 @@ def build_presentation():
     # ==========================================
     slide10 = prs.slides.add_slide(blank_layout)
     add_bg(slide10)
-    add_header(slide10, "Slide 10 — Giá trị Doanh nghiệp & Kịch bản Demo 3-5 Phút", "Tối ưu vận hành nhân sự toàn diện và Kịch bản trình diễn trực quan tính năng sản phẩm")
+    add_header(slide10, "Giá trị Doanh nghiệp & Kịch bản Demo 3-5 Phút", "Tối ưu vận hành nhân sự toàn diện và Kịch bản trình diễn trực quan tính năng sản phẩm")
+    add_footer(slide10, 10)
 
-    add_card(slide10, 0.8, 1.6, 5.7, 5.3, "Giá trị mang lại cho Doanh nghiệp", [
+    add_card(slide10, 0.8, 1.6, 5.7, 5.1, "Giá trị mang lại cho Doanh nghiệp", [
         ("Cho HR", "Tự động hóa 80% thao tác đọc/nhập CV, loại bỏ bỏ sót hồ sơ, quản lý luồng tập trung."),
         ("Cho Quản lý", "Đánh giá ứng viên theo tiêu chí đồng nhất, nắm chính xác tiến độ từng hồ sơ."),
         ("Cho Lãnh đạo", "Kiểm soát ngân sách & chỉ tiêu (Seat Ledger), tra cứu & phê duyệt 24/7 qua Telegram."),
         ("Toàn vẹn Dữ liệu", "Nối liền mạch Tuyển dụng → Nhân viên, lưu vết Lịch sử (Audit Log) đầy đủ.")
     ], border_color=ACCENT_GREEN, header_color=ACCENT_GREEN)
 
-    add_card(slide10, 6.8, 1.6, 5.7, 5.3, "Kịch bản Demo Thực tế (3 - 5 Phút)", [
+    add_card(slide10, 6.8, 1.6, 5.7, 5.1, "Kịch bản Demo Thực tế (3 - 5 Phút)", [
         ("B1. Đăng tin & CV List", "Mở Tin tuyển dụng đang OPEN & danh sách ứng viên nộp CV."),
         ("B2. AI Fit Score Detail", "Xem Fit Score (chấm bằng chứng), Cảnh báo Fraud & Đề xuất câu hỏi phỏng vấn."),
         ("B3. Offer & Seat Reserve", "Chuyển phỏng vấn → Duyệt Offer → Suất tuyển chuyển RESERVED."),
@@ -382,8 +402,13 @@ def build_presentation():
     ], border_color=ACCENT_AMBER, header_color=ACCENT_AMBER)
 
     output_path = os.path.join(os.path.dirname(__file__), "HRM_AI_Presentation.pptx")
-    prs.save(output_path)
-    print(f"Successfully generated PowerPoint presentation at: {output_path}")
+    try:
+        prs.save(output_path)
+        print(f"Successfully generated PowerPoint presentation at: {output_path}")
+    except PermissionError:
+        output_path_v2 = os.path.join(os.path.dirname(__file__), "HRM_AI_Presentation_Updated.pptx")
+        prs.save(output_path_v2)
+        print(f"File locked, saved updated presentation at: {output_path_v2}")
 
 if __name__ == "__main__":
     build_presentation()

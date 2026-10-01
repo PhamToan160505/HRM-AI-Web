@@ -128,20 +128,6 @@
       gap: 0.75rem;
     }
 
-    .title-badge {
-      font-size: 0.75rem;
-      font-weight: 700;
-      padding: 0.25rem 0.6rem;
-      border-radius: 6px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-
-    .badge-blue { background: var(--accent-blue-bg); color: var(--accent-blue-light); border: 1px solid rgba(59, 130, 246, 0.3); }
-    .badge-green { background: var(--accent-green-bg); color: var(--accent-green-light); border: 1px solid rgba(16, 185, 129, 0.3); }
-    .badge-purple { background: var(--accent-purple-bg); color: var(--accent-purple-light); border: 1px solid rgba(139, 92, 246, 0.3); }
-    .badge-amber { background: var(--accent-amber-bg); color: var(--accent-amber-light); border: 1px solid rgba(245, 158, 11, 0.3); }
-
     .subtitle {
       font-size: 0.92rem;
       color: var(--accent-blue-light);
@@ -170,6 +156,7 @@
       display: none;
       animation: fadeIn 0.4s ease-out forwards;
       overflow-y: auto;
+      position: relative;
     }
 
     .slide-body.active {
@@ -181,19 +168,35 @@
       to { opacity: 1; transform: translateY(0); }
     }
 
+    /* Bottom-Right Page Number Badge inside Slide Body */
+    .slide-page-badge {
+      position: absolute;
+      bottom: 0.85rem;
+      right: 2.25rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--accent-blue-light);
+      background: rgba(30, 58, 138, 0.35);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      padding: 0.25rem 0.65rem;
+      border-radius: 6px;
+      z-index: 30;
+    }
+
     /* Card System */
     .grid-2 {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 1.25rem;
-      height: 100%;
+      height: calc(100% - 1rem);
     }
 
     .grid-3 {
       display: grid;
       grid-template-columns: 1fr 1fr 1fr;
       gap: 1.25rem;
-      height: 100%;
+      height: calc(100% - 1rem);
     }
 
     .grid-steps {
@@ -201,7 +204,7 @@
       grid-template-columns: repeat(4, 1fr);
       grid-template-rows: repeat(3, 1fr);
       gap: 0.75rem;
-      height: 100%;
+      height: calc(100% - 1rem);
     }
 
     .card {
@@ -268,10 +271,10 @@
     .bullet-purple { background: var(--accent-purple); }
     .bullet-amber { background: var(--accent-amber); }
 
-    /* Step Item inside Grid-12 */
+    /* Step Item inside Grid-12 — All Uniform Blue */
     .step-card {
       background: rgba(22, 31, 50, 0.9);
-      border: 1px solid var(--card-border);
+      border: 1px solid rgba(59, 130, 246, 0.4);
       border-radius: 10px;
       padding: 0.65rem 0.85rem;
       display: flex;
@@ -280,27 +283,23 @@
       position: relative;
       overflow: hidden;
     }
-    .step-card.active-step {
-      border-color: rgba(59, 130, 246, 0.4);
-      background: rgba(30, 58, 138, 0.25);
-    }
-    .step-card.onboard-step {
-      border-color: rgba(16, 185, 129, 0.4);
-      background: rgba(6, 78, 59, 0.25);
-    }
+
     .step-num {
       font-size: 0.72rem;
       font-weight: 800;
       letter-spacing: 0.05em;
       text-transform: uppercase;
       margin-bottom: 0.2rem;
+      color: var(--accent-blue-light);
     }
+
     .step-title {
       font-size: 0.85rem;
       font-weight: 700;
       color: #FFF;
       line-height: 1.2;
     }
+
     .step-desc {
       font-size: 0.74rem;
       color: var(--text-muted);
@@ -331,6 +330,7 @@
       text-align: center;
       padding: 2rem;
       background: radial-gradient(circle at center, rgba(30, 58, 138, 0.3) 0%, transparent 70%);
+      position: relative;
     }
 
     .hero-title {
@@ -378,6 +378,7 @@
       align-items: center;
       gap: 0.4rem;
     }
+
     .flow-arrow {
       color: var(--accent-blue);
       font-weight: 800;
@@ -387,7 +388,7 @@
     .controls-bar {
       height: 3.5rem;
       border-top: 1px solid var(--card-border);
-      background: rgba(11, 15, 25, 0.8);
+      background: rgba(11, 15, 25, 0.85);
       padding: 0 1.5rem;
       display: flex;
       justify-content: space-between;
@@ -428,6 +429,7 @@
       border-color: var(--accent-blue);
       color: #FFF;
     }
+
     .btn-primary:hover {
       background: #2563EB;
     }
@@ -439,7 +441,7 @@
       color: var(--accent-blue-light);
     }
 
-    /* Speaker Notes Modal / Drawer */
+    /* Speaker Notes Modal */
     .notes-modal {
       position: fixed;
       bottom: 4rem;
@@ -493,13 +495,13 @@
       padding-right: 0.5rem;
     }
 
-    /* Key Hint */
     .key-hint {
       font-size: 0.75rem;
       color: var(--text-dim);
       display: flex;
       gap: 0.75rem;
     }
+
     .key-cap {
       background: rgba(255,255,255,0.08);
       padding: 0.1rem 0.35rem;
@@ -520,10 +522,10 @@
       <div class="progress-bar" id="progressBar"></div>
     </div>
 
-    <!-- Slide Header -->
+    <!-- Header Bar -->
     <div class="slide-header">
       <div class="title-group">
-        <h2 id="slideTitle">HRM AI <span class="title-badge badge-blue" id="slideBadge">BÀI THUYẾT TRÌNH</span></h2>
+        <h2 id="slideTitle">HRM AI</h2>
         <div class="subtitle" id="slideSubtitle">Từ nhu cầu tuyển dụng đến ngày đầu tiên của nhân viên</div>
       </div>
       <div class="brand-tag">HRM <span>AI</span> SYSTEM</div>
@@ -549,6 +551,7 @@
           <div class="flow-pill" style="border-color: var(--accent-green);">7. Telegram Bot</div>
         </div>
       </div>
+      <div class="slide-page-badge">1 / 10</div>
     </div>
 
     <!-- =========================================================
@@ -582,6 +585,7 @@
           </ul>
         </div>
       </div>
+      <div class="slide-page-badge">2 / 10</div>
     </div>
 
     <!-- =========================================================
@@ -589,67 +593,68 @@
          ========================================================= -->
     <div class="slide-body" id="slide-3">
       <div class="grid-steps">
-        <div class="step-card active-step">
-          <div class="step-num title-blue">BƯỚC 1</div>
+        <div class="step-card">
+          <div class="step-num">BƯỚC 1</div>
           <div class="step-title">Tạo Nhu cầu</div>
           <div class="step-desc">Trưởng phòng lập Job Requisition ở trạng thái DRAFT</div>
         </div>
-        <div class="step-card active-step">
-          <div class="step-num title-blue">BƯỚC 2</div>
+        <div class="step-card">
+          <div class="step-num">BƯỚC 2</div>
           <div class="step-title">Duyệt Nhu cầu</div>
           <div class="step-desc">CEO/Quản lý duyệt → Tự động cấp Hiring Seats (AVAILABLE)</div>
         </div>
-        <div class="step-card active-step">
-          <div class="step-num title-blue">BƯỚC 3</div>
+        <div class="step-card">
+          <div class="step-num">BƯỚC 3</div>
           <div class="step-title">Đăng tin Tuyển dụng</div>
           <div class="step-desc">HR tạo Posting & khóa cặp Version Tiêu chí + AI Profile</div>
         </div>
-        <div class="step-card active-step">
-          <div class="step-num title-blue">BƯỚC 4</div>
+        <div class="step-card">
+          <div class="step-num">BƯỚC 4</div>
           <div class="step-title">Ứng viên Nộp CV</div>
           <div class="step-desc">Form nộp trực tuyến an toàn (Không thu thập CCCD)</div>
         </div>
-        <div class="step-card active-step">
-          <div class="step-num title-blue">BƯỚC 5</div>
+        <div class="step-card">
+          <div class="step-num">BƯỚC 5</div>
           <div class="step-title">AI Phân tích CV</div>
           <div class="step-desc">PDFBox text extract + Gemini AI chấm Fit Score bằng chứng</div>
         </div>
-        <div class="step-card active-step">
-          <div class="step-num title-blue">BƯỚC 6</div>
+        <div class="step-card">
+          <div class="step-num">BƯỚC 6</div>
           <div class="step-title">Duyệt CV 2 Cấp</div>
           <div class="step-desc">HR duyệt cơ bản → Phòng chuyên môn duyệt chuyên sâu</div>
         </div>
-        <div class="step-card active-step">
-          <div class="step-num title-blue">BƯỚC 7</div>
+        <div class="step-card">
+          <div class="step-num">BƯỚC 7</div>
           <div class="step-title">Phỏng vấn 2 Vòng</div>
           <div class="step-desc">Vòng 1 Kỹ thuật & Vòng 2 Quản lý/HR đánh giá</div>
         </div>
-        <div class="step-card active-step">
-          <div class="step-num title-blue">BƯỚC 8</div>
+        <div class="step-card">
+          <div class="step-num">BƯỚC 8</div>
           <div class="step-title">Duyệt & Gửi Offer</div>
           <div class="step-desc">Lập Offer, duyệt ngân sách & GIỮ SUẤT TUYỂN (RESERVED)</div>
         </div>
-        <div class="step-card onboard-step">
-          <div class="step-num title-green">BƯỚC 9</div>
+        <div class="step-card">
+          <div class="step-num">BƯỚC 9</div>
           <div class="step-title">Ứng viên Chấp nhận</div>
           <div class="step-desc">Ứng viên click OFFER_ACCEPTED → Phát Outbox Bridge Event</div>
         </div>
-        <div class="step-card onboard-step">
-          <div class="step-num title-green">BƯỚC 10</div>
+        <div class="step-card">
+          <div class="step-num">BƯỚC 10</div>
           <div class="step-title">Pre-boarding & Checklist</div>
           <div class="step-desc">Tạo Employee (PRE_BOARDING), checklist CCCD, account DISABLED</div>
         </div>
-        <div class="step-card onboard-step">
-          <div class="step-num title-green">BƯỚC 11</div>
+        <div class="step-card">
+          <div class="step-num">BƯỚC 11</div>
           <div class="step-title">HR Xác nhận Đi làm</div>
           <div class="step-desc">Ngày đầu tiên đi làm: HR bấm xác nhận JOINED</div>
         </div>
-        <div class="step-card onboard-step">
-          <div class="step-num title-green">BƯỚC 12</div>
+        <div class="step-card">
+          <div class="step-num">BƯỚC 12</div>
           <div class="step-title">Kích hoạt Nhân viên</div>
           <div class="step-desc">Employee → EMPLOYED, Seat → JOINED, Account → ACTIVE</div>
         </div>
       </div>
+      <div class="slide-page-badge">3 / 10</div>
     </div>
 
     <!-- =========================================================
@@ -684,6 +689,7 @@
           </ul>
         </div>
       </div>
+      <div class="slide-page-badge">4 / 10</div>
     </div>
 
     <!-- =========================================================
@@ -711,6 +717,7 @@
           </ul>
         </div>
       </div>
+      <div class="slide-page-badge">5 / 10</div>
     </div>
 
     <!-- =========================================================
@@ -738,6 +745,7 @@
           </ul>
         </div>
       </div>
+      <div class="slide-page-badge">6 / 10</div>
     </div>
 
     <!-- =========================================================
@@ -765,6 +773,7 @@
           </ul>
         </div>
       </div>
+      <div class="slide-page-badge">7 / 10</div>
     </div>
 
     <!-- =========================================================
@@ -797,6 +806,7 @@
           </ul>
         </div>
       </div>
+      <div class="slide-page-badge">8 / 10</div>
     </div>
 
     <!-- =========================================================
@@ -824,6 +834,7 @@
           </ul>
         </div>
       </div>
+      <div class="slide-page-badge">9 / 10</div>
     </div>
 
     <!-- =========================================================
@@ -852,6 +863,7 @@
           </ul>
         </div>
       </div>
+      <div class="slide-page-badge">10 / 10</div>
     </div>
 
     <!-- Controls Bar -->
@@ -888,71 +900,51 @@
   const slidesData = [
     {
       title: "HRM AI",
-      badge: "TRANG BÌA",
-      badgeClass: "badge-blue",
       subtitle: "Hệ thống Tuyển dụng & Quản trị Nhân sự Tích hợp AI",
       notes: `Kính chào thầy cô và các bạn! Hôm nay nhóm chúng em xin được giới thiệu hệ thống HRM AI — Nền tảng Tuyển dụng và Quản trị Nhân sự Tích hợp Trí tuệ Nhân tạo.\n\nĐược thiết kế nhằm giải quyết bài toán đứt gãy dữ liệu phổ biến trong các doanh nghiệp hiện nay, HRM AI không chỉ là một công cụ lọc CV tự động, mà là một quy trình kiểm soát toàn diện xuyên suốt — bắt đầu từ khoảnh khắc phòng ban phát sinh nhu cầu tuyển người, qua các vòng phỏng vấn, phê duyệt offer, chuẩn bị pre-boarding, cho tới ngày đầu tiên nhân viên bước vào công ty. Đồng thời, hệ thống trao quyền cho Ban Lãnh đạo tra cứu và phê duyệt dữ liệu nhân sự real-time ngay trên Telegram.`
     },
     {
       title: "Bài toán thực tế & Giải pháp HRM AI",
-      badge: "SLIDE 02",
-      badgeClass: "badge-amber",
       subtitle: "Chuyển đổi quy trình thủ công đứt gãy thành Nền tảng hợp nhất Nhanh - Đúng - Minh bạch",
-      notes: `Kính thưa hội đồng, trong thực tế vận hành doanh nghiệp, vấn đề tuyển dụng không chỉ nằm ở việc đọc CV chậm, mà nghiêm trọng hơn là sự đứt gãy dữ liệu giữa tuyển dụng, phê duyệt và tiếp nhận nhân viên.\n\nDoanh nghiệp thường gặp 3 nỗi đau chính: Một là HR mất rất nhiều thời gian đọc CV thủ công nhưng tiêu chí lại không thống nhất với phòng chuyên môn. Hai là tình trạng 'tuyển vượt chỉ tiêu' hoặc ứng viên nhận offer xong đến công ty lại bị báo hết vị trí do không quản lý được suất tuyển. Và ba là khi ứng viên đồng ý nhận việc, HR lại phải gõ tay toàn bộ thông tin để tạo hồ sơ nhân viên mới.\n\nHRM AI ra đời để giải quyết triệt me bài toán này với thông điệp: Nhanh hơn - Đúng hơn - Minh bạch hơn.`
+      notes: `Kính thưa hội đồng, trong thực tế vận hành doanh nghiệp, vấn đề tuyển dụng không chỉ nằm ở việc đọc CV chậm, mà nghiêm trọng hơn là sự đứt gãy dữ liệu giữa tuyển dụng, phê duyệt và tiếp nhận nhân viên.\n\nDoanh nghiệp thường gặp 3 nỗi đau chính: Một là HR mất rất nhiều thời gian đọc CV thủ công nhưng tiêu chí lại không thống nhất với phòng chuyên môn. Hai là tình trạng 'tuyển vượt chỉ tiêu' hoặc ứng viên nhận offer xong đến công ty lại bị báo hết vị trí do không quản lý được suất tuyển. Và ba là khi ứng viên đồng ý nhận việc, HR lại phải gõ tay toàn bộ thông tin để tạo hồ sơ nhân viên mới.\n\nHRM AI ra đời để giải quyết triệt để bài toán này với thông điệp: Nhanh hơn - Đúng hơn - Minh bạch hơn.`
     },
     {
       title: "Luồng Tuyển dụng & Tiếp nhận Nhân sự Tổng thể",
-      badge: "SLIDE 03 — TRUNG TÂM",
-      badgeClass: "badge-blue",
       subtitle: "Quy trình 12 bước xuyên suốt từ Nhu cầu tuyển dụng đến Ngày đi làm đầu tiên của Nhân viên",
       notes: `Đây là Slide trung tâm biểu diễn toàn bộ luồng nghiệp vụ 12 bước của HRM AI.\n\nLuồng bắt đầu từ Bước 1 khi Trưởng phòng tạo yêu cầu tuyển dụng. Ngay khi yêu cầu được duyệt ở Bước 2, hệ thống tự động sinh các bản ghi Suất tuyển (Hiring Seats). Tại Bước 5, AI Gemini đảm nhận vai trò trích xuất và chấm Fit Score theo bằng chứng. Trải qua 2 vòng phỏng vấn, ở Bước 8 khi Offer được gửi đi, hệ thống lập tức khóa và giữ suất tuyển ở trạng thái RESERVED.\n\nĐặc biệt, tại Bước 9 khi ứng viên bấm Chấp nhận Offer, hệ thống kích hoạt Cầu nối tự động (Idempotent Bridge) chuyển ứng viên sang trạng thái Pre-boarding ở Bước 10. Tài khoản làm việc được chuẩn bị ở trạng thái Tắt (DISABLED) và chỉ chính thức kích hoạt sang ACTIVE ở Bước 12 khi HR xác nhận nhân viên đã thực sự có mặt làm việc (JOINED).`
     },
     {
       title: "Khởi tạo Nhu cầu & Đăng tin Tuyển dụng",
-      badge: "SLIDE 04",
-      badgeClass: "badge-purple",
       subtitle: "Quản lý Requisition, Sổ kế toán Suất tuyển (Seat Ledger) và Khóa tiêu chí AI Profile",
       notes: `Ở giai đoạn đầu tiên, HRM AI giải quyết triệt để bài toán quản lý chỉ tiêu và ngân sách.\n\nKhi Trưởng phòng gửi Requisition, quy trình phê duyệt backend sẽ kiểm tra quyền hạn và định mức lương. Ngay khi được cấp duyệt, hệ thống áp dụng cơ chế Sổ kế toán Suất tuyển (Hiring Seat Ledger) — tự động sinh ra đúng số lượng suất tuyển khả dụng.\n\nĐồng thời, trước khi đăng tin công khai, HR và Trưởng phòng phải chốt bộ tiêu chí chấm điểm. Hệ thống sẽ đóng băng bộ tiêu chí và version AI thành một cặp snapshot bất biến. Điều này đảm bảo tính công bằng và minh bạch: mọi ứng viên nộp trong cùng một đợt đều được chấm theo đúng một thước đo chuẩn mực.`
     },
     {
       title: "AI Phân tích, Sàng lọc & Chấm CV theo Bằng chứng",
-      badge: "SLIDE 05",
-      badgeClass: "badge-amber",
       subtitle: "Bảo mật tải lên, Trích xuất PDFBox, Gemini AI Fit Score & Cảnh báo bất thường",
       notes: `Điểm sáng đột phá của HRM AI nằm ở mô hình đánh giá CV theo Bằng chứng (Evidence-Based Scoring).\n\nCác hệ thống ATS thông thường chỉ quét từ khóa (keywords) đơn thuần, dẫn đến việc ứng viên cố tình chèn từ khóa trong JD để lấy điểm cao. HRM AI xử lý qua Apache PDFBox và Google Gemini AI để phân tích sâu: Phân biệt rõ giữa việc 'chỉ khai báo kỹ năng' và 'có dự án/bằng chứng thực tế chứng minh kỹ năng đó'.\n\nHệ thống tự động bật cờ AI Fraud Flag nếu phát hiện ứng viên sao chép nguyên văn JD (JD Mirroring), đồng thời sinh sẵn các câu hỏi phỏng vấn chuyên sâu để Hội đồng phỏng vấn xoáy vào kiểm tra. Quan trọng nhất, chúng em quán triệt nguyên tắc: AI không bao giờ tự loại ứng viên, người có thẩm quyền luôn là người đưa ra quyết định chuyển bước.`
     },
     {
       title: "Phỏng vấn có kiểm soát & Phê duyệt Offer an toàn",
-      badge: "SLIDE 06",
-      badgeClass: "badge-blue",
       subtitle: "Quy trình phỏng vấn 2 vòng, Duyệt Offer nội bộ và Cơ chế Giữ suất tuyển (Seat Reservation)",
       notes: `Sau khi vượt qua vòng duyệt CV, ứng viên bước vào quy trình Phỏng vấn 2 Vòng có kiểm soát chặt chẽ.\n\nKhi Hội đồng phỏng vấn thống nhất tuyển dụng, HR sẽ tạo dự thảo Offer. Tại đây, backend kiểm tra chính sách lương: nếu lương đề xuất vượt khung đã phê duyệt, hệ thống tự động cảnh báo cờ 'Vượt ngân sách' để CEO duyệt bổ sung.\n\nĐiểm khác biệt quan trọng: Ngay khi Offer được gửi đi (OFFER_SENT), suất tuyển tương ứng trong Seat Ledger lập tức chuyển từ AVAILABLE sang RESERVED (Đã giữ suất). Nhờ cơ chế này, ứng viên nhận được offer hợp lệ sẽ không bao giờ gặp tình trạng bấm chấp nhận mà hệ thống báo hết chỉ tiêu.`
     },
     {
       title: "Từ Offer Chấp nhận đến Nhân viên Chính thức",
-      badge: "SLIDE 07 — NỐI LUỒNG",
-      badgeClass: "badge-green",
       subtitle: "Cầu nối Tuyển dụng - Nhân sự (Idempotent Bridge), Pre-boarding, Cấp tài khoản và JOINED",
       notes: `Kính thưa hội đồng, đây chính là tính năng cập nhật mới nhất và quan trọng nhất nối liền Tuyển dụng với Vòng đời Nhân sự.\n\nNgay khi ứng viên bấm OFFER_ACCEPTED, hệ thống tự động kích hoạt Cầu nối dữ liệu Idempotent: Tạo bản ghi Nhân viên ở trạng thái PRE_BOARDING, tự động giao Pre-boarding Checklist để thu thập thông tin CCCD, tài khoản ngân hàng và bằng cấp.\n\nVề mặt an toàn thông tin: Tài khoản công ty của nhân viên mới được tạo ở trạng thái DISABLED (Chưa kích hoạt) trước ngày đi làm. Chỉ đến đúng ngày nhân viên đến công ty và HR bấm 'Xác nhận đã đi làm' (JOINED), tài khoản mới chính thức chuyển sang ACTIVE, hồ sơ chuyển sang EMPLOYED, và suất tuyển chuyển sang JOINED.\n\nTrong trường hợp ứng viên đổi ý không đến, HR chuyển trạng thái ONBOARD_CANCELLED, hệ thống tự động nhả lại Suất tuyển về AVAILABLE để tiếp tục tuyển dụng.`
     },
     {
       title: "Telegram HRM AI Bot: Điều hành & Phê duyệt Tức thì",
-      badge: "SLIDE 08 — BOT TELEGRAM",
-      badgeClass: "badge-green",
       subtitle: "Trợ lý thông minh dành cho CEO & Giám đốc — Tra cứu dữ liệu real-time và Phê duyệt nhanh 24/7",
       notes: `Chiếm 20% thời lượng của bài giới thiệu là Telegram HRM AI Bot — công cụ đắc lực dành riêng cho Ban Lãnh đạo.\n\nCEO và các Giám đốc thường xuyên bận rộn hoặc di chuyển ngoài văn phòng. Thông qua Telegram Bot, Lãnh đạo có thể gõ các lệnh nhanh như /dashboard, /nhanvien, /tuyendung để nắm bắt số liệu nhân sự tức thì.\n\nĐặc biệt hơn, Bot tích hợp Google Gemini AI để hiểu câu hỏi tiếng Việt tự nhiên. Lãnh đạo chỉ cần nhắn: 'Hôm nay công ty có bao nhiêu người đi muộn?' hay 'Có đơn tuyển dụng nào đang chờ duyệt không?', AI sẽ tự nhận diện ý định và truy vấn dữ liệu thực tế trả về kết quả trong 1 giây.\n\nLãnh đạo cũng có thể gõ lệnh /duyet 105 để phê duyệt ngay một yêu cầu tuyển dụng hay offer mà không cần mở máy tính đăng nhập vào hệ thống Web.`
     },
     {
       title: "Kiến trúc Công nghệ & Cấu hình Động (No-Hardcode)",
-      badge: "SLIDE 09",
-      badgeClass: "badge-purple",
       subtitle: "Hệ thống chuẩn Enterprise: React 19, Spring Boot, MySQL Flyway, Outbox Pattern & Dynamic Config",
       notes: `Về khía cạnh kỹ thuật, HRM AI được xây dựng theo chuẩn Enterprise Architecture.\n\nFrontend sử dụng React 19 và Vite cho tốc độ phản hồi cực nhanh, kết hợp WebSocket cập nhật trạng thái real-time. Backend sử dụng Java 17, Spring Boot và mô hình Outbox Event Pattern đảm bảo mọi sự kiện gửi Email hay Telegram đều được retry an toàn nếu gặp sự cố mạng.\n\nMột điểm nhấn kiến trúc quan trọng là Nguyên tắc Không Hardcode (No-Hardcode): Toàn bộ các con số nghiệp vụ như hệ số chấm điểm AI, ngưỡng cảnh báo gian lận, dung lượng file tối đa, ma trận người duyệt... đều được quản lý tập trung trong Database. Quản trị viên có thể điều chỉnh trực tiếp trên UI và hệ thống sẽ đổi hành vi ngay lập tức mà không cần phải sửa code hay khởi động lại server.`
     },
     {
       title: "Giá trị Doanh nghiệp & Kịch bản Demo 3-5 Phút",
-      badge: "SLIDE 10 — TỔNG KẾT",
-      badgeClass: "badge-amber",
       subtitle: "Tối ưu vận hành nhân sự toàn diện và Kịch bản trình diễn trực quan tính năng sản phẩm",
       notes: `Tóm lại, HRM AI mang lại giá trị thiết thực cho cả ba tầng người dùng: Giải phóng sức lao động cho HR, chuẩn hóa đánh giá cho Quản lý chuyên môn, và trao quyền kiểm soát toàn diện cho Ban Lãnh đạo.\n\nSau đây, em xin phép trình diễn Demo trực tiếp hệ thống trong 4 phút theo kịch bản 5 bước:\nĐầu tiên, mở tin tuyển dụng đang mở. Thứ hai, xem màn hình AI đánh giá CV với điểm Fit Score theo bằng chứng và câu hỏi phỏng vấn gợi ý. Thứ ba, thực hiện duyệt Offer và xem suất tuyển tự động khóa ở trạng thái RESERVED. Thứ tư, đóng vai ứng viên chấp nhận Offer để thấy hồ sơ tự động chuyển sang Pre-boarding, và khi HR bấm xác nhận JOINED, tài khoản sẽ được kích hoạt ACTIVE. Cuối cùng, mở Telegram tương tác hỏi đáp tự nhiên với Bot để hội đồng cùng theo dõi.\n\nEm xin trân trọng cảm ơn hội đồng đã lắng nghe!`
     }
@@ -972,14 +964,9 @@
     const activeEl = document.getElementById(`slide-${currentSlide}`);
     if (activeEl) activeEl.classList.add('active');
 
-    // Update Header
+    // Update Header Title (Without "Slide X — ")
     const data = slidesData[currentSlide - 1];
-    document.getElementById('slideTitle').childNodes[0].nodeValue = data.title + " ";
-    
-    const badgeEl = document.getElementById('slideBadge');
-    badgeEl.textContent = data.badge;
-    badgeEl.className = `title-badge ${data.badgeClass}`;
-
+    document.getElementById('slideTitle').textContent = data.title;
     document.getElementById('slideSubtitle').textContent = data.subtitle;
 
     // Update Progress Bar & Counter
