@@ -7,7 +7,7 @@ ENV MAVEN_OPTS="-Xmx384m -XX:+UseG1GC"
 RUN mvn clean package -DskipTests
 
 # Run stage
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:21-jre
 WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
 EXPOSE 8080
