@@ -8,6 +8,7 @@ import com.hrm.notification.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
@@ -32,10 +33,17 @@ public class RecruitmentOutboxProcessor {
     private final ObjectMapper objectMapper;
     private final EmailService emailService;
     private final NotificationService notificationService;
+    private final OfferTokenService offerTokenService;
+
+    @Value("${app.public-web-base-url:${APP_PUBLIC_WEB_BASE_URL:http://localhost:5173}}")
+    private String publicWebBaseUrl;
 
     private static final DateTimeFormatter VN_FORMATTER =
             DateTimeFormatter.ofPattern("HH:mm, dd/MM/yyyy");
-    private static final List<String> HANDLED_TYPES = List.of("INTERVIEW_SCHEDULED");
+    private static final List<String> HANDLED_TYPES = List.of(
+            "INTERVIEW_SCHEDULED",
+            "OFFER_DISPATCH_REQUESTED",
+            "OFFER_DISPATCH_EXTENDED");
 
     public List<Long> pendingEventIds() {
         String placeholders = String.join(",", HANDLED_TYPES.stream().map(t -> "?").toList());
@@ -63,6 +71,7 @@ public class RecruitmentOutboxProcessor {
 
         switch (eventType) {
             case "INTERVIEW_SCHEDULED" -> processInterviewScheduled(payload);
+            case "OFFER_DISPATCH_REQUESTED", "OFFER_DISPATCH_EXTENDED" -> processOfferDispatch(payload);
             default -> throw AppException.badRequest("Sự kiện tuyển dụng không được hỗ trợ: " + eventType);
         }
 
@@ -154,6 +163,47 @@ public class RecruitmentOutboxProcessor {
                 notificationBody,
                 "binh_thuong",
                 notificationLink));
+    }
+
+    private void processOfferDispatch(JsonNode payload) {
+        long dispatchId = payload.hasNonNull("dispatch_id")
+                ? payload.path("dispatch_id").asLong()
+                : payload.path("new_dispatch_id").asLong();
+        if (dispatchId <= 0) {
+            throw AppException.badRequest("Payload gửi offer thiếu dispatch_id");
+        }
+
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
+                SELECT d.dispatch_key, d.response_deadline, d.status,
+                       a.email AS candidate_email, a.full_name AS candidate_name,
+                       jp.title AS job_title, o.version_number
+                FROM offer_dispatches d
+                JOIN offers o ON o.id = d.offer_id
+                JOIN applications a ON a.id = o.application_id
+                JOIN job_postings jp ON jp.id = a.job_posting_id
+                WHERE d.id = ?
+                """, dispatchId);
+        if (rows.isEmpty()) {
+            throw AppException.notFound("Không tìm thấy lần gửi offer id=" + dispatchId);
+        }
+
+        Map<String, Object> row = rows.get(0);
+        String candidateEmail = (String) row.get("candidate_email");
+        if (candidateEmail == null || candidateEmail.isBlank()) {
+            throw AppException.badRequest("Hồ sơ ứng viên chưa có email để nhận offer");
+        }
+        String dispatchKey = String.valueOf(row.get("dispatch_key"));
+        String token = offerTokenService.tokenFor(dispatchKey);
+        String offerUrl = publicWebBaseUrl.replaceAll("/+$", "") + "/offer/" + token;
+        emailService.sendOfferEmail(
+                candidateEmail,
+                String.valueOf(row.get("candidate_name")),
+                String.valueOf(row.get("job_title")),
+                ((Number) row.get("version_number")).intValue(),
+                formatDateTime(row.get("response_deadline")),
+                offerUrl);
+        log.info("Đã gửi email offer version {} cho {} (dispatchId={})",
+                row.get("version_number"), candidateEmail, dispatchId);
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────────

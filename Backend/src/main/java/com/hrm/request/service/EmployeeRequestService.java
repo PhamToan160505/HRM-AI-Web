@@ -21,6 +21,8 @@ import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import com.hrm.request.event.RequestCreatedEvent;
+import org.springframework.context.ApplicationEventPublisher;
 
 @Service
 @RequiredArgsConstructor
@@ -30,6 +32,7 @@ public class EmployeeRequestService {
     private final UserRepository userRepository;
     private final AttendanceRepository attendanceRepository;
     private final NotificationService notificationService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @org.springframework.beans.factory.annotation.Value("${payroll.normal-leave-days-per-month:1}")
     private int normalLeaveDaysPerMonth;
@@ -139,6 +142,13 @@ public class EmployeeRequestService {
                     "binh_thuong",
                     path
             );
+        }
+
+        // Gui event thong bao TUC THI cho cac listener (VD: Telegram Bot)
+        try {
+            eventPublisher.publishEvent(new RequestCreatedEvent(saved));
+        } catch (Exception e) {
+            // Ignore event publish error so request creation is not blocked
         }
 
         return mapToDto(saved);

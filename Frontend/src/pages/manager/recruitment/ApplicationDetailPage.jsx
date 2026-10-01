@@ -14,6 +14,7 @@ import InterviewPanel from './components/InterviewPanel';
 import OfferComposer from './components/OfferComposer';
 import OfferReviewPanel from './components/OfferReviewPanel';
 import OfferActivityCard from './components/OfferActivityCard';
+import ContractWorkspace from './components/ContractWorkspace';
 import {
   buildOfferDetails,
   createEmptyOfferFields,
@@ -53,6 +54,7 @@ export default function ApplicationDetailPage() {
     feedback: '', 
     fields: createEmptyOfferFields()
   });
+  const applicationStatus = application?.approvalStatus;
 
   const emptyOfferFields = () => createEmptyOfferFields(application);
 
@@ -118,16 +120,34 @@ export default function ApplicationDetailPage() {
   useEffect(() => {
     const canView = role === 'admin' || role === 'ceo'
       || ((role === 'truong_phong' || role === 'giam_doc_phong_ban') && user?.tenPhong === 'Nhân sự');
-    if (!application || !canView || (!application.approvalStatus?.includes('OFFER') && application.approvalStatus !== 'PENDING_HR_OFFER')) {
+    if (!application || !canView || (!applicationStatus?.includes('OFFER') && applicationStatus !== 'PENDING_HR_OFFER')) {
       setOfferActivity([]);
       return;
     }
     let active = true;
-    api.get(`/api/recruitment/applications/${id}/offer-activity`)
-      .then(response => { if (active) setOfferActivity(response.data.data || []); })
-      .catch(() => { if (active) setOfferActivity([]); });
-    return () => { active = false; };
-  }, [id, application, role, user?.tenPhong]);
+    const refreshOfferState = async (includeApplication = false) => {
+      try {
+        const [activityResponse, applicationResponse] = await Promise.all([
+          api.get(`/api/recruitment/applications/${id}/offer-activity`),
+          includeApplication ? api.get(`/api/recruitment/applications/${id}`) : Promise.resolve(null),
+        ]);
+        if (!active) return;
+        setOfferActivity(activityResponse.data.data || []);
+        if (applicationResponse?.data?.success) setApplication(applicationResponse.data.data);
+      } catch {
+        // Giữ dữ liệu gần nhất; lần polling sau sẽ thử lại.
+      }
+    };
+
+    refreshOfferState(false);
+    const poller = applicationStatus === 'OFFER_SENT'
+      ? window.setInterval(() => refreshOfferState(true), 5000)
+      : null;
+    return () => {
+      active = false;
+      if (poller) window.clearInterval(poller);
+    };
+  }, [id, applicationStatus, role, user?.tenPhong]);
 
   const executeApprove = async () => {
     if (approveActionLoading || offerModalLoading) return;
@@ -464,6 +484,7 @@ export default function ApplicationDetailPage() {
       )}
 
       <OfferActivityCard activity={offerActivity} />
+      <ContractWorkspace applicationId={Number(id)} applicationStatus={application?.approvalStatus} />
 
       <InterviewPanel
         applicationId={Number(id)}

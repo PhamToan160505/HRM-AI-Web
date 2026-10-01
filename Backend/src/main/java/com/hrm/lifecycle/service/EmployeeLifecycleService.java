@@ -46,15 +46,16 @@ public class EmployeeLifecycleService {
     private final DepartmentRepository departmentRepository;
 
     @Transactional
-    public Long consumeOfferAccepted(String eventId, String eventType, int schemaVersion, String payloadJson) {
-        if (schemaVersion != 1 || !"OFFER_ACCEPTED".equals(eventType)) {
-            throw AppException.badRequest("Envelope OFFER_ACCEPTED không được hỗ trợ");
+    public Long consumeContractActivated(String eventId, String eventType, int schemaVersion, String payloadJson) {
+        if (schemaVersion != 1 || !"CONTRACT_ACTIVATED".equals(eventType)) {
+            throw AppException.badRequest("Envelope CONTRACT_ACTIVATED không được hỗ trợ");
         }
         JsonNode payload = parse(payloadJson);
         String conversionKey = requiredText(payload, "conversion_key");
         long applicationId = requiredLong(payload, "application_id");
         long offerId = requiredLong(payload, "accepted_offer_id");
         long seatId = requiredLong(payload, "seat_id");
+        long contractId = requiredLong(payload, "contract_id");
 
         int claimed = jdbcTemplate.update("""
                 INSERT IGNORE INTO inbox_events(event_id, event_type, schema_version)
@@ -67,8 +68,18 @@ public class EmployeeLifecycleService {
         List<Long> existing = jdbcTemplate.query(
                 "SELECT id FROM employees WHERE conversion_key = ?", (rs, row) -> rs.getLong(1), conversionKey);
         if (!existing.isEmpty()) {
+            jdbcTemplate.update("UPDATE employment_contracts SET employee_id = ? WHERE id = ?",
+                    existing.get(0), contractId);
             finishInbox(eventId, existing.get(0));
             return existing.get(0);
+        }
+
+        Integer activeContract = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM employment_contracts
+                WHERE id = ? AND application_id = ? AND offer_id = ? AND status = 'ACTIVE'
+                """, Integer.class, contractId, applicationId, offerId);
+        if (activeContract == null || activeContract != 1) {
+            throw AppException.conflict("Hợp đồng chưa hoàn tất hoặc không khớp offer đã chấp nhận");
         }
 
         Application application = applicationRepository.findById(applicationId)
@@ -105,13 +116,14 @@ public class EmployeeLifecycleService {
         String provisionalCode = "PB" + UUID.randomUUID().toString().replace("-", "").substring(0, 12).toUpperCase();
         String probationStatus = offer.getProbationMonths() > 0 ? "PLANNED" : "NOT_APPLICABLE";
         long employeeId = insertAndReturnId("""
-                INSERT INTO employees(person_id, application_id, offer_id, seat_id, conversion_key,
+                INSERT INTO employees(person_id, application_id, offer_id, contract_id, seat_id, conversion_key,
                                       employee_code, status, start_date_planned, probation_status)
-                VALUES (?, ?, ?, ?, ?, ?, 'PRE_BOARDING', ?, ?)
-                """, personId, applicationId, offerId, seatId, conversionKey, provisionalCode,
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'PRE_BOARDING', ?, ?)
+                """, personId, applicationId, offerId, contractId, seatId, conversionKey, provisionalCode,
                 Date.valueOf(offer.getExpectedStartDate()), probationStatus);
         jdbcTemplate.update("UPDATE employees SET employee_code = ? WHERE id = ?",
                 "NV" + String.format("%08d", employeeId), employeeId);
+        jdbcTemplate.update("UPDATE employment_contracts SET employee_id = ? WHERE id = ?", employeeId, contractId);
 
         jdbcTemplate.update("""
                 INSERT INTO employment_records(employee_id, department_id, position_title, level_name,
@@ -148,7 +160,8 @@ public class EmployeeLifecycleService {
                 application.getJobPosting().getDepartmentId(), application.getJobPosting().getTitle());
 
         appendLifecycle(employeeId, "EMPLOYEE_CREATED", null, "OFFER", offerId,
-                "Tạo nhân viên PRE_BOARDING từ offer đã chấp nhận", eventId + ":employee-created");
+                "Tạo nhân viên PRE_BOARDING từ hợp đồng hai bên đã ký và được kích hoạt",
+                eventId + ":employee-created");
         appendOutbox("PREBOARDING_CREATED", "lifecycle", "EMPLOYEE", employeeId,
                 Map.of("employee_id", employeeId, "application_id", applicationId));
         finishInbox(eventId, employeeId);
@@ -220,6 +233,14 @@ public class EmployeeLifecycleService {
         if ("EMPLOYED".equals(employee.get("status"))) return findView(employeeId);
         if (!"PRE_BOARDING".equals(employee.get("status"))) {
             throw AppException.conflict("Chỉ nhân viên PRE_BOARDING mới có thể xác nhận nhận việc");
+        }
+        if (employee.get("contract_id") != null) {
+            Integer activeContract = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM employment_contracts WHERE id = ? AND status = 'ACTIVE'",
+                    Integer.class, ((Number) employee.get("contract_id")).longValue());
+            if (activeContract == null || activeContract != 1) {
+                throw AppException.conflict("Hợp đồng chưa hoàn tất nên chưa thể xác nhận nhận việc");
+            }
         }
         LocalDate planned = ((Date) employee.get("start_date_planned")).toLocalDate();
         LocalDate actualJoinDate = joinDate == null ? LocalDate.now() : joinDate;
@@ -325,7 +346,7 @@ public class EmployeeLifecycleService {
 
     private Map<String, Object> lockEmployee(Long employeeId) {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
-                "SELECT id, application_id, offer_id, seat_id, status, start_date_planned FROM employees WHERE id = ? FOR UPDATE",
+                "SELECT id, application_id, offer_id, contract_id, seat_id, status, start_date_planned FROM employees WHERE id = ? FOR UPDATE",
                 employeeId);
         if (rows.isEmpty()) throw AppException.notFound("Không tìm thấy nhân viên vòng đời");
         return rows.get(0);

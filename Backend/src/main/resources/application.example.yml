@@ -40,6 +40,7 @@ spring:
             enable: true
 
 app:
+  public-web-base-url: ${APP_PUBLIC_WEB_BASE_URL:http://localhost:5173}
   redis:
     # Bật ở môi trường đã chạy Redis; để false giúp các module HRM vẫn khởi động khi dev local không có Redis.
     listener-enabled: ${REDIS_LISTENER_ENABLED:false}

@@ -15,6 +15,7 @@ import RequireRole from './components/common/RequireRole';
 import LoginPage from './pages/public/LoginPage';
 import PublicApplyForm from './pages/public/PublicApplyForm';
 import PublicOfferPage from './pages/public/PublicOfferPage';
+import PublicContractSignPage from './pages/public/PublicContractSignPage';
 import CeoDashboardPage from './pages/ceo/CeoDashboardPage';
 import DirectorDashboardPage from './pages/director/DashboardPage';
 import AdminDashboardPage from './pages/admin/AdminDashboardPage';
@@ -32,6 +33,7 @@ import JobRequisitionPage from './pages/manager/recruitment/JobRequisitionPage';
 import JobRequisitionForm from './pages/manager/recruitment/JobRequisitionForm';
 import ApplicationPipeline from './pages/manager/recruitment/ApplicationPipeline';
 import SeatLedgerPage from './pages/manager/recruitment/SeatLedgerPage';
+import ContractQueuePage from './pages/manager/recruitment/ContractQueuePage';
 import EmployeeDashboardPage from './pages/employee/DashboardPage';
 import EmployeeListPage from './pages/manager/employees/EmployeeListPage';
 import EmployeeLifecyclePage from './pages/manager/employees/EmployeeLifecyclePage';
@@ -74,6 +76,7 @@ export default function App() {
           {/* Placeholder cho trang public apply (Bước 4) */}
           <Route path="/public/apply/:jobSlug" element={<PublicApplyForm />} />
           <Route path="/offer/:token" element={<PublicOfferPage />} />
+          <Route path="/contract-sign/:token" element={<PublicContractSignPage />} />
 
           {/* ── Admin ───────────────────────────────────────── */}
           <Route
@@ -117,6 +120,7 @@ export default function App() {
               <Route path="applications" element={<ApplicationListPage />} />
               <Route path="pipeline" element={<ApplicationPipeline />} />
               <Route path="seats" element={<SeatLedgerPage />} />
+              <Route path="contracts" element={<ContractQueuePage />} />
               <Route path="applications/:id" element={<ApplicationDetailPage />} />
             </Route>
             <Route path="attendance" element={<ManagerAttendancePage />} />
@@ -158,6 +162,7 @@ export default function App() {
               <Route path="applications" element={<ApplicationListPage />} />
               <Route path="pipeline" element={<ApplicationPipeline />} />
               <Route path="seats" element={<SeatLedgerPage />} />
+              <Route path="contracts" element={<ContractQueuePage />} />
               <Route path="applications/:id" element={<ApplicationDetailPage />} />
             </Route>
             <Route path="attendance" element={<ManagerAttendancePage />} />
@@ -212,6 +217,7 @@ export default function App() {
               <Route path="applications" element={<ApplicationListPage />} />
               <Route path="pipeline" element={<ApplicationPipeline />} />
               <Route path="seats" element={<SeatLedgerPage />} />
+              <Route path="contracts" element={<ContractQueuePage />} />
               <Route path="applications/:id" element={<ApplicationDetailPage />} />
             </Route>
           </Route>

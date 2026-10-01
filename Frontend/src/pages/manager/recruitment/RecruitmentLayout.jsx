@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
-import { Armchair, Briefcase, FileText, List, Kanban } from 'lucide-react';
+import { Armchair, Briefcase, FileSignature, FileText, List, Kanban } from 'lucide-react';
 
 import { useAuth } from '../../../context/AuthContext';
 
@@ -23,6 +23,13 @@ export default function RecruitmentLayout() {
   ];
   if (role === 'ceo' || isHrManagement) {
     tabs.push({ path: `${basePath}/seats`, label: 'Số ghế ngồi', icon: <Armchair size={18} /> });
+  }
+  const normalizedDepartment = (user?.tenPhong || '').normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
+  const isLegalManagement = ['truong_phong', 'giam_doc_phong_ban'].includes(role)
+    && normalizedDepartment.includes('phap che');
+  if (role === 'ceo' || isHrManagement || isLegalManagement) {
+    tabs.push({ path: `${basePath}/contracts`, label: 'Hợp đồng & Pháp chế', icon: <FileSignature size={18} /> });
   }
 
   return (

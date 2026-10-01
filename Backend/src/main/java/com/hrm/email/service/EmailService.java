@@ -8,6 +8,7 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.web.util.HtmlUtils;
 
 @Service
 @RequiredArgsConstructor
@@ -15,6 +16,110 @@ import org.springframework.stereotype.Service;
 public class EmailService {
 
     private final JavaMailSender mailSender;
+
+    /**
+     * Gửi đồng bộ để outbox chỉ được đánh dấu PUBLISHED sau khi SMTP chấp nhận email.
+     * Nếu SMTP lỗi, exception được trả về poller để retry thay vì nuốt lỗi.
+     */
+    public void sendOfferEmail(String to, String candidateName, String jobTitle,
+                               int versionNumber, String responseDeadline, String offerUrl) {
+        log.info("Bắt đầu gửi email offer version {} cho: {}", versionNumber, to);
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setTo(to);
+            helper.setSubject("HRM AI - Đề nghị làm việc vị trí " + safe(jobTitle));
+
+            String htmlContent = """
+                <html>
+                <body style="font-family: Arial, sans-serif; line-height: 1.7; color: #1e293b; max-width: 620px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
+                    <div style="background-color: #2563eb; color: #ffffff; padding: 26px; text-align: center;">
+                        <h2 style="margin: 0;">Đề nghị làm việc từ HRM AI</h2>
+                    </div>
+                    <div style="padding: 32px;">
+                        <p>Kính gửi anh/chị <strong>%s</strong>,</p>
+                        <p>Chúng tôi trân trọng gửi đến bạn đề nghị làm việc cho vị trí <strong>%s</strong>.</p>
+                        <div style="background: #f8fafc; border-left: 4px solid #2563eb; padding: 16px; margin: 22px 0;">
+                            <p style="margin: 0 0 6px;"><strong>Phiên bản offer:</strong> %d</p>
+                            <p style="margin: 0;"><strong>Hạn phản hồi:</strong> %s</p>
+                        </div>
+                        <p>Nhấn nút bên dưới để xem đầy đủ nội dung và chọn <strong>Chấp nhận</strong>, <strong>Thương lượng</strong> hoặc <strong>Từ chối</strong>.</p>
+                        <p style="text-align: center; margin: 28px 0;">
+                            <a href="%s" style="display: inline-block; background: #2563eb; color: #ffffff; text-decoration: none; font-weight: 700; padding: 13px 24px; border-radius: 9px;">Xem và phản hồi offer</a>
+                        </p>
+                        <p style="font-size: 13px; color: #64748b;">Link này dành riêng cho bạn. Vui lòng không chuyển tiếp cho người khác.</p>
+                        <p>Trân trọng,<br/><strong>Bộ phận Tuyển dụng HRM AI</strong></p>
+                    </div>
+                </body>
+                </html>
+                """.formatted(
+                    safe(candidateName), safe(jobTitle), versionNumber,
+                    safe(responseDeadline), safe(offerUrl));
+            helper.setText(htmlContent, true);
+            mailSender.send(message);
+            log.info("Đã gửi email offer version {} thành công cho: {}", versionNumber, to);
+        } catch (Exception exception) {
+            log.error("Lỗi gửi email offer cho {}: {}", to, exception.getMessage(), exception);
+            throw new IllegalStateException("Không thể gửi email offer tới " + to, exception);
+        }
+    }
+
+    public void sendContractSigningInvitation(String to, String candidateName, String contractNumber,
+                                              String expiresAt, String signingUrl) {
+        sendHtml(to, "HRM AI - Mời ký hợp đồng " + safe(contractNumber), """
+                <div style="font-family:Arial,sans-serif;line-height:1.7;color:#1e293b;max-width:620px;margin:auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
+                  <div style="background:#1d4ed8;color:white;padding:26px;text-align:center"><h2 style="margin:0">Mời ký hợp đồng lao động</h2></div>
+                  <div style="padding:32px">
+                    <p>Kính gửi anh/chị <strong>%s</strong>,</p>
+                    <p>Công ty đã phát hành và ký hợp đồng <strong>%s</strong>. Vui lòng mở liên kết bảo mật bên dưới, xác thực OTP qua email và ký hợp đồng.</p>
+                    <p><strong>Hạn ký:</strong> %s</p>
+                    <p style="text-align:center;margin:28px 0"><a href="%s" style="display:inline-block;background:#2563eb;color:white;text-decoration:none;font-weight:700;padding:13px 24px;border-radius:9px">Xem và ký hợp đồng</a></p>
+                    <p style="font-size:13px;color:#64748b">Không chuyển tiếp liên kết này. Hệ thống sẽ yêu cầu mã OTP gửi tới chính email của bạn trước khi ký.</p>
+                  </div>
+                </div>
+                """.formatted(safe(candidateName), safe(contractNumber), safe(expiresAt), safe(signingUrl)));
+    }
+
+    public void sendContractSigningOtp(String to, String candidateName, String otp) {
+        sendHtml(to, "HRM AI - Mã OTP ký hợp đồng", """
+                <div style="font-family:Arial,sans-serif;line-height:1.7;color:#1e293b;max-width:560px;margin:auto;border:1px solid #e2e8f0;border-radius:12px;padding:30px">
+                  <h2>Xác thực ký hợp đồng</h2>
+                  <p>Xin chào <strong>%s</strong>, mã OTP của bạn là:</p>
+                  <div style="font-size:32px;letter-spacing:8px;font-weight:800;text-align:center;background:#eff6ff;color:#1d4ed8;padding:18px;border-radius:10px">%s</div>
+                  <p>Mã có hiệu lực trong 10 phút và chỉ dùng một lần. Không cung cấp mã này cho người khác.</p>
+                </div>
+                """.formatted(safe(candidateName), safe(otp)));
+    }
+
+    public void sendContractSignedConfirmation(String to, String candidateName, String contractNumber,
+                                               String finalDocumentUrl) {
+        sendHtml(to, "HRM AI - Đã ghi nhận chữ ký hợp đồng", """
+                <div style="font-family:Arial,sans-serif;line-height:1.7;color:#1e293b;max-width:560px;margin:auto;border:1px solid #e2e8f0;border-radius:12px;padding:30px">
+                  <h2 style="color:#047857">Đã hoàn tất ký hợp đồng</h2>
+                  <p>Xin chào <strong>%s</strong>, hệ thống đã ghi nhận chữ ký của bạn cho hợp đồng <strong>%s</strong>.</p>
+                  <p><a href="%s">Tải bản hợp đồng đã ký bởi hai bên</a></p>
+                  <p>Bộ phận Nhân sự sẽ tiếp tục quy trình chuẩn bị nhận việc.</p>
+                </div>
+                """.formatted(safe(candidateName), safe(contractNumber), safe(finalDocumentUrl)));
+    }
+
+    private void sendHtml(String to, String subject, String html) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setTo(to);
+            helper.setSubject(subject);
+            helper.setText(html, true);
+            mailSender.send(message);
+        } catch (Exception exception) {
+            log.error("Không thể gửi email {} tới {}: {}", subject, to, exception.getMessage(), exception);
+            throw new IllegalStateException("Không thể gửi email tới " + to, exception);
+        }
+    }
+
+    private String safe(String value) {
+        return HtmlUtils.htmlEscape(value == null ? "" : value);
+    }
 
     @Async
     public void sendApprovalEmail(String to, String candidateName, String jobTitle) {

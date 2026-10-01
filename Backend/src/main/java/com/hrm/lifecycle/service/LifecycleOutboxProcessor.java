@@ -30,7 +30,7 @@ public class LifecycleOutboxProcessor {
         return jdbcTemplate.query("""
                 SELECT id FROM outbox_events
                 WHERE status = 'PENDING' AND next_attempt_at <= NOW(6)
-                  AND event_type IN ('OFFER_ACCEPTED','EMPLOYEE_JOINED','ONBOARD_CANCELLED','ENSURE_ACCOUNT_ACTIVE')
+                  AND event_type IN ('OFFER_ACCEPTED','CONTRACT_ACTIVATED','EMPLOYEE_JOINED','ONBOARD_CANCELLED','ENSURE_ACCOUNT_ACTIVE')
                 ORDER BY id LIMIT 20
                 """, (rs, row) -> rs.getLong(1));
     }
@@ -48,7 +48,9 @@ public class LifecycleOutboxProcessor {
         JsonNode payload = parse(payloadJson);
 
         switch (eventType) {
-            case "OFFER_ACCEPTED" -> lifecycleService.consumeOfferAccepted(
+            // Từ giai đoạn 3, OFFER_ACCEPTED chỉ mở quy trình hợp đồng; không tạo nhân viên sớm.
+            case "OFFER_ACCEPTED" -> { }
+            case "CONTRACT_ACTIVATED" -> lifecycleService.consumeContractActivated(
                     (String) event.get("event_id"), eventType,
                     ((Number) event.get("schema_version")).intValue(), payloadJson);
             case "EMPLOYEE_JOINED" -> seatService.join(

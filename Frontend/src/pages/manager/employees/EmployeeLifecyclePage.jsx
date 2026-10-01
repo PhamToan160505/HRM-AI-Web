@@ -95,7 +95,7 @@ export default function EmployeeLifecyclePage() {
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">Vòng đời nhân viên</p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950">Nhân viên mới</h1>
-          <p className="mt-2 text-sm text-slate-600">Theo dõi từ lúc chấp nhận offer đến ngày chính thức nhận việc.</p>
+          <p className="mt-2 text-sm text-slate-600">Theo dõi từ khi hợp đồng hai bên đã ký và được kích hoạt đến ngày chính thức nhận việc.</p>
         </div>
         <button onClick={loadEmployees} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
           <RefreshCw size={17} /> Làm mới
@@ -113,7 +113,7 @@ export default function EmployeeLifecyclePage() {
           <div className="grid min-h-56 place-items-center text-slate-500"><Loader2 className="animate-spin text-blue-600" /></div>
         ) : employees.length === 0 ? (
           <div className="grid min-h-56 place-items-center px-6 text-center">
-            <div><UserRoundCheck className="mx-auto text-slate-300" size={44} /><p className="mt-3 font-semibold text-slate-700">Chưa có nhân viên ở trạng thái này</p><p className="mt-1 text-sm text-slate-500">Dữ liệu sẽ xuất hiện sau khi ứng viên chấp nhận offer.</p></div>
+            <div><UserRoundCheck className="mx-auto text-slate-300" size={44} /><p className="mt-3 font-semibold text-slate-700">Chưa có nhân viên ở trạng thái này</p><p className="mt-1 text-sm text-slate-500">Dữ liệu sẽ xuất hiện sau khi hợp đồng đủ chữ ký hai bên và được HR kích hoạt.</p></div>
           </div>
         ) : (
           <div className="overflow-x-auto">

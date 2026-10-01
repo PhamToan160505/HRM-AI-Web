@@ -121,9 +121,9 @@ public class TelegramNotificationService {
         }
     }
 
-    // ── 2. CANH BAO DON CHO DUYET (30 phut/lan, chi gui neu co pending) ──────
+    // ── 2. CANH BAO DON CHO DUYET (8:00 va 15:00 hang ngay) ───────────────────
 
-    @Scheduled(fixedDelay = 1800000, initialDelay = 60000) // 30 phut
+    @Scheduled(cron = "0 0 8,15 * * *") // Run at 08:00 and 15:00 every day
     public void alertPendingRequests() {
         String chatId = properties.getGroupChatId();
         if (chatId == null || chatId.isBlank()) return;
@@ -133,41 +133,86 @@ public class TelegramNotificationService {
 
             if (pendingList.isEmpty()) return;
 
-            // Tranh spam: chi gui neu lan cuoi gui cach day > 29 phut
-            long now = System.currentTimeMillis();
-            if (now - lastPendingRequestAlert < 29 * 60 * 1000L) return;
-            lastPendingRequestAlert = now;
-
             StringBuilder sb = new StringBuilder();
-            sb.append("CO ").append(pendingList.size()).append(" DON CHO PHE DUYET!\n");
+            sb.append("📋 CẢNH BÁO DỊNH KỲ: CÓ ").append(pendingList.size()).append(" ĐƠN CHỜ PHÊ DUYỆT!\n");
             sb.append("━━━━━━━━━━━━━━━━━━━━━━\n");
 
             int shown = Math.min(pendingList.size(), 5);
             for (int i = 0; i < shown; i++) {
                 var req = pendingList.get(i);
                 String loai = switch (req.getRequestType()) {
-                    case NORMAL_LEAVE      -> "Nghi thuong";
-                    case SPECIAL_WFH_LEAVE -> "Lam tu xa (WFH)";
-                    case HALF_DAY_LEAVE    -> "Nghi nua ngay";
-                    case UNPAID_LEAVE      -> "Nghi khong luong";
-                    case OVERTIME          -> "Tang ca";
+                    case NORMAL_LEAVE      -> "Nghỉ thường";
+                    case SPECIAL_WFH_LEAVE -> "Làm từ xa (WFH)";
+                    case HALF_DAY_LEAVE    -> "Nghỉ nửa ngày";
+                    case UNPAID_LEAVE      -> "Nghỉ không lương";
+                    case OVERTIME          -> "Tăng ca";
                     default -> req.getRequestType().name();
                 };
-                sb.append("#").append(req.getId()).append(" - ").append(req.getUser().getHoTen())
+                sb.append("#").append(req.getId()).append(" - ").append(req.getUser() != null ? req.getUser().getHoTen() : "N/A")
                   .append(" | ").append(loai).append("\n");
                 sb.append("  ").append(req.getStartDate().format(DATE_FMT))
-                  .append(" den ").append(req.getEndDate().format(DATE_FMT)).append("\n");
+                  .append(" đến ").append(req.getEndDate().format(DATE_FMT)).append("\n");
             }
             if (pendingList.size() > 5) {
-                sb.append("... va ").append(pendingList.size() - 5).append(" don khac.\n");
+                sb.append("... và ").append(pendingList.size() - 5).append(" đơn khác.\n");
             }
-            sb.append("\nGo /duyet [ID] de duyet, /tuchoi [ID] [ly do] de tu choi.");
+            sb.append("\nGõ /duyet [ID] để duyệt, /tuchoi [ID] [lý do] để từ chối.");
 
             sendToGroup(chatId, sb.toString());
-            log.info("[TelegramNotify] Da gui canh bao {} don cho duyet", pendingList.size());
+            log.info("[TelegramNotify] Đã gửi cảnh báo {} đơn chờ duyệt (lịch 8h/15h)", pendingList.size());
 
         } catch (Exception e) {
-            log.error("[TelegramNotify] Loi canh bao don cho duyet: {}", e.getMessage(), e);
+            log.error("[TelegramNotify] Lỗi cảnh báo đơn chờ duyệt: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Thông báo TỨC THÌ vào nhóm Telegram khi nhân viên tạo đơn mới.
+     */
+    public void notifyNewRequestCreated(com.hrm.request.entity.EmployeeRequest req) {
+        String chatId = properties.getGroupChatId();
+        if (chatId == null || chatId.isBlank()) return;
+        try {
+            String loai = switch (req.getRequestType()) {
+                case NORMAL_LEAVE      -> "Nghỉ thường";
+                case SPECIAL_WFH_LEAVE -> "Làm từ xa (WFH)";
+                case HALF_DAY_LEAVE    -> "Nghỉ nửa ngày";
+                case UNPAID_LEAVE      -> "Nghỉ không lương";
+                case OVERTIME          -> "Tăng ca";
+                default -> req.getRequestType().name();
+            };
+
+            String nguoiGui = (req.getUser() != null && req.getUser().getHoTen() != null)
+                    ? req.getUser().getHoTen() : "Nhân viên";
+
+            StringBuilder sb = new StringBuilder();
+            sb.append("📩 ĐƠN YÊU CẦU MỚI!\n");
+            sb.append("━━━━━━━━━━━━━━━━━━━━━━\n");
+            sb.append("Mã đơn: #").append(req.getId()).append("\n");
+            sb.append("Người gửi: ").append(nguoiGui).append("\n");
+            sb.append("Loại đơn: ").append(loai).append("\n");
+            sb.append("Thời gian: ").append(req.getStartDate().format(DATE_FMT))
+              .append(" đến ").append(req.getEndDate().format(DATE_FMT)).append("\n");
+            if (req.getReason() != null && !req.getReason().isBlank()) {
+                sb.append("Lý do: ").append(req.getReason()).append("\n");
+            }
+            sb.append("\n👉 Gõ /duyet ").append(req.getId())
+              .append(" để duyệt, /tuchoi ").append(req.getId()).append(" [lý do] để từ chối.");
+
+            sendToGroup(chatId, sb.toString());
+            log.info("[TelegramNotify] Đã gửi thông báo đơn mới #{}", req.getId());
+        } catch (Exception e) {
+            log.error("[TelegramNotify] Lỗi gửi thông báo đơn mới: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Lắng nghe event khi có đơn mới tạo và tự động gửi thông báo Telegram.
+     */
+    @org.springframework.context.event.EventListener
+    public void handleRequestCreated(com.hrm.request.event.RequestCreatedEvent event) {
+        if (event != null && event.getRequest() != null) {
+            notifyNewRequestCreated(event.getRequest());
         }
     }
 
