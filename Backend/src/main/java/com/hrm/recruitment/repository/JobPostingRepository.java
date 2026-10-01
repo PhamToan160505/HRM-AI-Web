@@ -9,6 +9,7 @@ import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import java.util.List;
 import java.util.Optional;
 
 public interface JobPostingRepository extends JpaRepository<JobPosting, Long> {
@@ -23,6 +24,14 @@ public interface JobPostingRepository extends JpaRepository<JobPosting, Long> {
     
     @Query("SELECT j FROM JobPosting j WHERE (:departmentId IS NULL OR j.departmentId = :departmentId) AND (:capBac IS NULL OR j.capBac = :capBac) AND (:requesterId IS NULL OR j.jobRequisitionId IN (SELECT r.id FROM JobRequisition r WHERE r.requesterId = :requesterId))")
     Page<JobPosting> findWithFiltersStrictRequester(@Param("departmentId") Long departmentId, @Param("capBac") String capBac, @Param("requesterId") Long requesterId, Pageable pageable);
+
+    @Query("SELECT j FROM JobPosting j WHERE (:departmentId IS NULL OR j.departmentId = :departmentId) AND (:capBac IS NULL OR j.capBac = :capBac) AND (:requesterId IS NULL OR j.jobRequisitionId IN (SELECT r.id FROM JobRequisition r WHERE r.requesterId = :requesterId) OR j.id IN :assignedJobIds)")
+    Page<JobPosting> findWithFiltersForRequesterOrInterviewer(
+            @Param("departmentId") Long departmentId,
+            @Param("capBac") String capBac,
+            @Param("requesterId") Long requesterId,
+            @Param("assignedJobIds") List<Long> assignedJobIds,
+            Pageable pageable);
     
     long countByStatus(JobPostingStatus status);
     long countByStatusAndDepartmentId(JobPostingStatus status, Long departmentId);

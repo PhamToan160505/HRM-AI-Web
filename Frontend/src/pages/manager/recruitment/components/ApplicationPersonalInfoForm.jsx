@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Mail, Phone, Calendar, CreditCard, AlertTriangle, MapPin, Globe } from 'lucide-react';
+import { User, Mail, Phone, Calendar, CreditCard, MapPin, Globe, MessageSquare, Building2 } from 'lucide-react';
 
 export default function ApplicationPersonalInfoForm({ application, mode = 'manager', onSave, initialData }) {
   const [formData, setFormData] = useState({
@@ -12,23 +12,26 @@ export default function ApplicationPersonalInfoForm({ application, mode = 'manag
     nation: '',
     nationality: '',
     religion: '',
-    address: ''
+    address: '',
+    tinhThanh: '',
+    phuongXa: '',
+    gioiThieu: ''
   });
-  
+
   const [confidences, setConfidences] = useState({});
 
   useEffect(() => {
     // Nếu có initialData (từ OCR ở bước public)
     let extracted = initialData;
-    
+
     // Nếu có application (ở bước manager view)
     if (application && application.extractedData) {
       try {
-        extracted = typeof application.extractedData === 'string' 
-          ? JSON.parse(application.extractedData) 
+        extracted = typeof application.extractedData === 'string'
+          ? JSON.parse(application.extractedData)
           : application.extractedData;
       } catch (e) {
-        console.error("Lỗi parse JSON extractedData", e);
+        console.error('Lỗi parse JSON extractedData', e);
       }
     }
 
@@ -43,9 +46,12 @@ export default function ApplicationPersonalInfoForm({ application, mode = 'manag
         nation: extracted.nation?.value || '',
         nationality: extracted.nationality?.value || '',
         religion: extracted.religion?.value || '',
-        address: extracted.address?.value || application?.address || ''
+        address: extracted.address?.value || application?.address || '',
+        tinhThanh: extracted.tinhThanh?.value || '',
+        phuongXa: extracted.phuongXa?.value || '',
+        gioiThieu: extracted.gioiThieu?.value || ''
       });
-      
+
       setConfidences({
         fullName: extracted.fullName?.confidence || 100,
         email: extracted.email?.confidence || 100,
@@ -56,7 +62,10 @@ export default function ApplicationPersonalInfoForm({ application, mode = 'manag
         nation: extracted.nation?.confidence || 100,
         nationality: extracted.nationality?.confidence || 100,
         religion: extracted.religion?.confidence || 100,
-        address: extracted.address?.confidence || 100
+        address: extracted.address?.confidence || 100,
+        tinhThanh: extracted.tinhThanh?.confidence || 100,
+        phuongXa: extracted.phuongXa?.confidence || 100,
+        gioiThieu: extracted.gioiThieu?.confidence || 100
       });
     } else if (application) {
       // Fallback
@@ -70,24 +79,29 @@ export default function ApplicationPersonalInfoForm({ application, mode = 'manag
         nation: '',
         nationality: '',
         religion: '',
-        address: application.address || ''
+        address: application.address || '',
+        tinhThanh: '',
+        phuongXa: '',
+        gioiThieu: ''
       });
     }
   }, [application, initialData]);
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setFormData(current => ({ ...current, [name]: value }));
   };
 
   const isEditable = mode === 'public' || mode === 'edit';
 
-  const renderField = (name, label, icon, type = "text", options = null) => {
+  const renderField = (name, label, icon, type = 'text', options = null, required = false) => {
     const confidence = confidences[name];
     const isLowConfidence = confidence !== undefined && confidence < 80;
 
     return (
       <div className="mb-4">
         <label className="block text-sm font-medium text-slate-700 mb-1">
+          {required && <span className="text-red-500 mr-1">*</span>}
           {label}
         </label>
         <div className="relative">
@@ -101,21 +115,28 @@ export default function ApplicationPersonalInfoForm({ application, mode = 'manag
               onChange={handleChange}
               disabled={!isEditable}
               className={`w-full pl-10 pr-4 py-2 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
-                isLowConfidence && mode === 'manager' ? 'border-red-300 focus:border-red-500 focus:ring-red-500/20' : 'border-slate-200'
+                isLowConfidence && mode === 'manager'
+                  ? 'border-red-300 focus:border-red-500 focus:ring-red-500/20'
+                  : 'border-slate-200'
               } ${!isEditable && 'opacity-80'}`}
             >
               <option value="">Chọn {label.toLowerCase()}</option>
-              {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+              {options.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
             </select>
           ) : (
-            <input 
+            <input
               type={type}
               name={name}
               value={formData[name]}
               onChange={handleChange}
               readOnly={!isEditable}
+              placeholder={isEditable ? `Nhập ${label.toLowerCase()}` : ''}
               className={`w-full pl-10 pr-4 py-2 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
-                isLowConfidence && mode === 'manager' ? 'border-red-300 focus:border-red-500 focus:ring-red-500/20' : 'border-slate-200'
+                isLowConfidence && mode === 'manager'
+                  ? 'border-red-300 focus:border-red-500 focus:ring-red-500/20'
+                  : 'border-slate-200'
               } ${!isEditable && 'opacity-80'}`}
             />
           )}
@@ -129,40 +150,98 @@ export default function ApplicationPersonalInfoForm({ application, mode = 'manag
     );
   };
 
+  const renderTextarea = (name, label, icon, required = false) => (
+    <div className="mb-4">
+      <label className="block text-sm font-medium text-slate-700 mb-1">
+        {required && <span className="text-red-500 mr-1">*</span>}
+        {label}
+      </label>
+      <div className="relative">
+        <div className="absolute left-3 top-3 text-slate-400">
+          {icon}
+        </div>
+        <textarea
+          name={name}
+          value={formData[name]}
+          onChange={handleChange}
+          readOnly={!isEditable}
+          rows={3}
+          placeholder={isEditable ? 'Viết giới thiệu ngắn về bản thân' : ''}
+          className={`w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-y ${
+            !isEditable && 'opacity-80'
+          }`}
+        />
+      </div>
+    </div>
+  );
+
   return (
     <div className="mb-8">
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-bold text-slate-800">Thông tin cá nhân</h3>
-        {mode === 'public' && <span className="text-xs text-blue-600 font-medium bg-blue-50 px-2 py-1 rounded">Chỉ thu thập thông tin cần thiết để ứng tuyển</span>}
+        {mode === 'public' && (
+          <span className="text-xs text-blue-600 font-medium bg-blue-50 px-2 py-1 rounded">
+            Chỉ thu thập thông tin cần thiết để ứng tuyển
+          </span>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-        {renderField('fullName', 'Họ và tên', <User size={16} />)}
-        {renderField('email', 'Email', <Mail size={16} />, 'email')}
-        {renderField('phone', 'SĐT', <Phone size={16} />)}
-        {mode !== 'public' && <>
-          {renderField('dob', 'Ngày sinh', <Calendar size={16} />)}
-          {renderField('gender', 'Giới tính', <User size={16} />, 'text', [
-            { label: 'Nam', value: 'Nam' },
-            { label: 'Nữ', value: 'Nữ' },
-            { label: 'Khác', value: 'Khác' }
-          ])}
-          {renderField('cccd', 'CCCD', <CreditCard size={16} />)}
-          {renderField('nation', 'Dân tộc', <Globe size={16} />)}
-          {renderField('nationality', 'Quốc tịch', <Globe size={16} />)}
-          {renderField('religion', 'Tôn giáo', <Globe size={16} />)}
-          {renderField('address', 'Địa chỉ', <MapPin size={16} />)}
-        </>}
-      </div>
+      {mode === 'public' ? (
+        /* ── CHẾ ĐỘ CÔNG KHAI: đủ trường giống form tuyển dụng thực tế ── */
+        <div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+            {renderField('fullName', 'Họ và tên', <User size={16} />, 'text', null, true)}
+            {renderField('phone', 'Số điện thoại', <Phone size={16} />, 'tel', null, true)}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+            {renderField('dob', 'Ngày sinh', <Calendar size={16} />, 'date', null, true)}
+            {renderField('gender', 'Giới tính', <User size={16} />, 'text', [
+              { label: 'Nam', value: 'Nam' },
+              { label: 'Nữ', value: 'Nữ' },
+              { label: 'Khác', value: 'Khác' }
+            ])}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+            {renderField('tinhThanh', 'Tỉnh thành', <Building2 size={16} />, 'text', null, true)}
+            {renderField('phuongXa', 'Phường/Xã', <MapPin size={16} />, 'text', null, true)}
+          </div>
+          {renderField('address', 'Địa chỉ', <MapPin size={16} />, 'text', null, true)}
+          {renderField('email', 'Email', <Mail size={16} />, 'email', null, true)}
+          {renderTextarea('gioiThieu', 'Giới thiệu bản thân', <MessageSquare size={16} />)}
+        </div>
+      ) : (
+        /* ── CHẾ ĐỘ MANAGER/EDIT: toàn bộ trường ── */
+        <div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+            {renderField('fullName', 'Họ và tên', <User size={16} />)}
+            {renderField('email', 'Email', <Mail size={16} />, 'email')}
+            {renderField('phone', 'SĐT', <Phone size={16} />)}
+            {renderField('dob', 'Ngày sinh', <Calendar size={16} />)}
+            {renderField('gender', 'Giới tính', <User size={16} />, 'text', [
+              { label: 'Nam', value: 'Nam' },
+              { label: 'Nữ', value: 'Nữ' },
+              { label: 'Khác', value: 'Khác' }
+            ])}
+            {renderField('cccd', 'CCCD', <CreditCard size={16} />)}
+            {renderField('nation', 'Dân tộc', <Globe size={16} />)}
+            {renderField('nationality', 'Quốc tịch', <Globe size={16} />)}
+            {renderField('religion', 'Tôn giáo', <Globe size={16} />)}
+            {renderField('address', 'Địa chỉ', <MapPin size={16} />)}
+            {renderField('tinhThanh', 'Tỉnh thành', <Building2 size={16} />)}
+            {renderField('phuongXa', 'Phường/Xã', <MapPin size={16} />)}
+          </div>
+          {renderTextarea('gioiThieu', 'Giới thiệu bản thân', <MessageSquare size={16} />)}
+        </div>
+      )}
 
-      {mode === 'public' && onSave && (
+      {onSave && (
         <div className="mt-6 flex justify-end">
-          <button 
+          <button
             type="button"
             onClick={() => onSave(formData)}
             className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-sm"
           >
-            Xác nhận thông tin
+            {mode === 'public' ? 'Xác nhận thông tin' : 'Lưu thông tin'}
           </button>
         </div>
       )}

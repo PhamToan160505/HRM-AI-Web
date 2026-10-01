@@ -114,6 +114,7 @@ public class JobRequisitionService {
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy người yêu cầu"));
 
         validateRequisitionContent(request);
+        validateDepartment(request.departmentId());
 
         validateRequesterAuthority(requester, request.targetRole());
 
@@ -215,6 +216,17 @@ public class JobRequisitionService {
         }
     }
 
+    private void validateDepartment(Long departmentId) {
+        if (departmentId == null) {
+            throw com.hrm.exception.AppException.badRequest("Phòng ban tuyển dụng là bắt buộc");
+        }
+        com.hrm.common.entity.Department department = departmentRepository.findById(departmentId)
+                .orElseThrow(() -> com.hrm.exception.AppException.badRequest("Phòng ban tuyển dụng không tồn tại"));
+        if (Boolean.TRUE.equals(department.getIsLock())) {
+            throw com.hrm.exception.AppException.badRequest("Phòng ban tuyển dụng đã bị khóa");
+        }
+    }
+
     private void validateRequesterAuthority(User requester, Role targetRole) {
         if (targetRole == null) {
             throw com.hrm.exception.AppException.badRequest("Chức vụ cần tuyển là bắt buộc");
@@ -246,6 +258,7 @@ public class JobRequisitionService {
                     "Chỉ được sửa yêu cầu ở trạng thái DRAFT hoặc REVISION_REQUIRED");
         }
         validateRequisitionContent(request);
+        validateDepartment(request.departmentId());
         User requester = userRepository.findById(requesterId)
                 .orElseThrow(() -> com.hrm.exception.AppException.notFound("Không tìm thấy người yêu cầu"));
         validateRequesterAuthority(requester, request.targetRole());

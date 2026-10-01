@@ -1,5 +1,6 @@
 package com.hrm.recruitment.controller;
 
+import com.hrm.ai.service.AiInterviewQuestionService;
 import com.hrm.exception.ApiResponse;
 import com.hrm.recruitment.service.InterviewService;
 import com.hrm.security.CustomUserDetails;
@@ -17,6 +18,7 @@ import java.util.List;
 public class InterviewController {
 
     private final InterviewService interviewService;
+    private final AiInterviewQuestionService aiInterviewQuestionService;
 
     @GetMapping("/applications/{applicationId}/interviews")
     @PreAuthorize("hasAnyRole('NHAN_VIEN','TRUONG_PHONG','GIAM_DOC_PHONG_BAN','CEO','ADMIN')")
@@ -25,6 +27,15 @@ public class InterviewController {
             @AuthenticationPrincipal CustomUserDetails actor) {
         return ResponseEntity.ok(ApiResponse.ok(
                 interviewService.list(applicationId, actor.getUserId()), "Lịch sử phỏng vấn"));
+    }
+
+    @GetMapping("/applications/{applicationId}/interview-access")
+    @PreAuthorize("hasAnyRole('NHAN_VIEN','TRUONG_PHONG','GIAM_DOC_PHONG_BAN','CEO','ADMIN')")
+    public ResponseEntity<ApiResponse<InterviewService.InterviewAccess>> access(
+            @PathVariable Long applicationId,
+            @AuthenticationPrincipal CustomUserDetails actor) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                interviewService.access(applicationId, actor.getUserId()), "Quyền thao tác phỏng vấn"));
     }
 
     @GetMapping("/applications/{applicationId}/interviewers")
@@ -58,6 +69,17 @@ public class InterviewController {
                 "Đã lưu phiếu feedback"));
     }
 
+    @PostMapping("/interviews/{interviewId}/invitation")
+    @PreAuthorize("hasAnyRole('NHAN_VIEN','TRUONG_PHONG','GIAM_DOC_PHONG_BAN','CEO','ADMIN')")
+    public ResponseEntity<ApiResponse<InterviewService.InterviewView>> respondInvitation(
+            @PathVariable Long interviewId,
+            @RequestBody InterviewService.InvitationResponse request,
+            @AuthenticationPrincipal CustomUserDetails actor) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                interviewService.respondInvitation(interviewId, request, actor.getUserId()),
+                "Đã phản hồi lời mời phỏng vấn"));
+    }
+
     @PostMapping("/interviews/{interviewId}/complete")
     @PreAuthorize("hasAnyRole('TRUONG_PHONG','GIAM_DOC_PHONG_BAN','CEO','ADMIN')")
     public ResponseEntity<ApiResponse<InterviewService.InterviewView>> complete(
@@ -88,5 +110,18 @@ public class InterviewController {
         return ResponseEntity.ok(ApiResponse.ok(
                 interviewService.recordNegotiation(interviewId, request, actor.getUserId()),
                 "Đã lưu kết quả đàm phán sơ bộ"));
+    }
+
+    /**
+     * Tạo câu hỏi phỏng vấn vòng 2 (onsite/trực tiếp) dựa trên kết quả vòng 1 và JD.
+     * Gọi Gemini AI — chỉ HR/manager có quyền tạo lịch mới được truy cập.
+     */
+    @GetMapping("/applications/{applicationId}/round2-questions")
+    @PreAuthorize("hasAnyRole('TRUONG_PHONG','GIAM_DOC_PHONG_BAN','CEO','ADMIN')")
+    public ResponseEntity<ApiResponse<List<String>>> round2Questions(
+            @PathVariable Long applicationId) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                aiInterviewQuestionService.generateRound2Questions(applicationId),
+                "Câu hỏi phỏng vấn vòng 2"));
     }
 }

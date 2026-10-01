@@ -1,6 +1,7 @@
 package com.hrm.recruitment.controller;
 
 import com.hrm.exception.ApiResponse;
+import com.hrm.exception.AppException;
 import com.hrm.recruitment.entity.Application;
 import com.hrm.recruitment.entity.JobPosting;
 import com.hrm.recruitment.service.ApplicationService;
@@ -130,9 +131,8 @@ public class PublicRecruitmentController {
                 );
                 return ResponseEntity.status(HttpStatus.CREATED)
                         .body(ApiResponse.ok(app, "Nộp hồ sơ thành công, AI đang tiến hành phân tích"));
-            } catch (Exception e) {
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                        .body(ApiResponse.error("Lỗi khi nộp hồ sơ: " + e.getMessage()));
+            } catch (java.io.IOException e) {
+                throw AppException.badRequest("Không thể xử lý tệp CV. Vui lòng kiểm tra tệp và thử lại.");
             }
         } else {
             return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)

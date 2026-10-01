@@ -5,6 +5,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 
 /**
  * Bind cấu hình Telegram Bot từ application.yml (prefix: app.telegram).
@@ -35,8 +37,17 @@ public class TelegramBotProperties {
 
     /**
      * Webhook URL đầy đủ (nếu dùng webhook mode).
-     * VD: https://your-domain.com/api/telegram/webhook
      * Bỏ trống nếu dùng Long Polling mode.
      */
     private String webhookUrl = "";
+
+    /**
+     * Map Telegram username (lowercase, không @) → User ID trong DB.
+     * Dùng để xác định người duyệt khi bot thực hiện hành động.
+     * Ví dụ:
+     *   user-id-map:
+     *     zcap05: 1
+     *     ceo_nguyen: 2
+     */
+    private Map<String, Long> userIdMap = new HashMap<>();
 }

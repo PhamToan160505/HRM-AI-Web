@@ -50,7 +50,7 @@ app:
     expiration-ms: 86400000
   gemini:
     api-key: ${GEMINI_API_KEY}
-    model: gemini-3.6-flash
+    model: ${GEMINI_MODEL:gemini-3.5-flash-lite}
     base-url: https://generativelanguage.googleapis.com/v1beta
   cloudinary:
     cloud-name: ${CLOUDINARY_CLOUD_NAME}

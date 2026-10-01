@@ -8,8 +8,8 @@ import org.springframework.web.reactive.function.client.WebClient;
 /**
  * Gemini API WebClient bean dùng chung — theo SKILL_backend-patterns.md mục 6.
  *
- * Model bắt buộc: gemini-3.5-flash
- * TUYỆT ĐỐI KHÔNG dùng gemini-2.5-* (Google ngừng hoạt động dòng 2.5 từ 16/10/2026).
+ * Model mặc định: gemini-3.5-flash-lite — model ổn định có Free Tier,
+ * phù hợp cho phân tích văn bản, hình ảnh và tài liệu PDF.
  * GEMINI_API_KEY bắt buộc từ biến môi trường — throw khi start nếu thiếu.
  *
  * Mọi AI service (CvExtractionService, SemanticFitScoreService, v.v.) inject bean này,

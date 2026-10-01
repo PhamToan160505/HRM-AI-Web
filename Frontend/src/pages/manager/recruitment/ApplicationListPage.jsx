@@ -34,6 +34,8 @@ export default function ApplicationListPage() {
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
   const [sortMode, setSortMode] = useState('TIME');
+  const [minEvidence, setMinEvidence] = useState('');
+  const [mustHaveOnly, setMustHaveOnly] = useState(false);
   const [aiByApplication, setAiByApplication] = useState({});
   const [loadingAi, setLoadingAi] = useState(false);
   const pageSize = 5;
@@ -85,12 +87,14 @@ export default function ApplicationListPage() {
     if (selectedCampaign) {
       fetchApplications();
     }
-  }, [selectedCampaign, currentPage, selectedStatus]);
+  }, [selectedCampaign, currentPage, selectedStatus, sortMode, minEvidence, mustHaveOnly]);
 
   useEffect(() => {
     if (!selectedCampaign) {
       setAiByApplication({});
       setSortMode('TIME');
+      setMinEvidence('');
+      setMustHaveOnly(false);
       return;
     }
     let active = true;
@@ -132,6 +136,9 @@ export default function ApplicationListPage() {
       });
       if (selectedStatus !== 'ALL') params.append('status', selectedStatus);
       if (searchTerm) params.append('search', searchTerm);
+      if (sortMode === 'AI_EVIDENCE') params.append('sortBy', sortMode);
+      if (minEvidence) params.append('minEvidence', minEvidence);
+      if (mustHaveOnly) params.append('mustHaveOnly', 'true');
 
       const res = await api.get(`/api/recruitment/applications?${params.toString()}`);
       if (res.data.success) {
@@ -186,6 +193,22 @@ export default function ApplicationListPage() {
     const s = STATUS_MAP[app.approvalStatus];
     if (s) return <span className={`px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1 w-max ${s.color}`}>{s.label}</span>;
     return <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700">{app.approvalStatus}</span>;
+  };
+
+  const getMustSummary = (analysis) => {
+    const mustCriteria = (analysis?.computedResult?.criteria || [])
+      .filter((criterion) => criterion.type === 'MUST');
+    const passed = mustCriteria.filter((criterion) => (
+      criterion.evidence_level === 'MENTIONED_IN_EXPERIENCE'
+      || criterion.evidence_level === 'DEMONSTRATED'
+    )).length;
+    return { passed, total: mustCriteria.length };
+  };
+
+  const getFitBand = (score) => {
+    if (score >= 70) return { label: 'Phù hợp cao', color: 'text-emerald-700 bg-emerald-50' };
+    if (score >= 40) return { label: 'Cần xem xét', color: 'text-amber-700 bg-amber-50' };
+    return { label: 'Ít bằng chứng', color: 'text-slate-600 bg-slate-100' };
   };
 
   // ----- RENDER LEVEL 1: CAMPAIGN GRID -----
@@ -400,7 +423,10 @@ export default function ApplicationListPage() {
           <button
             type="button"
             disabled={loadingAi}
-            onClick={() => setSortMode(current => current === 'TIME' ? 'AI_EVIDENCE' : 'TIME')}
+            onClick={() => {
+              setSortMode(current => current === 'TIME' ? 'AI_EVIDENCE' : 'TIME');
+              setCurrentPage(0);
+            }}
             className={`inline-flex items-center justify-center gap-2 rounded-lg border px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50 ${sortMode === 'AI_EVIDENCE' ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700'}`}
             title="Chỉ dùng kết quả cùng cặp phiên bản tiêu chí và scoring profile của chiến dịch"
           >
@@ -409,8 +435,31 @@ export default function ApplicationListPage() {
         </div>
 
         {sortMode === 'AI_EVIDENCE' && (
-          <div className="border-b border-blue-100 bg-blue-50 px-4 py-2.5 text-xs text-blue-800">
-            AI chỉ đổi thứ tự hỗ trợ xem xét. Quyết định tuyển dụng vẫn do người có thẩm quyền thực hiện; chỉ so sánh kết quả cùng cặp version hiện tại.
+          <div className="flex flex-col gap-3 border-b border-blue-100 bg-blue-50 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+            <p className="text-xs leading-5 text-blue-800">
+              AI xếp hạng trên toàn chiến dịch theo bằng chứng trong CV. Đây là công cụ hỗ trợ; quyết định tuyển dụng vẫn do người có thẩm quyền thực hiện.
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <select
+                value={minEvidence}
+                onChange={(event) => { setMinEvidence(event.target.value); setCurrentPage(0); }}
+                className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              >
+                <option value="">Tất cả mức bằng chứng</option>
+                <option value="40">Bằng chứng từ 40%</option>
+                <option value="60">Bằng chứng từ 60%</option>
+                <option value="80">Bằng chứng từ 80%</option>
+              </select>
+              <label className="flex cursor-pointer items-center gap-2 whitespace-nowrap rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-medium text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={mustHaveOnly}
+                  onChange={(event) => { setMustHaveOnly(event.target.checked); setCurrentPage(0); }}
+                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                />
+                Đủ bằng chứng cho toàn bộ MUST
+              </label>
+            </div>
           </div>
         )}
 
@@ -462,10 +511,22 @@ export default function ApplicationListPage() {
                     </td>
                     <td className="p-4">
                       {aiByApplication[app.id]?.status === 'DONE' ? (
-                        <div className="min-w-40 space-y-1.5">
-                          <div className="flex items-center justify-between gap-3 text-xs"><span className="text-slate-500">Độ phủ lời khai</span><strong className="text-blue-700">{Number(aiByApplication[app.id].claimCoverage || 0).toFixed(0)}%</strong></div>
-                          <div className="flex items-center justify-between gap-3 text-xs"><span className="text-slate-500">Mức bằng chứng</span><strong className="text-indigo-700">{Number(aiByApplication[app.id].evidenceScore || 0).toFixed(0)}%</strong></div>
-                        </div>
+                        (() => {
+                          const analysis = aiByApplication[app.id];
+                          const score = Number(analysis.evidenceScore || 0);
+                          const must = getMustSummary(analysis);
+                          const fitBand = getFitBand(score);
+                          return (
+                            <div className="min-w-44 space-y-1.5">
+                              <div className="flex items-center justify-between gap-3 text-xs"><span className="text-slate-500">Độ phủ lời khai</span><strong className="text-blue-700">{Number(analysis.claimCoverage || 0).toFixed(0)}%</strong></div>
+                              <div className="flex items-center justify-between gap-3 text-xs"><span className="text-slate-500">Mức bằng chứng</span><strong className="text-indigo-700">{score.toFixed(0)}%</strong></div>
+                              {must.total > 0 && (
+                                <div className="flex items-center justify-between gap-3 text-xs"><span className="text-slate-500">Tiêu chí MUST</span><strong className={must.passed === must.total ? 'text-emerald-700' : 'text-amber-700'}>{must.passed}/{must.total}</strong></div>
+                              )}
+                              <span className={`inline-flex rounded-md px-2 py-1 text-[11px] font-semibold ${fitBand.color}`}>{fitBand.label}</span>
+                            </div>
+                          );
+                        })()
                       ) : (
                         <span className="text-xs text-slate-400 italic">Chưa có kết quả cùng version</span>
                       )}

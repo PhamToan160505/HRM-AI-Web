@@ -18,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.io.IOException;
 import com.hrm.notification.service.NotificationService;
@@ -84,8 +85,23 @@ public class ApplicationService {
         return applicationRepository.findAll(org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt"));
     }
 
-    public org.springframework.data.domain.Page<Application> getApplicationsPaginated(Long jobPostingId, String status, String search, int page, int size, com.hrm.security.CustomUserDetails currentUser) {
+    public org.springframework.data.domain.Page<Application> getApplicationsPaginated(
+            Long jobPostingId,
+            String status,
+            String search,
+            String sortBy,
+            java.math.BigDecimal minEvidence,
+            Boolean mustHaveOnly,
+            int page,
+            int size,
+            com.hrm.security.CustomUserDetails currentUser) {
         org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page, size, org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt"));
+        boolean hasGlobalRecruitmentAccess = jobPostingService.isSpecialRole(currentUser);
+        List<Long> assignedApplicationIds = hasGlobalRecruitmentAccess
+                ? List.of(-1L)
+                : interviewService.assignedApplicationIds(currentUser.getUserId());
+        if (assignedApplicationIds.isEmpty()) assignedApplicationIds = List.of(-1L);
+        List<Long> visibleAssignedApplicationIds = assignedApplicationIds;
         
         org.springframework.data.jpa.domain.Specification<Application> spec = (root, query, cb) -> {
             java.util.List<jakarta.persistence.criteria.Predicate> predicates = new java.util.ArrayList<>();
@@ -93,12 +109,14 @@ public class ApplicationService {
             if (jobPostingId != null) {
                 predicates.add(cb.equal(root.get("jobPosting").get("id"), jobPostingId));
             }
-            if (!jobPostingService.isSpecialRole(currentUser)) {
+            if (!hasGlobalRecruitmentAccess) {
                 jakarta.persistence.criteria.Subquery<Long> subquery = query.subquery(Long.class);
                 jakarta.persistence.criteria.Root<com.hrm.recruitment.entity.JobRequisition> reqRoot = subquery.from(com.hrm.recruitment.entity.JobRequisition.class);
                 subquery.select(reqRoot.get("id")).where(cb.equal(reqRoot.get("requesterId"), currentUser.getUserId()));
                 
-                predicates.add(root.get("jobPosting").get("jobRequisitionId").in(subquery));
+                predicates.add(cb.or(
+                        root.get("jobPosting").get("jobRequisitionId").in(subquery),
+                        root.get("id").in(visibleAssignedApplicationIds)));
             }
             if (status != null && !status.isEmpty() && !"ALL".equals(status)) {
                 if ("NEEDS_VERIFICATION".equals(status)) {
@@ -122,7 +140,85 @@ public class ApplicationService {
             return cb.and(predicates.toArray(new jakarta.persistence.criteria.Predicate[0]));
         };
         
-        return applicationRepository.findAll(spec, pageable);
+        boolean useAiRanking = "AI_EVIDENCE".equalsIgnoreCase(sortBy);
+        boolean useAiFilter = minEvidence != null || Boolean.TRUE.equals(mustHaveOnly);
+        if (jobPostingId == null || (!useAiRanking && !useAiFilter)) {
+            return applicationRepository.findAll(spec, pageable);
+        }
+
+        java.util.Map<Long, AiAnalysisService.AnalysisView> latestCompletedByApplication =
+                aiAnalysisService.getCurrentComparableViews(jobPostingId).stream()
+                        .filter(analysis -> "DONE".equals(analysis.status()))
+                        .collect(java.util.stream.Collectors.toMap(
+                                AiAnalysisService.AnalysisView::applicationId,
+                                java.util.function.Function.identity(),
+                                (latest, ignoredOlder) -> latest,
+                                java.util.LinkedHashMap::new));
+
+        List<Application> ranked = new java.util.ArrayList<>(applicationRepository.findAll(
+                spec,
+                org.springframework.data.domain.Sort.by(
+                        org.springframework.data.domain.Sort.Direction.DESC,
+                        "createdAt")));
+
+        if (minEvidence != null) {
+            ranked.removeIf(application -> {
+                AiAnalysisService.AnalysisView analysis = latestCompletedByApplication.get(application.getId());
+                return analysis == null || analysis.evidenceScore() == null
+                        || analysis.evidenceScore().compareTo(minEvidence) < 0;
+            });
+        }
+        if (Boolean.TRUE.equals(mustHaveOnly)) {
+            ranked.removeIf(application -> !passesAllMustCriteria(
+                    latestCompletedByApplication.get(application.getId())));
+        }
+        if (useAiRanking) {
+            ranked.sort(java.util.Comparator
+                    .comparing((Application application) -> evidenceScore(
+                            latestCompletedByApplication.get(application.getId())))
+                    .reversed()
+                    .thenComparing(application -> claimCoverage(
+                            latestCompletedByApplication.get(application.getId())),
+                            java.util.Comparator.reverseOrder())
+                    .thenComparing(Application::getCreatedAt,
+                            java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())));
+        }
+
+        int fromIndex = Math.min(page * size, ranked.size());
+        int toIndex = Math.min(fromIndex + size, ranked.size());
+        return new org.springframework.data.domain.PageImpl<>(
+                ranked.subList(fromIndex, toIndex),
+                org.springframework.data.domain.PageRequest.of(page, size),
+                ranked.size());
+    }
+
+    private java.math.BigDecimal evidenceScore(AiAnalysisService.AnalysisView analysis) {
+        return analysis == null || analysis.evidenceScore() == null
+                ? java.math.BigDecimal.valueOf(-1)
+                : analysis.evidenceScore();
+    }
+
+    private java.math.BigDecimal claimCoverage(AiAnalysisService.AnalysisView analysis) {
+        return analysis == null || analysis.claimCoverage() == null
+                ? java.math.BigDecimal.valueOf(-1)
+                : analysis.claimCoverage();
+    }
+
+    private boolean passesAllMustCriteria(AiAnalysisService.AnalysisView analysis) {
+        if (analysis == null || analysis.computedResult() == null) return false;
+        com.fasterxml.jackson.databind.JsonNode criteria = analysis.computedResult().path("criteria");
+        if (!criteria.isArray()) return false;
+        boolean hasMustCriterion = false;
+        for (com.fasterxml.jackson.databind.JsonNode criterion : criteria) {
+            if (!"MUST".equalsIgnoreCase(criterion.path("type").asText())) continue;
+            hasMustCriterion = true;
+            String evidenceLevel = criterion.path("evidence_level").asText();
+            if (!"MENTIONED_IN_EXPERIENCE".equals(evidenceLevel)
+                    && !"DEMONSTRATED".equals(evidenceLevel)) {
+                return false;
+            }
+        }
+        return hasMustCriterion;
     }
 
     private String getReviewerString(com.hrm.security.CustomUserDetails userDetails) {
@@ -329,13 +425,11 @@ public class ApplicationService {
         if (job.getHanNopHoSo() != null && java.time.LocalDateTime.now().isAfter(job.getHanNopHoSo())) {
             throw new RuntimeException("Đợt tuyển dụng này đã hết hạn nộp hồ sơ (" + job.getHanNopHoSo().toLocalDate() + ")");
         }
-        
 
-
-        // Chống nộp trùng (Double-submit prevention)
-        java.time.LocalDateTime fiveMinutesAgo = java.time.LocalDateTime.now().minusMinutes(5);
-        if (applicationRepository.existsByEmailAndJobPostingIdAndCreatedAtAfter(email, job.getId(), fiveMinutesAgo)) {
-            throw new RuntimeException("Bạn vừa nộp hồ sơ cho vị trí này gần đây. Vui lòng thử lại sau 5 phút nếu có lỗi.");
+        String normalizedEmail = email == null ? "" : email.trim().toLowerCase(java.util.Locale.ROOT);
+        if (applicationRepository.existsByEmailIgnoreCaseAndJobPostingId(normalizedEmail, job.getId())) {
+            throw com.hrm.exception.AppException.conflict(
+                    "Email này đã ứng tuyển vào vị trí này. Vui lòng kiểm tra hồ sơ đã nộp.");
         }
 
         // 1. Đọc text thật từ file PDF: Sẽ được chạy ngầm trong AsyncUploadService để tránh treo UI.
@@ -354,7 +448,7 @@ public class ApplicationService {
         Application application = Application.builder()
                 .jobPosting(job)
                 .fullName(fullName)
-                .email(email)
+                .email(normalizedEmail)
                 .phone(phone)
                 .cvUrl("UPLOADING")
                 .cccdUrl(null)
@@ -368,7 +462,19 @@ public class ApplicationService {
                 .fitScore(0)
                 .build();
 
-        Application savedApp = applicationRepository.saveAndFlush(application);
+        Application savedApp;
+        try {
+            savedApp = applicationRepository.saveAndFlush(application);
+        } catch (DataIntegrityViolationException ex) {
+            String detail = ex.getMostSpecificCause() == null
+                    ? ""
+                    : String.valueOf(ex.getMostSpecificCause().getMessage());
+            if (detail.contains("uk_application_posting_email")) {
+                throw com.hrm.exception.AppException.conflict(
+                        "Email này đã ứng tuyển vào vị trí này. Vui lòng kiểm tra hồ sơ đã nộp.");
+            }
+            throw ex;
+        }
         
         // Kích hoạt tiến trình upload file ngầm lên Cloudinary
         aiConsentService.record(savedApp.getId(), aiConsent);

@@ -50,6 +50,15 @@ public class OfferDispatch {
     @Column(name = "candidate_comment", columnDefinition = "TEXT")
     private String candidateComment;
 
+    @Column(name = "candidate_response_json", columnDefinition = "JSON")
+    private String candidateResponseJson;
+
+    @Column(name = "viewed_at")
+    private LocalDateTime viewedAt;
+
+    @Column(name = "view_count", nullable = false)
+    private Integer viewCount;
+
     @Column(name = "supersedes_dispatch_id")
     private Long supersedesDispatchId;
 
@@ -68,22 +77,41 @@ public class OfferDispatch {
         dispatch.responseDeadline = deadline;
         dispatch.sentBy = sentBy;
         dispatch.supersedesDispatchId = supersedesId;
+        dispatch.viewCount = 0;
         return dispatch;
     }
 
-    public void accept(String comment) { complete(OfferDispatchStatus.ACCEPTED, comment); }
-    public void decline(String comment) { complete(OfferDispatchStatus.DECLINED, comment); }
-    public void negotiate(String comment) { complete(OfferDispatchStatus.NEGOTIATION_CLOSED, comment); }
+    public void markViewed() {
+        if (viewedAt == null) {
+            viewedAt = LocalDateTime.now();
+        }
+        viewCount = (viewCount == null ? 0 : viewCount) + 1;
+    }
+
+    public void accept(String comment, String responseJson) {
+        complete(OfferDispatchStatus.ACCEPTED, comment, responseJson);
+    }
+    public void decline(String comment, String responseJson) {
+        complete(OfferDispatchStatus.DECLINED, comment, responseJson);
+    }
+    public void negotiate(String comment, String responseJson) {
+        complete(OfferDispatchStatus.NEGOTIATION_CLOSED, comment, responseJson);
+    }
     public void supersede() { complete(OfferDispatchStatus.SUPERSEDED, null); }
     public void expire() { complete(OfferDispatchStatus.EXPIRED, null); }
     public void revoke(String reason) { complete(OfferDispatchStatus.REVOKED, reason); }
 
     private void complete(OfferDispatchStatus target, String comment) {
+        complete(target, comment, null);
+    }
+
+    private void complete(OfferDispatchStatus target, String comment, String responseJson) {
         if (status != OfferDispatchStatus.ACTIVE) {
             throw new IllegalStateException("Dispatch không còn ACTIVE");
         }
         status = target;
         candidateComment = comment;
+        candidateResponseJson = responseJson;
         respondedAt = LocalDateTime.now();
     }
 }

@@ -7,6 +7,7 @@ import FacePunchModal from './FacePunchModal';
 import { useToast } from '../../components/common/Toast';
 import { useNavigate } from 'react-router-dom';
 import { requestService } from '../../services/request.service';
+import { getAttendancePunchState } from '../../utils/attendanceTime';
 
 export default function EmployeeAttendancePage() {
     const [viewMode, setViewMode] = useState('calendar'); // 'calendar' or 'table'
@@ -16,6 +17,7 @@ export default function EmployeeAttendancePage() {
     const [loading, setLoading] = useState(true);
     const [isPunchModalOpen, setIsPunchModalOpen] = useState(false);
     const [confirmEnrollment, setConfirmEnrollment] = useState(null);
+    const [attendanceNow, setAttendanceNow] = useState(() => new Date());
     const toast = useToast();
     const navigate = useNavigate();
 
@@ -42,6 +44,13 @@ export default function EmployeeAttendancePage() {
     useEffect(() => {
         fetchHistoryAndRequests();
     }, []);
+
+    useEffect(() => {
+        const timer = window.setInterval(() => setAttendanceNow(new Date()), 30000);
+        return () => window.clearInterval(timer);
+    }, []);
+
+    const punchState = getAttendancePunchState(history, attendanceNow);
 
     const parseSafeDate = (dateVal) => {
         if (!dateVal) return "Không xác định";
@@ -288,13 +297,20 @@ export default function EmployeeAttendancePage() {
                     >
                         Cập nhật khuôn mặt
                     </Button>
-                    <Button 
-                        variant="primary" 
-                        onClick={() => setIsPunchModalOpen(true)}
-                        leadingIcon={<Clock size={18} />}
-                    >
-                        Chấm công ngay
-                    </Button>
+                    <div className="flex flex-col items-end gap-1">
+                        <Button 
+                            variant="primary"
+                            disabled={!punchState.allowed}
+                            onClick={() => setIsPunchModalOpen(true)}
+                            leadingIcon={<Clock size={18} />}
+                            title={punchState.message}
+                        >
+                            {punchState.label}
+                        </Button>
+                        <span className={`text-xs ${punchState.allowed ? 'text-slate-500' : 'font-medium text-amber-600'}`}>
+                            {punchState.message}
+                        </span>
+                    </div>
                 </div>
             </div>
 

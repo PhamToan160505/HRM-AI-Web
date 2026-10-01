@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as faceapi from '@vladmandic/face-api';
 import { Camera, CheckCircle, AlertCircle, Loader2, MapPin, RefreshCw } from 'lucide-react';
 import api from '../../services/api';
+import { getAttendanceWindowState } from '../../utils/attendanceTime';
 
 let faceModelsPromise = null;
 
@@ -153,6 +154,12 @@ const FacePunchModal = ({ onSuccess, onCancel }) => {
 
     const captureAndPunch = async () => {
         if (!videoRef.current || !isModelsLoaded || isPunching.current) return;
+
+        const attendanceWindow = getAttendanceWindowState();
+        if (!attendanceWindow.allowed) {
+            setError(attendanceWindow.message);
+            return;
+        }
         
         isPunching.current = true;
         setLoading(true);

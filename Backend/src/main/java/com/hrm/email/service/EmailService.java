@@ -182,4 +182,72 @@ public class EmailService {
             log.error("LỖI khi gửi email thông báo tag cho {}: {}", to, e.getMessage(), e);
         }
     }
+
+    @Async
+    public void sendInterviewScheduledEmail(String to, String candidateName, String jobTitle,
+                                             int round, String scheduledStart, String scheduledEnd,
+                                             String mode, String locationOrLink) {
+        log.info("Bắt đầu gửi email thông báo lịch phỏng vấn vòng {} cho: {}", round, to);
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            helper.setTo(to);
+            helper.setSubject("HRM AI - Thư mời phỏng vấn vòng " + round + " – " + jobTitle);
+
+            String modeLabel = switch (mode != null ? mode.toUpperCase() : "") {
+                case "ONLINE" -> "Trực tuyến (Online)";
+                case "ONSITE" -> "Tại văn phòng";
+                case "HYBRID" -> "Kết hợp";
+                default -> mode != null ? mode : "Chưa xác định";
+            };
+            String locationLabel = (locationOrLink != null && !locationOrLink.isBlank())
+                    ? locationOrLink : "Sẽ được thông báo thêm";
+
+            String htmlContent = """
+                <html>
+                <body style="font-family: Arial, sans-serif; line-height: 1.7; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
+                    <div style="background-color: #2563eb; color: #ffffff; padding: 24px; text-align: center;">
+                        <h2 style="margin: 0;">HRM AI – Thư mời phỏng vấn</h2>
+                    </div>
+                    <div style="padding: 32px;">
+                        <p>Kính gửi anh/chị <strong>%s</strong>,</p>
+                        <p>Chúng tôi xin trân trọng thông báo rằng bạn đã được <strong>mời tham gia phỏng vấn vòng %d</strong> cho vị trí <strong>%s</strong>.</p>
+                        <div style="background-color: #f1f5f9; border-left: 4px solid #2563eb; padding: 16px; border-radius: 4px; margin: 20px 0;">
+                            <table style="width: 100%%; border-collapse: collapse;">
+                                <tr><td style="padding: 6px 0; color: #64748b; width: 140px;">📅 Thời gian bắt đầu</td><td style="font-weight: bold;">%s</td></tr>
+                                <tr><td style="padding: 6px 0; color: #64748b;">⏱ Thời gian kết thúc</td><td style="font-weight: bold;">%s</td></tr>
+                                <tr><td style="padding: 6px 0; color: #64748b;">💻 Hình thức</td><td style="font-weight: bold;">%s</td></tr>
+                                <tr><td style="padding: 6px 0; color: #64748b;">📍 Địa điểm / Link</td><td style="font-weight: bold;">%s</td></tr>
+                            </table>
+                        </div>
+                        <p>Vui lòng xác nhận tham dự bằng cách phản hồi email này hoặc liên hệ trực tiếp với bộ phận Nhân sự nếu bạn có thắc mắc.</p>
+                        <p>Chúc bạn chuẩn bị tốt và buổi phỏng vấn diễn ra thành công!</p>
+                        <br/>
+                        <p>Trân trọng,</p>
+                        <p><strong>Bộ phận Tuyển dụng HRM AI</strong></p>
+                    </div>
+                    <div style="background-color: #f8fafc; padding: 15px; text-align: center; color: #64748b; font-size: 12px; border-top: 1px solid #e0e0e0;">
+                        Đây là email tự động từ hệ thống HRM AI. Vui lòng không trả lời email này.
+                    </div>
+                </body>
+                </html>
+                """.formatted(
+                    candidateName != null ? candidateName : "Ứng viên",
+                    round,
+                    jobTitle != null ? jobTitle : "Chưa xác định",
+                    scheduledStart != null ? scheduledStart : "Chưa xác định",
+                    scheduledEnd != null ? scheduledEnd : "Chưa xác định",
+                    modeLabel,
+                    locationLabel
+            );
+
+            helper.setText(htmlContent, true);
+            mailSender.send(message);
+            log.info("Đã gửi email lịch phỏng vấn vòng {} thành công cho: {}", round, to);
+
+        } catch (Exception e) {
+            log.error("LỖI khi gửi email lịch phỏng vấn cho {}: {}", to, e.getMessage(), e);
+        }
+    }
 }

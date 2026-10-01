@@ -18,7 +18,6 @@ public interface HiringSeatRepository extends JpaRepository<HiringSeat, Long> {
     long countByRequisitionIdAndKindAndStatusIn(Long requisitionId, HiringSeatKind kind, List<HiringSeatStatus> statuses);
     Optional<HiringSeat> findByApplicationIdAndStatus(Long applicationId, HiringSeatStatus status);
 
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query(value = "SELECT * FROM hiring_seats WHERE requisition_id = :requisitionId AND kind = 'STANDARD' AND status = 'AVAILABLE' ORDER BY id LIMIT 1 FOR UPDATE", nativeQuery = true)
     Optional<HiringSeat> lockFirstAvailableStandard(@Param("requisitionId") Long requisitionId);
 

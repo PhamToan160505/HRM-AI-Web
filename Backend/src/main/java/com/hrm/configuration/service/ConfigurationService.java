@@ -54,19 +54,21 @@ public class ConfigurationService {
             "ai.max_verify_points",
             "ai.negation_patterns");
 
-    private static final Set<String> REQUIRED_SCORING_KEYS = Set.of(
-            "scoring.evidence_multiplier.listed_only",
-            "scoring.evidence_multiplier.mentioned",
-            "scoring.evidence_multiplier.demonstrated",
-            "scoring.evidence_grade.low_ratio",
-            "scoring.evidence_grade.high_ratio",
-            "scoring.evidence_grade.low_score_max",
-            "scoring.evidence_grade.high_score_min",
-            "scoring.ngram_n",
-            "scoring.copy_span_threshold",
-            "scoring.mirroring_warn_threshold",
-            "scoring.confidence.unverified_citation_ratio_max",
-            "scoring.max_input_chars");
+    private static final Map<String, ConfigurationValueType> REQUIRED_SCORING_TYPES = Map.ofEntries(
+            Map.entry("scoring.evidence_multiplier.listed_only", ConfigurationValueType.DECIMAL),
+            Map.entry("scoring.evidence_multiplier.mentioned", ConfigurationValueType.DECIMAL),
+            Map.entry("scoring.evidence_multiplier.demonstrated", ConfigurationValueType.DECIMAL),
+            Map.entry("scoring.evidence_grade.low_ratio", ConfigurationValueType.DECIMAL),
+            Map.entry("scoring.evidence_grade.high_ratio", ConfigurationValueType.DECIMAL),
+            Map.entry("scoring.evidence_grade.low_score_max", ConfigurationValueType.DECIMAL),
+            Map.entry("scoring.evidence_grade.high_score_min", ConfigurationValueType.DECIMAL),
+            Map.entry("scoring.ngram_n", ConfigurationValueType.INTEGER),
+            Map.entry("scoring.copy_span_threshold", ConfigurationValueType.DECIMAL),
+            Map.entry("scoring.mirroring_warn_threshold", ConfigurationValueType.DECIMAL),
+            Map.entry("scoring.confidence.unverified_citation_ratio_max", ConfigurationValueType.DECIMAL),
+            Map.entry("scoring.max_input_chars", ConfigurationValueType.INTEGER));
+
+    private static final Set<String> REQUIRED_SCORING_KEYS = REQUIRED_SCORING_TYPES.keySet();
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -117,7 +119,13 @@ public class ConfigurationService {
             if (!missing.isEmpty()) {
                 throw AppException.conflict("Thiếu cấu hình scoring profile " + profileId + ": " + String.join(", ", missing));
             }
-            parameters.values().forEach(this::validateScoringParameter);
+            parameters.forEach((key, parameter) -> {
+                ConfigurationValueType expectedType = REQUIRED_SCORING_TYPES.get(key);
+                if (expectedType != null && parameter.getValueType() != expectedType) {
+                    throw AppException.conflict("Sai kiểu cấu hình " + key + ": cần " + expectedType);
+                }
+                validateScoringParameter(parameter);
+            });
             return parameters;
         });
     }

@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import {
   BadgeCheck,
   BriefcaseBusiness,
+  Building2,
   CalendarDays,
   Check,
   CheckCircle2,
@@ -10,10 +11,13 @@ import {
   FileText,
   Loader2,
   MessageSquareText,
+  MapPin,
+  Printer,
   ShieldCheck,
   X,
 } from 'lucide-react';
 import { formatCurrencyVND } from '../../utils/currency';
+import { parseJson } from '../../utils/offer';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
@@ -67,7 +71,8 @@ function safeAllowances(value) {
     const parsed = JSON.parse(value);
     if (typeof parsed === 'string') return parsed;
     if (parsed?.description) return parsed.description;
-    const values = Object.values(parsed || {}).filter(Boolean);
+    if (Array.isArray(parsed?.items) || Array.isArray(parsed?.benefits)) return null;
+    const values = Object.values(parsed || {}).filter(item => typeof item === 'string' && item);
     return values.length ? values.join(', ') : null;
   } catch {
     return value;
@@ -91,6 +96,10 @@ export default function PublicOfferPage() {
   const [error, setError] = useState('');
   const [selectedAction, setSelectedAction] = useState(null);
   const [comment, setComment] = useState('');
+  const [confirmedRead, setConfirmedRead] = useState(false);
+  const [responseDetails, setResponseDetails] = useState({
+    topics: [], salaryExpectation: '', preferredStartDate: '', declineReason: '',
+  });
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -113,6 +122,9 @@ export default function PublicOfferPage() {
   }, [token]);
 
   const allowanceText = useMemo(() => safeAllowances(offer?.allowancesJson), [offer]);
+  const details = useMemo(() => parseJson(offer?.offerDetailsJson, {}), [offer]);
+  const compensationItems = Array.isArray(details.compensation?.items) ? details.compensation.items : [];
+  const benefits = Array.isArray(details.benefits) ? details.benefits : [];
   const isActive = offer?.dispatchStatus === 'ACTIVE' && !offer?.expired;
   const completedContent = offer?.expired
     ? { title: 'Offer đã hết hạn', detail: 'Hạn phản hồi đã kết thúc. Vui lòng liên hệ bộ phận tuyển dụng để được hỗ trợ.' }
@@ -124,16 +136,37 @@ export default function PublicOfferPage() {
       setError('Vui lòng nhập nội dung bạn muốn trao đổi.');
       return;
     }
+    if (selectedAction === 'ACCEPT' && !confirmedRead) {
+      setError('Vui lòng xác nhận bạn đã đọc và hiểu nội dung offer.');
+      return;
+    }
+    if (selectedAction === 'DECLINE' && !responseDetails.declineReason) {
+      setError('Vui lòng chọn lý do từ chối.');
+      return;
+    }
     setSubmitting(true);
     setError('');
     try {
+      const structuredResponse = selectedAction === 'ACCEPT'
+        ? { confirmedRead: true }
+        : selectedAction === 'DECLINE'
+          ? { declineReason: responseDetails.declineReason }
+          : {
+              topics: responseDetails.topics,
+              salaryExpectation: Number(responseDetails.salaryExpectation.replace(/\D/g, '')) || null,
+              preferredStartDate: responseDetails.preferredStartDate || null,
+            };
       const response = await fetch(`${API_URL}/public/offers/${encodeURIComponent(token)}/respond`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Idempotency-Key': crypto.randomUUID(),
         },
-        body: JSON.stringify({ action: selectedAction, comment: comment.trim() || null }),
+        body: JSON.stringify({
+          action: selectedAction,
+          comment: comment.trim() || null,
+          responseDetails: structuredResponse,
+        }),
       });
       const body = await response.json().catch(() => null);
       if (!response.ok || !body?.success) {
@@ -142,6 +175,7 @@ export default function PublicOfferPage() {
       setOffer(body.data);
       setSelectedAction(null);
       setComment('');
+      setConfirmedRead(false);
     } catch (submitError) {
       setError(submitError.message || 'Không thể kết nối đến máy chủ.');
     } finally {
@@ -176,7 +210,7 @@ export default function PublicOfferPage() {
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="border-b border-blue-800 bg-blue-700 text-white">
+      <header className="print:hidden border-b border-blue-800 bg-blue-700 text-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 sm:px-8">
           <div className="flex items-center gap-3">
             <div className="grid size-10 place-items-center rounded-xl bg-white text-blue-700"><BriefcaseBusiness size={21} /></div>
@@ -185,14 +219,15 @@ export default function PublicOfferPage() {
               <p className="text-xs text-blue-100">Đề nghị làm việc</p>
             </div>
           </div>
-          <div className="flex items-center gap-2 text-xs font-medium text-blue-100">
-            <ShieldCheck size={16} /> Liên kết bảo mật
+          <div className="flex items-center gap-3 text-xs font-medium text-blue-100">
+            <button type="button" onClick={() => window.print()} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-400/60 px-3 py-2 text-white hover:bg-blue-600"><Printer size={15} />Lưu PDF</button>
+            <span className="inline-flex items-center gap-1.5"><ShieldCheck size={16} /> Liên kết bảo mật</span>
           </div>
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-6xl gap-6 px-5 py-8 sm:px-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:py-12">
-        <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+      <div className="mx-auto grid max-w-6xl gap-6 px-5 py-8 print:grid-cols-1 print:p-0 sm:px-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:py-12">
+        <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm print:border-0 print:shadow-none sm:p-8">
           <div className="border-b border-slate-100 pb-7">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
               <BadgeCheck size={15} /> Offer chính thức, phiên bản {offer.versionNumber}
@@ -212,6 +247,12 @@ export default function PublicOfferPage() {
                 <dt className="text-xs font-semibold uppercase tracking-wider text-slate-500">Vị trí</dt>
                 <dd className="mt-1.5 font-semibold text-slate-900">{offer.jobTitle}</dd>
               </div>
+              {details.job?.departmentName && (
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wider text-slate-500">Phòng ban</dt>
+                  <dd className="mt-1.5 flex items-center gap-2 font-semibold text-slate-900"><Building2 size={17} className="text-blue-600" />{details.job.departmentName}</dd>
+                </div>
+              )}
               <div>
                 <dt className="text-xs font-semibold uppercase tracking-wider text-slate-500">Lương cơ bản</dt>
                 <dd className="mt-1.5 text-xl font-bold text-blue-700">{formatCurrencyVND(offer.baseSalary)}</dd>
@@ -224,6 +265,18 @@ export default function PublicOfferPage() {
                 <dt className="text-xs font-semibold uppercase tracking-wider text-slate-500">Thử việc</dt>
                 <dd className="mt-1.5 font-medium text-slate-800">{offer.probationMonths} tháng, {offer.probationSalaryRate}% lương</dd>
               </div>
+              {details.job?.workplace && (
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wider text-slate-500">Địa điểm làm việc</dt>
+                  <dd className="mt-1.5 flex items-center gap-2 font-medium text-slate-800"><MapPin size={17} className="text-blue-600" />{details.job.workplace}</dd>
+                </div>
+              )}
+              {details.job?.managerName && (
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wider text-slate-500">Quản lý trực tiếp</dt>
+                  <dd className="mt-1.5 font-medium text-slate-800">{details.job.managerName}</dd>
+                </div>
+              )}
               {allowanceText && (
                 <div className="sm:col-span-2">
                   <dt className="text-xs font-semibold uppercase tracking-wider text-slate-500">Phụ cấp và phúc lợi</dt>
@@ -232,6 +285,38 @@ export default function PublicOfferPage() {
               )}
             </dl>
           </div>
+
+          {(compensationItems.length > 0 || benefits.length > 0) && (
+            <div className="border-t border-slate-100 py-7">
+              <h2 className="text-lg font-bold text-slate-900">Thu nhập và phúc lợi</h2>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {compensationItems.map((item, index) => (
+                  <div key={`comp-${index}`} className="rounded-xl bg-slate-50 p-4">
+                    <p className="text-sm font-bold text-slate-900">{item.label}</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-600">{item.amount ? formatCurrencyVND(item.amount) : ''}{item.amount && item.note ? ' · ' : ''}{item.note}</p>
+                  </div>
+                ))}
+                {benefits.map((item, index) => (
+                  <div key={`benefit-${index}`} className="rounded-xl bg-slate-50 p-4">
+                    <p className="text-sm font-bold text-slate-900">{item.label}</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-600">{item.description || 'Theo chính sách công ty'}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {details.workSchedule && (
+            <div className="border-t border-slate-100 py-7">
+              <h2 className="text-lg font-bold text-slate-900">Thời gian và điều kiện làm việc</h2>
+              <div className="mt-4 grid gap-4 text-sm text-slate-700 sm:grid-cols-2">
+                <p><strong className="block text-slate-900">Lịch làm việc</strong>{details.workSchedule.workingDays} · {details.workSchedule.workingHours}</p>
+                <p><strong className="block text-slate-900">Phép năm</strong>{details.workSchedule.annualLeaveDays || 0} ngày/năm</p>
+                <p><strong className="block text-slate-900">Chu kỳ trả lương</strong>Hàng tháng, ngày {details.compensation?.payDay || '--'}</p>
+                <p><strong className="block text-slate-900">Loại hợp đồng dự kiến</strong>{details.job?.contractType === 'INDEFINITE' ? 'Không xác định thời hạn' : `Xác định thời hạn ${details.job?.contractDurationMonths || ''} tháng`}</p>
+              </div>
+            </div>
+          )}
 
           <div className="border-t border-slate-100 pt-7">
             <h2 className="flex items-center gap-2 text-lg font-bold text-slate-900"><FileText size={19} className="text-blue-600" />Điều khoản</h2>
@@ -244,7 +329,7 @@ export default function PublicOfferPage() {
           </div>
         </section>
 
-        <aside className="lg:sticky lg:top-6 lg:self-start">
+        <aside className="print:hidden lg:sticky lg:top-6 lg:self-start">
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex items-start gap-3 rounded-xl bg-blue-50 p-4 text-blue-900">
               <Clock3 className="mt-0.5 shrink-0 text-blue-600" size={20} />
@@ -296,6 +381,31 @@ export default function PublicOfferPage() {
             <textarea id="offer-comment" value={comment} onChange={event => setComment(event.target.value)}
               className="mt-2 min-h-28 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
               placeholder={selectedAction === 'NEGOTIATE' ? 'Ví dụ: Tôi muốn trao đổi thêm về ngày bắt đầu...' : 'Nhập lời nhắn của bạn...'} />
+            {selectedAction === 'NEGOTIATE' && (
+              <div className="mt-4 space-y-3 rounded-xl bg-blue-50 p-4">
+                <p className="text-sm font-bold text-blue-950">Nội dung muốn thương lượng</p>
+                <div className="flex flex-wrap gap-2">
+                  {['Lương', 'Ngày bắt đầu', 'Phụ cấp', 'Phúc lợi', 'Hình thức làm việc'].map(topic => (
+                    <label key={topic} className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-white px-2.5 py-2 text-xs font-semibold text-slate-700">
+                      <input type="checkbox" checked={responseDetails.topics.includes(topic)} onChange={event => setResponseDetails(current => ({ ...current, topics: event.target.checked ? [...current.topics, topic] : current.topics.filter(item => item !== topic) }))} />{topic}
+                    </label>
+                  ))}
+                </div>
+                <input className="w-full rounded-lg border border-blue-100 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500" placeholder="Mức lương mong muốn (nếu có)" value={responseDetails.salaryExpectation} onChange={event => setResponseDetails(current => ({ ...current, salaryExpectation: event.target.value }))} />
+                <label className="block text-xs font-semibold text-slate-600">Ngày bắt đầu mong muốn<input type="date" className="mt-1 w-full rounded-lg border border-blue-100 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500" value={responseDetails.preferredStartDate} onChange={event => setResponseDetails(current => ({ ...current, preferredStartDate: event.target.value }))} /></label>
+              </div>
+            )}
+            {selectedAction === 'DECLINE' && (
+              <select className="mt-4 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-blue-500" value={responseDetails.declineReason} onChange={event => setResponseDetails(current => ({ ...current, declineReason: event.target.value }))}>
+                <option value="">-- Chọn lý do từ chối --</option><option value="COMPENSATION">Thu nhập chưa phù hợp</option><option value="ACCEPTED_OTHER_OFFER">Đã nhận công việc khác</option><option value="START_DATE">Ngày bắt đầu chưa phù hợp</option><option value="PERSONAL">Lý do cá nhân</option><option value="OTHER">Lý do khác</option>
+              </select>
+            )}
+            {selectedAction === 'ACCEPT' && (
+              <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-900">
+                <input type="checkbox" className="mt-1 size-4" checked={confirmedRead} onChange={event => setConfirmedRead(event.target.checked)} />
+                <span>Tôi xác nhận đã đọc và hiểu nội dung offer. Thao tác này là chấp nhận đề nghị làm việc, chưa thay thế việc ký hợp đồng lao động.</span>
+              </label>
+            )}
             {error && <p className="mt-2 text-sm font-medium text-rose-600" role="alert">{error}</p>}
             <div className="mt-6 flex gap-3">
               <button type="button" disabled={submitting} onClick={() => { setSelectedAction(null); setError(''); }}

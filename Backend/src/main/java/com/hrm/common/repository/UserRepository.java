@@ -13,6 +13,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByEmail(String email);
     Optional<User> findByMaNhanVien(String maNhanVien);
+    Optional<User> findFirstByHoTenAndActiveTrueOrderByIdAsc(String hoTen);
     
     @org.springframework.data.jpa.repository.Query("SELECT MAX(u.maNhanVien) FROM User u WHERE u.maNhanVien LIKE CONCAT(:prefix, '%')")
     String findMaxMaNhanVienByPrefix(@org.springframework.data.repository.query.Param("prefix") String prefix);
@@ -28,6 +29,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     java.util.List<User> findByRoleIn(java.util.List<com.hrm.common.entity.Role> roles);
     Page<User> findByRoleIn(java.util.List<com.hrm.common.entity.Role> roles, Pageable pageable);
     long countByRoleIn(java.util.List<com.hrm.common.entity.Role> roles);
+    long countByActiveAndRoleIn(Boolean active, java.util.List<com.hrm.common.entity.Role> roles);
 
     @org.springframework.data.jpa.repository.Query("SELECT SUM(u.baseSalary + COALESCE(u.allowance, 0)) FROM User u WHERE u.role IN :roles")
     Double sumTotalSalaryBudgetByRoleIn(@org.springframework.data.repository.query.Param("roles") java.util.List<com.hrm.common.entity.Role> roles);

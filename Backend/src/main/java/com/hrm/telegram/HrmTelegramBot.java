@@ -22,7 +22,6 @@ import java.util.List;
  */
 @Slf4j
 @Component
-@org.springframework.boot.autoconfigure.condition.ConditionalOnExpression("'${app.telegram.bot-token:}' != '' && '${app.telegram.bot-token:}' != 'YOUR_BOT_TOKEN_HERE'")
 public class HrmTelegramBot extends TelegramLongPollingBot {
 
     private final TelegramBotProperties properties;
@@ -37,6 +36,7 @@ public class HrmTelegramBot extends TelegramLongPollingBot {
         this.properties = properties;
         this.dataService = dataService;
         this.intentService = intentService;
+        log.info("✅ HRM Telegram Bot initialized! Username: @{}", properties.getBotUsername());
     }
 
     // ─── Lệnh nhanh (slash commands) ─────────────────────────────────────
@@ -48,6 +48,8 @@ public class HrmTelegramBot extends TelegramLongPollingBot {
     private static final String CMD_REQUEST     = "/request";
     private static final String CMD_DASHBOARD   = "/dashboard";
     private static final String CMD_START       = "/start";
+    private static final String CMD_DUYET       = "/duyet";
+    private static final String CMD_TUCHOI      = "/tuchoi";
 
     @Override
     public String getBotToken() {
@@ -76,14 +78,15 @@ public class HrmTelegramBot extends TelegramLongPollingBot {
 
         // ─── Kiểm tra phân quyền ─────────────────────────────────────────
         if (!isAuthorized(username)) {
-            sendReply(chatId, "⛔ Xin lỗi, bạn không có quyền sử dụng bot này.\n" +
-                    "_Bot chỉ dành cho CEO và Giám đốc._", message.getMessageId());
+            log.warn("Unauthorized user: username='{}', firstName='{}'", username, firstName);
+            sendReply(chatId, "Xin loi, ban khong co quyen su dung bot nay.", message.getMessageId());
             return;
         }
+        log.info("Authorized user: {}", senderName);
 
         // ─── Xử lý lệnh slash (ưu tiên trước AI) ──────────────────────────
         if (text.startsWith("/")) {
-            handleSlashCommand(chatId, text.toLowerCase(), message.getMessageId(), senderName);
+            handleSlashCommand(chatId, text.toLowerCase(), message.getMessageId(), senderName, username);
         } else {
             // ─── Xử lý ngôn ngữ tự nhiên qua AI ─────────────────────────
             handleNaturalLanguage(chatId, text, message.getMessageId(), senderName);
@@ -92,27 +95,69 @@ public class HrmTelegramBot extends TelegramLongPollingBot {
 
     // ─────────────────────────── Slash Commands ────────────────────────────
 
-    private void handleSlashCommand(String chatId, String cmd, Integer replyToMsgId, String sender) {
-        // Chỉ lấy phần trước space (để ignore @botname suffix)
-        String baseCmd = cmd.split("\\s+")[0];
-        // Bỏ @username suffix nếu có
+    private void handleSlashCommand(String chatId, String cmd, Integer replyToMsgId, String sender, String username) {
+        // Tách base command và arguments — xử lý cả "/duyet 5" lẫn "/help@Hrmaii_bot"
+        // cmd đã lowercase, ví dụ: "/nhanvien@hrmaii_bot" hoặc "/duyet 5 lý do"
+        String[] parts = cmd.trim().split("\\s+", 3);
+        String baseCmd = parts[0];
+        // Bỏ @botname suffix trong base command
         if (baseCmd.contains("@")) {
             baseCmd = baseCmd.substring(0, baseCmd.indexOf("@"));
+            parts[0] = baseCmd;
         }
 
+        // Lấy managerId từ config map
+        Long managerId = properties.getUserIdMap() != null
+                ? properties.getUserIdMap().get(username != null ? username.toLowerCase() : "")
+                : null;
+
         String response = switch (baseCmd) {
-            case CMD_START  -> buildWelcomeMessage(sender);
-            case CMD_HELP   -> buildHelpMessage();
+            case CMD_START      -> buildWelcomeMessage(sender);
+            case CMD_HELP       -> buildHelpMessage();
             case CMD_NHANVIEN   -> dataService.getEmployeeSummary();
             case CMD_CHAMCONG   -> dataService.getTodayAttendance();
             case CMD_LUONG      -> dataService.getPayrollSummary();
             case CMD_TUYENDUNG  -> dataService.getRecruitmentSummary();
-            case CMD_REQUEST    -> dataService.getPendingRequestsSummary();
+            case CMD_REQUEST    -> dataService.getPendingRequestsList();
             case CMD_DASHBOARD  -> dataService.getFullDashboard();
+            case CMD_DUYET      -> handleDuyet(parts, managerId, sender);
+            case CMD_TUCHOI     -> handleTuchoi(parts, managerId, sender);
             default -> "❓ Lệnh không nhận ra. Gõ /help để xem danh sách lệnh.";
         };
 
         sendReply(chatId, response, replyToMsgId);
+    }
+
+    private String handleDuyet(String[] parts, Long managerId, String sender) {
+        if (managerId == null) {
+            return "⛔ Bạn chưa được cấu hình userId. Liên hệ admin để thiết lập user-id-map trong config.";
+        }
+        if (parts.length < 2) {
+            return "⚠️ Cú pháp: /duyet [ID đơn]\nVí dụ: /duyet 5";
+        }
+        try {
+            long requestId = Long.parseLong(parts[1].trim());
+            String note = parts.length > 2 ? parts[2].trim() : null;
+            return dataService.approveRequestById(managerId, requestId, note);
+        } catch (NumberFormatException e) {
+            return "⚠️ ID đơn phải là số. Ví dụ: /duyet 5";
+        }
+    }
+
+    private String handleTuchoi(String[] parts, Long managerId, String sender) {
+        if (managerId == null) {
+            return "⛔ Bạn chưa được cấu hình userId. Liên hệ admin để thiết lập user-id-map trong config.";
+        }
+        if (parts.length < 2) {
+            return "⚠️ Cú pháp: /tuchoi [ID đơn] [lý do]\nVí dụ: /tuchoi 5 chưa đủ số ngày phép";
+        }
+        try {
+            long requestId = Long.parseLong(parts[1].trim());
+            String reason = parts.length > 2 ? parts[2].trim() : null;
+            return dataService.rejectRequestById(managerId, requestId, reason);
+        } catch (NumberFormatException e) {
+            return "⚠️ ID đơn phải là số. Ví dụ: /tuchoi 5 lý do";
+        }
     }
 
     // ─────────────────────────── Natural Language ──────────────────────────
@@ -143,34 +188,29 @@ public class HrmTelegramBot extends TelegramLongPollingBot {
     private boolean isAuthorized(String username) {
         List<String> allowed = properties.getAllowedUsernames();
         if (allowed == null || allowed.isEmpty()) {
-            // Nếu không cấu hình whitelist → block tất cả (an toàn)
             log.warn("No allowed usernames configured! Blocking all users.");
             return false;
         }
-        return username != null && allowed.contains(username.toLowerCase());
+        if (username == null) return false;
+        String userLower = username.toLowerCase();
+        boolean authorized = allowed.stream()
+                .anyMatch(a -> a.toLowerCase().equals(userLower));
+        log.info("Auth check: username='{}' -> {}", username, authorized ? "ALLOWED" : "DENIED");
+        return authorized;
     }
 
     private void sendReply(String chatId, String text, Integer replyToMessageId) {
+        log.info("Sending reply to chatId={}: {}", chatId, text.substring(0, Math.min(50, text.length())));
         SendMessage msg = SendMessage.builder()
                 .chatId(chatId)
                 .text(text)
-                .parseMode("Markdown")
                 .replyToMessageId(replyToMessageId)
                 .build();
         try {
             execute(msg);
+            log.info("Reply sent successfully to chatId={}", chatId);
         } catch (TelegramApiException e) {
-            log.error("Failed to send Telegram message to {}: {}", chatId, e.getMessage());
-            // Thử gửi lại không có Markdown nếu parse error
-            try {
-                SendMessage fallback = SendMessage.builder()
-                        .chatId(chatId)
-                        .text(text.replaceAll("[*_`]", ""))
-                        .build();
-                execute(fallback);
-            } catch (TelegramApiException ex) {
-                log.error("Fallback send also failed: {}", ex.getMessage());
-            }
+            log.error("Failed to send Telegram message to {}: {}", chatId, e.getMessage(), e);
         }
     }
 
@@ -187,17 +227,17 @@ public class HrmTelegramBot extends TelegramLongPollingBot {
 
     private String buildWelcomeMessage(String sender) {
         return String.format("""
-                🤖 *Chào mừng %s đến với HRM AI Bot!*
+                🤖 Chào mừng %s đến với HRM AI Bot!
                 
                 Tôi có thể giúp bạn tra cứu thông tin nhân sự của công ty bằng tiếng Việt tự nhiên.
                 
                 ━━━━━━━━━━━━━━━━━━━━━━
-                💡 *Ví dụ bạn có thể hỏi:*
-                • "Hiện tại công ty có bao nhiêu nhân viên?"
-                • "Hôm nay ai đi muộn?"
-                • "Bảng lương tháng này thế nào?"
-                • "Đang tuyển bao nhiêu vị trí?"
-                • "Có yêu cầu nào chờ duyệt không?"
+                💡 Ví dụ bạn có thể hỏi:
+                · "Hiện tại công ty có bao nhiêu nhân viên?"
+                · "Hôm nay ai đi muộn?"
+                · "Bảng lương tháng này thế nào?"
+                · "Đang tuyển bao nhiêu vị trí?"
+                · "Có yêu cầu nào chờ duyệt không?"
                 
                 Gõ /help để xem danh sách lệnh nhanh.
                 """, sender);
@@ -205,35 +245,35 @@ public class HrmTelegramBot extends TelegramLongPollingBot {
 
     private String buildHelpMessage() {
         return """
-                📋 *DANH SÁCH LỆNH HRM AI BOT*
+                📋 DANH SÁCH LỆNH HRM AI BOT
                 ━━━━━━━━━━━━━━━━━━━━━━
                 
-                *Lệnh nhanh:*
+                Lệnh nhanh:
                 /dashboard — Tổng quan toàn bộ
-                /nhanvien — Thống kê nhân viên
-                /chamcong — Chấm công hôm nay
-                /luong — Bảng lương tháng này
+                /nhanvien  — Thống kê nhân viên
+                /chamcong  — Chấm công hôm nay
+                /luong     — Bảng lương tháng này
                 /tuyendung — Tình hình tuyển dụng
-                /request — Yêu cầu chờ phê duyệt
-                /help — Hiển thị hướng dẫn này
+                /request   — Yêu cầu chờ phê duyệt
+                /help      — Hiển thị hướng dẫn này
                 
-                *Hỏi tự nhiên:*
-                Bạn cũng có thể gõ câu hỏi bằng tiếng Việt tự nhiên, ví dụ:
-                _"Hôm nay có bao nhiêu nhân viên đi muộn?"_
-                _"Tổng chi phí lương tháng này là bao nhiêu?"_
+                Hỏi tự nhiên:
+                Bạn cũng có thể gõ câu hỏi bằng tiếng Việt, ví dụ:
+                "Hôm nay có bao nhiêu nhân viên đi muộn?"
+                "Tổng chi phí lương tháng này là bao nhiêu?"
                 
-                🔐 _Bot chỉ dành cho CEO và Giám đốc._
+                🔐 Bot chỉ dành cho CEO và Giám đốc.
                 """;
     }
 
     private String buildUnknownResponse(String originalText) {
-        return String.format("""
-                🤔 Tôi chưa hiểu rõ yêu cầu: _"%s"_
+        return """
+                🤔 Tôi chưa hiểu rõ yêu cầu của bạn.
                 
                 Hãy thử:
-                • Đặt câu hỏi rõ hơn về nhân sự, chấm công, lương, tuyển dụng
-                • Dùng lệnh /help để xem danh sách lệnh có sẵn
-                • Hoặc gõ /dashboard để xem tổng quan
-                """, originalText.length() > 50 ? originalText.substring(0, 50) + "..." : originalText);
+                · Đặt câu hỏi rõ hơn về nhân sự, chấm công, lương, tuyển dụng
+                · Dùng lệnh /help để xem danh sách lệnh có sẵn
+                · Hoặc gõ /dashboard để xem tổng quan
+                """;
     }
 }

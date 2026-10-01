@@ -1,8 +1,40 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { ArrowLeft, Save, Copy, CheckCircle2, X } from 'lucide-react';
+import { ArrowLeft, Save, Copy, CheckCircle2 } from 'lucide-react';
 import { useNotification } from '../../../context/NotificationContext';
 import api from '../../../services/api';
+import AiCriteriaBuilder from './components/AiCriteriaBuilder';
+
+const parseCriteriaDefinition = (rawCriteria) => {
+  if (!rawCriteria) return [];
+  try {
+    const parsed = typeof rawCriteria === 'string' ? JSON.parse(rawCriteria) : rawCriteria;
+    const items = Array.isArray(parsed) ? parsed : parsed?.criteria;
+    if (!Array.isArray(items)) return [];
+    return items.map((item, index) => ({
+      id: item.id || `C${index + 1}`,
+      name: item.name || '',
+      type: item.type === 'MUST' ? 'MUST' : 'NICE',
+      weight: item.weight ?? '',
+      synonymsText: Array.isArray(item.synonyms) ? item.synonyms.join(', ') : '',
+      evidenceExpected: item.evidenceExpected || ''
+    }));
+  } catch {
+    return [];
+  }
+};
+
+const serializeCriteria = (criteria) => criteria.map((item, index) => ({
+  id: `C${index + 1}`,
+  name: item.name.trim(),
+  type: item.type,
+  weight: Number(item.weight),
+  synonyms: (item.synonymsText || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean),
+  evidenceExpected: item.evidenceExpected.trim()
+}));
 
 const getMinStartDate = () => {
   const now = new Date();
@@ -38,6 +70,9 @@ export default function JobPostingForm() {
   const [isCopied, setIsCopied] = useState(false);
   const [errors, setErrors] = useState({});
   const [requisitions, setRequisitions] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [suggestingCriteria, setSuggestingCriteria] = useState(false);
+  const [criteriaConfirmed, setCriteriaConfirmed] = useState(false);
 
   const location = useLocation();
   const prefillReq = location.state?.reqData;
@@ -70,7 +105,8 @@ export default function JobPostingForm() {
     quyenLoi: '',
     targetRole: prefillReq ? prefillReq.targetRole : 'NHAN_VIEN',
     departmentId: prefillReq ? prefillReq.departmentId : '',
-    jobRequisitionId: prefillReq ? prefillReq.id : ''
+    jobRequisitionId: prefillReq ? prefillReq.id : '',
+    criteria: []
   });
 
   useEffect(() => {
@@ -100,8 +136,13 @@ export default function JobPostingForm() {
               capBacKhac: isFetchedCustomCapBac ? fetchedCapBac : '',
               description: data.description || '',
               requirements: data.requirements || '',
-              quyenLoi: data.quyenLoi || ''
+              quyenLoi: data.quyenLoi || '',
+              targetRole: data.targetRole || 'NHAN_VIEN',
+              departmentId: data.departmentId || '',
+              jobRequisitionId: data.jobRequisitionId || '',
+              criteria: parseCriteriaDefinition(data.criteriaDefinition)
             });
+            setCriteriaConfirmed(true);
           }
         } catch (err) {
           showNotification('Lỗi', 'Không thể tải dữ liệu chiến dịch', 'error');
@@ -125,6 +166,12 @@ export default function JobPostingForm() {
       };
       fetchReqs();
     }
+
+    api.get('/api/departments')
+      .then((res) => {
+        if (res.data.success) setDepartments(res.data.data);
+      })
+      .catch(() => showNotification('Lỗi', 'Không thể tải danh sách phòng ban', 'error'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, isEditMode]);
 
@@ -149,18 +196,73 @@ export default function JobPostingForm() {
         capBac: isCustomCapBac ? 'Khác' : initCapBac,
         capBacKhac: isCustomCapBac ? initCapBac : '',
         hinhThucLamViec: isCustomHinhThuc ? 'Khác' : initHinhThuc,
-        hinhThucLamViecKhac: isCustomHinhThuc ? initHinhThuc : ''
+        hinhThucLamViecKhac: isCustomHinhThuc ? initHinhThuc : '',
+        criteria: []
       });
+      setCriteriaConfirmed(false);
       if (errors.title) setErrors({...errors, title: null});
       if (errors.soLuongTuyen) setErrors({...errors, soLuongTuyen: null});
+      if (errors.departmentId || errors.jobRequisitionId) {
+        setErrors((current) => ({ ...current, departmentId: null, jobRequisitionId: null }));
+      }
     } else {
       setFormData({
         ...formData,
         jobRequisitionId: '',
         title: '',
         soLuongTuyen: '',
-        requirements: ''
+        requirements: '',
+        description: '',
+        criteria: []
       });
+      setCriteriaConfirmed(false);
+    }
+  };
+
+  const handleCriteriaChange = (criteria) => {
+    setFormData((current) => ({ ...current, criteria }));
+    setCriteriaConfirmed(false);
+    setErrors((current) => ({ ...current, criteria: null }));
+  };
+
+  const invalidateCriteriaConfirmation = () => {
+    if (formData.criteria.length > 0) setCriteriaConfirmed(false);
+  };
+
+  const handleSuggestCriteria = async () => {
+    if (!formData.title.trim()) {
+      setErrors((current) => ({ ...current, title: 'Vui lòng nhập vị trí tuyển dụng trước' }));
+      showNotification('Thiếu thông tin', 'Hãy nhập vị trí tuyển dụng trước khi tạo tiêu chí AI', 'error');
+      return;
+    }
+    if (!formData.description.trim() && !formData.requirements.trim()) {
+      setErrors((current) => ({ ...current, description: 'Cần có mô tả hoặc yêu cầu công việc để AI tạo tiêu chí' }));
+      showNotification('Thiếu JD', 'Hãy nhập mô tả hoặc yêu cầu công việc trước khi tạo tiêu chí AI', 'error');
+      return;
+    }
+
+    setSuggestingCriteria(true);
+    try {
+      const response = await api.post('/api/recruitment/jobs/criteria/suggest', {
+        title: formData.title,
+        description: formData.description,
+        requirements: formData.requirements,
+        level: formData.capBac === 'Khác' ? formData.capBacKhac : formData.capBac,
+        workMode: formData.hinhThucLamViec === 'Khác' ? formData.hinhThucLamViecKhac : formData.hinhThucLamViec
+      });
+      const suggested = (response.data.data || []).map((item, index) => ({
+        ...item,
+        id: `C${index + 1}`,
+        synonymsText: Array.isArray(item.synonyms) ? item.synonyms.join(', ') : ''
+      }));
+      setFormData((current) => ({ ...current, criteria: suggested }));
+      setCriteriaConfirmed(false);
+      setErrors((current) => ({ ...current, criteria: null }));
+      showNotification('AI đã đề xuất', 'Hãy kiểm tra, chỉnh sửa và xác nhận bộ tiêu chí trước khi lưu', 'success');
+    } catch (error) {
+      showNotification('Không thể tạo tiêu chí', error.response?.data?.message || 'AI chưa thể đề xuất tiêu chí lúc này', 'error');
+    } finally {
+      setSuggestingCriteria(false);
     }
   };
 
@@ -170,6 +272,10 @@ export default function JobPostingForm() {
 
     const newErrors = {};
     if (!formData.title.trim()) newErrors.title = 'Vui lòng nhập vị trí tuyển dụng';
+    if (!formData.departmentId) newErrors.departmentId = 'Vui lòng chọn phòng ban cần tuyển';
+    if (!isEditMode && !formData.jobRequisitionId) {
+      newErrors.jobRequisitionId = 'Vui lòng chọn yêu cầu tuyển dụng đã được duyệt';
+    }
     
     if (!formData.soLuongTuyen) {
       newErrors.soLuongTuyen = 'Vui lòng nhập số lượng cần tuyển';
@@ -198,6 +304,24 @@ export default function JobPostingForm() {
       }
     }
     if (!formData.description.trim()) newErrors.description = 'Vui lòng nhập mô tả công việc (JD)';
+
+    if (formData.criteria.length === 0) {
+      newErrors.criteria = 'Vui lòng tạo ít nhất một tiêu chí sàng lọc CV';
+    } else if (formData.criteria.length > 8) {
+      newErrors.criteria = 'Bộ tiêu chí chỉ được có tối đa 8 tiêu chí';
+    } else if (formData.criteria.some((item) => (
+      !item.name?.trim()
+      || !item.evidenceExpected?.trim()
+      || !['MUST', 'NICE'].includes(item.type)
+      || !Number.isInteger(Number(item.weight))
+      || Number(item.weight) <= 0
+    ))) {
+      newErrors.criteria = 'Mỗi tiêu chí phải có tên, mức độ, trọng số nguyên dương và bằng chứng mong đợi';
+    } else if (formData.criteria.reduce((total, item) => total + Number(item.weight), 0) !== 100) {
+      newErrors.criteria = 'Tổng trọng số của bộ tiêu chí phải bằng 100%';
+    } else if (!criteriaConfirmed) {
+      newErrors.criteria = 'Bạn cần kiểm tra và xác nhận bộ tiêu chí trước khi lưu chiến dịch';
+    }
     
     if (!formData.coThoaThuan && formData.mucLuong && formData.mucLuong.trim().startsWith('-')) {
       newErrors.mucLuong = 'Mức lương không hợp lệ (không được là số âm)';
@@ -216,7 +340,8 @@ export default function JobPostingForm() {
       let payload = {
         ...formData,
         capBac: formData.capBac === 'Khác' ? formData.capBacKhac : formData.capBac,
-        hinhThucLamViec: formData.hinhThucLamViec === 'Khác' ? formData.hinhThucLamViecKhac : formData.hinhThucLamViec
+        hinhThucLamViec: formData.hinhThucLamViec === 'Khác' ? formData.hinhThucLamViecKhac : formData.hinhThucLamViec,
+        criteria: serializeCriteria(formData.criteria)
       };
 
       let res;
@@ -282,21 +407,49 @@ export default function JobPostingForm() {
           <h2 className="text-lg font-semibold text-slate-800 border-b border-slate-100 pb-2">Thông tin cơ bản</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Phòng ban tuyển dụng <span className="text-red-500">*</span>
+              </label>
+              <select
+                required
+                value={formData.departmentId}
+                disabled={isEditMode}
+                onChange={(e) => {
+                  const departmentId = e.target.value ? Number(e.target.value) : '';
+                  setFormData({ ...formData, departmentId, jobRequisitionId: '' });
+                  setErrors((current) => ({ ...current, departmentId: null, jobRequisitionId: null }));
+                }}
+                className={`w-full px-4 py-2.5 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:cursor-not-allowed disabled:bg-slate-100 ${errors.departmentId ? 'border-red-500' : 'border-slate-200'}`}
+              >
+                <option value="">-- Chọn phòng ban cần tuyển --</option>
+                {departments.map((dept) => (
+                  <option key={dept.id} value={dept.id} disabled={dept.isLock}>
+                    {dept.tenPhong}{dept.isLock ? ' (Đã khóa)' : ''}
+                  </option>
+                ))}
+              </select>
+              {isEditMode && <p className="mt-1 text-xs text-slate-500">Phòng ban được giữ theo yêu cầu tuyển dụng đã duyệt.</p>}
+              {errors.departmentId && <p className="mt-1 text-xs text-red-500">{errors.departmentId}</p>}
+            </div>
+
             {!isEditMode && (
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Chọn từ Yêu cầu tuyển dụng đã duyệt
+                  Chọn từ yêu cầu tuyển dụng đã duyệt <span className="text-red-500">*</span>
                 </label>
                 <select 
                   value={formData.jobRequisitionId}
                   onChange={(e) => handleRequisitionSelect(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  disabled={!formData.departmentId}
+                  className={`w-full px-4 py-2.5 bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:cursor-not-allowed disabled:bg-slate-100 ${errors.jobRequisitionId ? 'border-red-500' : 'border-slate-200'}`}
                 >
-                  <option value="">-- Tạo tự do (Không liên kết) --</option>
-                  {requisitions.map(req => (
+                  <option value="">{formData.departmentId ? '-- Chọn yêu cầu đã duyệt --' : '-- Chọn phòng ban trước --'}</option>
+                  {requisitions.filter((req) => Number(req.departmentId) === Number(formData.departmentId)).map(req => (
                     <option key={req.id} value={req.id}>{req.title}</option>
                   ))}
                 </select>
+                {errors.jobRequisitionId && <p className="mt-1 text-xs text-red-500">{errors.jobRequisitionId}</p>}
               </div>
             )}
             
@@ -311,6 +464,7 @@ export default function JobPostingForm() {
                 value={formData.title}
                 onChange={(e) => {
                   setFormData({...formData, title: e.target.value});
+                  invalidateCriteriaConfirmation();
                   if (errors.title) setErrors({...errors, title: null});
                 }}
               />
@@ -348,7 +502,10 @@ export default function JobPostingForm() {
               <select 
                 className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                 value={formData.capBac}
-                onChange={(e) => setFormData({...formData, capBac: e.target.value})}
+                onChange={(e) => {
+                  setFormData({...formData, capBac: e.target.value});
+                  invalidateCriteriaConfirmation();
+                }}
               >
                 <option value="">-- Chọn cấp bậc --</option>
                 <option value="Thực tập sinh (Intern)">Thực tập sinh (Intern)</option>
@@ -364,7 +521,10 @@ export default function JobPostingForm() {
                   type="text"
                   required
                   value={formData.capBacKhac}
-                  onChange={(e) => setFormData({...formData, capBacKhac: e.target.value})}
+                  onChange={(e) => {
+                    setFormData({...formData, capBacKhac: e.target.value});
+                    invalidateCriteriaConfirmation();
+                  }}
                   placeholder="Nhập cấp bậc khác..."
                   className="mt-2 w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                 />
@@ -380,6 +540,7 @@ export default function JobPostingForm() {
                 value={formData.hinhThucLamViec}
                 onChange={(e) => {
                   setFormData({...formData, hinhThucLamViec: e.target.value});
+                  invalidateCriteriaConfirmation();
                   if (errors.hinhThucLamViec) setErrors({...errors, hinhThucLamViec: null});
                 }}
               >
@@ -394,7 +555,10 @@ export default function JobPostingForm() {
                   type="text"
                   required
                   value={formData.hinhThucLamViecKhac}
-                  onChange={(e) => setFormData({...formData, hinhThucLamViecKhac: e.target.value})}
+                  onChange={(e) => {
+                    setFormData({...formData, hinhThucLamViecKhac: e.target.value});
+                    invalidateCriteriaConfirmation();
+                  }}
                   placeholder="Nhập hình thức làm việc khác..."
                   className="mt-2 w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                 />
@@ -520,6 +684,7 @@ export default function JobPostingForm() {
               value={formData.description}
               onChange={(e) => {
                 setFormData({...formData, description: e.target.value});
+                invalidateCriteriaConfirmation();
                 if (errors.description) setErrors({...errors, description: null});
               }}
             />
@@ -534,7 +699,10 @@ export default function JobPostingForm() {
               rows={4}
               className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
               value={formData.requirements}
-              onChange={(e) => setFormData({...formData, requirements: e.target.value})}
+              onChange={(e) => {
+                setFormData({...formData, requirements: e.target.value});
+                invalidateCriteriaConfirmation();
+              }}
             />
           </div>
 
@@ -550,6 +718,19 @@ export default function JobPostingForm() {
             />
           </div>
         </div>
+
+        <AiCriteriaBuilder
+          criteria={formData.criteria}
+          onChange={handleCriteriaChange}
+          onSuggest={handleSuggestCriteria}
+          suggesting={suggestingCriteria}
+          confirmed={criteriaConfirmed}
+          onConfirmedChange={(checked) => {
+            setCriteriaConfirmed(checked);
+            if (checked) setErrors((current) => ({ ...current, criteria: null }));
+          }}
+          error={errors.criteria}
+        />
 
         <div className="pt-6 border-t border-slate-100 flex justify-end gap-3">
           <button 

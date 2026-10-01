@@ -32,16 +32,14 @@ export default function JobRequisitionForm() {
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
-    if (user?.role === 'ceo' || user?.role === 'admin') {
-      api.get('/api/departments')
-        .then(res => {
-          if (res.data.success) {
-            setDepartments(res.data.data);
-          }
-        })
-        .catch(err => console.error("Error fetching departments", err));
-    }
-  }, [user]);
+    api.get('/api/departments')
+      .then(res => {
+        if (res.data.success) {
+          setDepartments(res.data.data);
+        }
+      })
+      .catch(() => show('Lỗi', 'Không thể tải danh sách phòng ban', 'error'));
+  }, [show]);
 
   const getDefaultRole = (role) => {
     if (role === 'ceo' || role === 'admin') return 'GIAM_DOC_PHONG_BAN';
@@ -140,7 +138,7 @@ export default function JobRequisitionForm() {
     if (!Number.isInteger(Number(formData.soLuong)) || Number(formData.soLuong) <= 0) {
       nextErrors.soLuong = 'Số lượng phải là số nguyên lớn hơn 0.';
     }
-    if ((user?.role === 'ceo' || user?.role === 'admin') && !formData.departmentId) {
+    if (!formData.departmentId) {
       nextErrors.departmentId = 'Vui lòng chọn phòng ban.';
     }
     if (!formData.reason.trim()) {
@@ -386,25 +384,25 @@ export default function JobRequisitionForm() {
               </div>
             </div>
 
-            {(user.role === 'ceo' || user.role === 'admin') && (
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Phòng ban <span className="text-red-500">*</span></label>
-                <select 
-                  required
-                  value={formData.departmentId || ''} 
-                  onChange={(e) => updateField('departmentId', e.target.value ? parseInt(e.target.value, 10) : null)}
-                  aria-invalid={Boolean(errors.departmentId)}
-                  aria-describedby={errors.departmentId ? 'department-error' : undefined}
-                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${errors.departmentId ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border-slate-300 focus:border-blue-600 focus:ring-blue-500/20'}`}
-                >
-                  <option value="">-- Chọn phòng ban --</option>
-                  {departments.map(dept => (
-                    <option key={dept.id} value={dept.id}>{dept.tenPhong}</option>
-                  ))}
-                </select>
-                {errors.departmentId && <p id="department-error" className="mt-1.5 text-xs font-medium text-red-600">{errors.departmentId}</p>}
-              </div>
-            )}
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Phòng ban tuyển dụng <span className="text-red-500">*</span></label>
+              <select
+                required
+                value={formData.departmentId || ''}
+                onChange={(e) => updateField('departmentId', e.target.value ? parseInt(e.target.value, 10) : null)}
+                aria-invalid={Boolean(errors.departmentId)}
+                aria-describedby={errors.departmentId ? 'department-error' : undefined}
+                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${errors.departmentId ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border-slate-300 focus:border-blue-600 focus:ring-blue-500/20'}`}
+              >
+                <option value="">-- Chọn phòng ban cần tuyển --</option>
+                {departments.map(dept => (
+                  <option key={dept.id} value={dept.id} disabled={dept.isLock}>
+                    {dept.tenPhong}{dept.isLock ? ' (Đã khóa)' : ''}
+                  </option>
+                ))}
+              </select>
+              {errors.departmentId && <p id="department-error" className="mt-1.5 text-xs font-medium text-red-600">{errors.departmentId}</p>}
+            </div>
 
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1">

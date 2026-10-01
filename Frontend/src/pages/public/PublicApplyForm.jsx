@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { Upload, CheckCircle2, Building2, ChevronRight, Loader2 } from 'lucide-react';
 import { useNotification } from '../../context/NotificationContext';
@@ -16,9 +16,9 @@ export default function PublicApplyForm() {
   
   const [step, setStep] = useState(1);
   const [cvFile, setCvFile] = useState(null);
-  const [aiConsent, setAiConsent] = useState(false);
-  const [consentNotice, setConsentNotice] = useState(null);
+  const aiConsent = true; // AI luôn phân tích CV — không cần đồng ý từ ứng viên
   const [submitting, setSubmitting] = useState(false);
+  const submissionLockRef = useRef(false);
   const [extractingCv, setExtractingCv] = useState(false);
   const [extractedCvData, setExtractedCvData] = useState(null);
 
@@ -40,13 +40,7 @@ export default function PublicApplyForm() {
       });
   }, [jobSlug]);
 
-  useEffect(() => {
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
-    fetch(`${apiUrl}/public/apply/${jobSlug}/ai-consent`)
-      .then(res => res.json())
-      .then(data => data.success && setConsentNotice(data.data))
-      .catch(() => setConsentNotice(null));
-  }, [jobSlug]);
+
 
   const handleNextToStep2 = () => {
     if (!cvFile) {
@@ -59,10 +53,6 @@ export default function PublicApplyForm() {
   const handleExtractAI = async () => {
     if (!cvFile) {
       showNotification('Lỗi', 'Không có CV để trích xuất', 'error');
-      return;
-    }
-    if (!aiConsent) {
-      showNotification('Cần sự đồng ý', 'Hãy đồng ý phân tích CV bằng AI trước khi dùng tính năng này.', 'error');
       return;
     }
 
@@ -93,11 +83,27 @@ export default function PublicApplyForm() {
   };
 
   const handleSubmit = async (formData) => {
-    if (submitting) return;
-    if (!formData.fullName?.trim() || !formData.email?.trim() || !formData.phone?.trim()) {
-      showNotification('Thiếu thông tin', 'Họ tên, email và số điện thoại là bắt buộc.', 'error');
+    if (submissionLockRef.current) return;
+
+    const requiredFields = [
+      ['fullName', 'Họ và tên'],
+      ['phone', 'Số điện thoại'],
+      ['dob', 'Ngày sinh'],
+      ['tinhThanh', 'Tỉnh thành'],
+      ['phuongXa', 'Phường/Xã'],
+      ['address', 'Địa chỉ'],
+      ['email', 'Email']
+    ];
+    const missingFields = requiredFields
+      .filter(([key]) => !String(formData[key] || '').trim())
+      .map(([, label]) => label);
+
+    if (missingFields.length > 0) {
+      showNotification('Thiếu thông tin', `Vui lòng nhập: ${missingFields.join(', ')}.`, 'error');
       return;
     }
+
+    submissionLockRef.current = true;
     setSubmitting(true);
     try {
       const data = new FormData();
@@ -111,9 +117,12 @@ export default function PublicApplyForm() {
       data.append('rawCvText', '');
       
       // Gửi toàn bộ thông tin ứng viên đã nhập làm extractedData ban đầu
+      const allFields = ['fullName', 'email', 'phone', 'dob', 'gender', 'address', 'tinhThanh', 'phuongXa', 'gioiThieu'];
       const formattedData = {};
-      ['fullName', 'email', 'phone'].forEach(key => {
-        formattedData[key] = { value: formData[key], confidence: 100 };
+      allFields.forEach(key => {
+        if (formData[key]) {
+          formattedData[key] = { value: formData[key], confidence: 100 };
+        }
       });
       data.append('extractedData', JSON.stringify(formattedData));
 
@@ -132,6 +141,7 @@ export default function PublicApplyForm() {
     } catch (err) {
       showNotification('Lỗi', 'Lỗi kết nối', 'error');
     } finally {
+      submissionLockRef.current = false;
       setSubmitting(false);
     }
   };
@@ -258,16 +268,7 @@ export default function PublicApplyForm() {
                 </div>
               </label>
 
-              <label className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4">
-                <input type="checkbox" checked={aiConsent} onChange={(e) => setAiConsent(e.target.checked)}
-                  className="mt-1 h-4 w-4 rounded border-blue-300 text-blue-600" />
-                <span className="text-sm text-slate-700">
-                  <strong className="block text-slate-900">Đồng ý để AI hỗ trợ phân tích CV (không bắt buộc)</strong>
-                  <span>{consentNotice?.purpose || 'AI chỉ hỗ trợ trích xuất bằng chứng; con người quyết định tuyển dụng.'}</span>
-                  {consentNotice?.providerDisclosure && <span className="mt-1 block text-xs text-slate-500">{consentNotice.providerDisclosure}</span>}
-                  <span className="mt-1 block text-xs font-medium text-blue-700">Không đồng ý vẫn nộp hồ sơ bình thường.</span>
-                </span>
-              </label>
+
             </div>
 
             <div className="pt-6 flex justify-end">
@@ -293,7 +294,7 @@ export default function PublicApplyForm() {
             )}
             
             <div className="bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded-lg text-sm flex items-center justify-between">
-              <span>Hệ thống đã nhận CV. Vui lòng nhập ba thông tin liên hệ bên dưới; AI chỉ phân tích bằng chứng sau khi nộp và chỉ khi bạn đồng ý.</span>
+              <span>Hệ thống đã nhận CV. Vui lòng nhập ba thông tin liên hệ bên dưới; AI sẽ tự động hỗ trợ phân tích hồ sơ sau khi nộp.</span>
               <button 
                 onClick={handleExtractAI}
                 disabled={extractingCv || !aiConsent}
@@ -309,7 +310,7 @@ export default function PublicApplyForm() {
 
             <ApplicationPersonalInfoForm 
               mode="public" 
-              initialData={extractedCvData || { fullName: { value: '' } }} // Dữ liệu AI bóc tách
+              initialData={extractedCvData} // null ổn định để form không bị reset khi component cha render lại
               onSave={handleSubmit}
             />
             
@@ -329,9 +330,7 @@ export default function PublicApplyForm() {
             </div>
             <h3 className="text-2xl font-bold text-slate-800">Nộp hồ sơ thành công!</h3>
             <p className="text-slate-600 max-w-md mx-auto">
-              {aiConsent
-                ? 'Hồ sơ đã được gửi đến bộ phận Tuyển dụng và AI đang hỗ trợ trích xuất bằng chứng theo sự đồng ý của bạn. Con người là bên quyết định.'
-                : 'Hồ sơ đã được gửi đến bộ phận Tuyển dụng và không được gửi cho nhà cung cấp AI. Chúng tôi sẽ phản hồi qua email.'}
+              Hồ sơ đã được gửi đến bộ phận Tuyển dụng. AI sẽ hỗ trợ phân tích hồ sơ để đội ngũ tuyển dụng xem xét. Con người là bên quyết định cuối cùng.
             </p>
           </div>
         )}

@@ -13,20 +13,20 @@ import com.hrm.common.repository.DepartmentRepository;
 import com.hrm.common.repository.UserRepository;
 import com.hrm.notification.service.NotificationService;
 import com.hrm.security.CustomUserDetails;
-import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
 public class AttendanceService {
 
     private final AttendanceRepository attendanceRepository;
@@ -34,12 +34,33 @@ public class AttendanceService {
     private final UserRepository userRepository;
     private final NotificationService notificationService;
     private final DepartmentRepository departmentRepository;
+    private final Clock attendanceClock;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private static final double SIMILARITY_THRESHOLD = 0.6; 
-    private static final LocalTime START_TIME = LocalTime.of(8, 0); 
+    static final LocalTime CHECK_IN_OPEN_TIME = LocalTime.of(7, 30);
+    static final LocalTime PUNCH_CLOSE_TIME = LocalTime.of(18, 0);
+    private static final LocalTime START_TIME = LocalTime.of(8, 0);
+
+    public AttendanceService(AttendanceRepository attendanceRepository,
+                             FaceEmbeddingRepository faceEmbeddingRepository,
+                             UserRepository userRepository,
+                             NotificationService notificationService,
+                             DepartmentRepository departmentRepository,
+                             Clock attendanceClock) {
+        this.attendanceRepository = attendanceRepository;
+        this.faceEmbeddingRepository = faceEmbeddingRepository;
+        this.userRepository = userRepository;
+        this.notificationService = notificationService;
+        this.departmentRepository = departmentRepository;
+        this.attendanceClock = attendanceClock;
+    }
 
     public Attendance punch(Long employeeId, String incomingVectorJson, String location) {
+        LocalDate today = LocalDate.now(attendanceClock);
+        LocalTime now = LocalTime.now(attendanceClock);
+        validatePunchWindow(now);
+
         try {
             List<Double> incomingVector = objectMapper.readValue(incomingVectorJson, new TypeReference<List<Double>>() {});
             
@@ -53,9 +74,6 @@ public class AttendanceService {
                 throw new RuntimeException("Khuôn mặt không khớp. Vui lòng thử lại.");
             }
 
-            LocalDate today = LocalDate.now();
-            LocalTime now = LocalTime.now();
-            
             // Tìm các bản ghi trong ngày (phòng trường hợp DB đang có lỗi nhiều bản ghi cùng ngày)
             java.util.Optional<Attendance> todayRecordOpt = attendanceRepository.findFirstByEmployeeIdAndDateOrderByIdDesc(employeeId, today);
             
@@ -99,6 +117,17 @@ public class AttendanceService {
 
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Lỗi xử lý dữ liệu khuôn mặt", e);
+        }
+    }
+
+    private void validatePunchWindow(LocalTime now) {
+        if (now.isBefore(CHECK_IN_OPEN_TIME)) {
+            throw com.hrm.exception.AppException.badRequest(
+                    "Chưa đến giờ chấm công. Check-in mở từ 07:30.");
+        }
+        if (now.truncatedTo(ChronoUnit.MINUTES).isAfter(PUNCH_CLOSE_TIME)) {
+            throw com.hrm.exception.AppException.badRequest(
+                    "Đã hết giờ chấm công. Check-out đóng lúc 18:00.");
         }
     }
     

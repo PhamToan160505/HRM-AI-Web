@@ -21,7 +21,7 @@ public class GeminiClientService {
     private final String apiKey;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    @Value("${app.gemini.model:gemini-1.5-flash}")
+    @Value("${app.gemini.model:gemini-3.5-flash-lite}")
     private String model;
 
     public GeminiClientService(WebClient.Builder webClientBuilder,

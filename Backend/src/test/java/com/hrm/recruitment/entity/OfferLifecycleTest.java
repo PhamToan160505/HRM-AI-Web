@@ -41,7 +41,7 @@ class OfferLifecycleTest {
 
     private Offer draft() {
         return Offer.draft(1L, 1, null, new BigDecimal("15000000"), "{}", 2,
-                new BigDecimal("85"), LocalDate.now().plusMonths(1), "Terms", null,
+                new BigDecimal("85"), LocalDate.now().plusMonths(1), "Terms", "{}", null,
                 false, null, 2L);
     }
 }

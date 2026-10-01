@@ -71,7 +71,7 @@ public class OfferService {
                 applicationId, version, previous == null ? null : previous.getId(),
                 command.baseSalary(), canonicalJson(command.allowances()), command.probationMonths(),
                 command.probationSalaryRate(), command.expectedStartDate(), command.contractTerms().trim(),
-                trim(command.fileUrl()), outsideRange, rangeReason, actorId));
+                canonicalOptionalObject(command.offerDetails()), trim(command.fileUrl()), outsideRange, rangeReason, actorId));
     }
 
     @Transactional
@@ -248,11 +248,13 @@ public class OfferService {
         return dispatchResult(replacement, token);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public PublicOfferView viewByToken(String token) {
         String hash = tokenService.requireValidAndHash(token);
-        OfferDispatch dispatch = dispatchRepository.findByResponseTokenHash(hash)
+        OfferDispatch dispatch = dispatchRepository.lockByTokenHash(hash)
                 .orElseThrow(() -> AppException.notFound("Không tìm thấy offer hoặc token đã vô hiệu"));
+        dispatch.markViewed();
+        dispatchRepository.save(dispatch);
         Offer offer = offerRepository.findById(dispatch.getOfferId())
                 .orElseThrow(() -> AppException.notFound("Không tìm thấy offer"));
         Application application = applicationRepository.findById(offer.getApplicationId())
@@ -260,12 +262,13 @@ public class OfferService {
         return new PublicOfferView(offer.getId(), offer.getVersionNumber(), application.getFullName(),
                 application.getJobPosting().getTitle(), offer.getBaseSalary(), offer.getAllowancesJson(),
                 offer.getProbationMonths(), offer.getProbationSalaryRate(), offer.getExpectedStartDate(),
-                offer.getContractTerms(), offer.getFileUrl(), dispatch.getStatus(),
-                dispatch.getResponseDeadline(), dispatch.getResponseDeadline().isBefore(LocalDateTime.now()));
+                offer.getContractTerms(), offer.getOfferDetailsJson(), offer.getFileUrl(), dispatch.getStatus(),
+                dispatch.getResponseDeadline(), dispatch.getResponseDeadline().isBefore(LocalDateTime.now()),
+                dispatch.getViewedAt(), dispatch.getViewCount(), dispatch.getCandidateResponseJson());
     }
 
     @Transactional
-    public PublicOfferView respond(String token, CandidateOfferAction action, String comment,
+    public PublicOfferView respond(String token, CandidateOfferAction action, String comment, JsonNode responseDetails,
                                    String requestId, String idempotencyKey) {
         if (action == null) {
             throw AppException.badRequest("Phản hồi offer là bắt buộc");
@@ -285,9 +288,9 @@ public class OfferService {
         Offer offer = lockOffer(dispatch.getOfferId());
         Application application = lockApplication(offer.getApplicationId());
         switch (action) {
-            case ACCEPT -> accept(dispatch, offer, application, comment, requestId, idempotencyKey);
-            case DECLINE -> decline(dispatch, offer, application, comment, requestId, idempotencyKey);
-            case NEGOTIATE -> negotiate(dispatch, offer, application, comment, requestId, idempotencyKey);
+            case ACCEPT -> accept(dispatch, offer, application, comment, responseDetails, requestId, idempotencyKey);
+            case DECLINE -> decline(dispatch, offer, application, comment, responseDetails, requestId, idempotencyKey);
+            case NEGOTIATE -> negotiate(dispatch, offer, application, comment, responseDetails, requestId, idempotencyKey);
         }
         return viewByToken(token);
     }
@@ -343,8 +346,30 @@ public class OfferService {
 
     @Transactional(readOnly = true)
     public List<Offer> getApplicationOffers(Long applicationId, Long actorId) {
-        requireOfferOperator(actorId);
+        requireOfferViewer(actorId);
         return offerRepository.findByApplicationIdOrderByVersionNumberDesc(applicationId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<OfferActivityView> getApplicationOfferActivity(Long applicationId, Long actorId) {
+        requireOfferViewer(actorId);
+        applicationRepository.findById(applicationId)
+                .orElseThrow(() -> AppException.notFound("Không tìm thấy hồ sơ ứng viên"));
+        return offerRepository.findByApplicationIdOrderByVersionNumberDesc(applicationId).stream()
+                .flatMap(offer -> {
+                    List<OfferDispatch> dispatches = dispatchRepository.findByOfferIdOrderBySentAtDesc(offer.getId());
+                    if (dispatches.isEmpty()) {
+                        return java.util.stream.Stream.of(new OfferActivityView(
+                                offer.getId(), offer.getVersionNumber(), offer.getStatus(), null,
+                                null, null, null, 0, null, null, null));
+                    }
+                    return dispatches.stream().map(dispatch -> new OfferActivityView(
+                            offer.getId(), offer.getVersionNumber(), offer.getStatus(), dispatch.getStatus(),
+                            dispatch.getResponseDeadline(), dispatch.getSentAt(), dispatch.getViewedAt(),
+                            dispatch.getViewCount(), dispatch.getRespondedAt(), dispatch.getCandidateComment(),
+                            dispatch.getCandidateResponseJson()));
+                })
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -373,8 +398,9 @@ public class OfferService {
     }
 
     private void accept(OfferDispatch dispatch, Offer offer, Application application, String comment,
+                        JsonNode responseDetails,
                         String requestId, String idempotencyKey) {
-        dispatch.accept(trim(comment));
+        dispatch.accept(trim(comment), canonicalOptionalObject(responseDetails));
         HiringSeat seat = seatService.accept(dispatch.getSeatId(), application.getId(), offer.getId(),
                 childKey(idempotencyKey, "seat-accept"));
         offer.accept();
@@ -391,8 +417,9 @@ public class OfferService {
     }
 
     private void decline(OfferDispatch dispatch, Offer offer, Application application, String comment,
+                         JsonNode responseDetails,
                          String requestId, String idempotencyKey) {
-        dispatch.decline(trim(comment));
+        dispatch.decline(trim(comment), canonicalOptionalObject(responseDetails));
         seatService.release(dispatch.getSeatId(), null, "Ứng viên từ chối offer",
                 childKey(idempotencyKey, "seat-decline"));
         transitionService.transitionApplication(application, RecruitmentAction.DECLINE_OFFER,
@@ -403,12 +430,13 @@ public class OfferService {
     }
 
     private void negotiate(OfferDispatch dispatch, Offer offer, Application application, String comment,
+                           JsonNode responseDetails,
                            String requestId, String idempotencyKey) {
         String candidateComment = trim(comment);
         if (candidateComment == null) {
             throw AppException.badRequest("Đề nghị thương lượng phải có nội dung");
         }
-        dispatch.negotiate(candidateComment);
+        dispatch.negotiate(candidateComment, canonicalOptionalObject(responseDetails));
         offer.supersede();
         transitionService.transitionApplication(application, RecruitmentAction.NEGOTIATE_OFFER,
                 null, null, candidateComment, requestId, childKey(idempotencyKey, "application-negotiate"));
@@ -469,7 +497,31 @@ public class OfferService {
             throw AppException.badRequest("Điều khoản hợp đồng là bắt buộc");
         }
         canonicalJson(command.allowances());
+        validateOfferDetails(command.offerDetails());
         requireRequisitionId(application);
+    }
+
+    private void validateOfferDetails(JsonNode details) {
+        if (details == null || details.isNull()) {
+            return; // Tương thích với client cũ; UI Giai đoạn 1 luôn gửi snapshot này.
+        }
+        if (!details.isObject()) {
+            throw AppException.badRequest("Chi tiết offer phải là JSON object");
+        }
+        requireDetailsText(details, "/employer/name", "Pháp nhân tuyển dụng");
+        requireDetailsText(details, "/job/title", "Chức danh");
+        requireDetailsText(details, "/job/departmentName", "Phòng ban");
+        requireDetailsText(details, "/job/workplace", "Địa điểm làm việc");
+        requireDetailsText(details, "/job/contractType", "Loại hợp đồng");
+        requireDetailsText(details, "/compensation/salaryType", "Hình thức lương Gross/Net");
+        requireDetailsText(details, "/compensation/payCycle", "Chu kỳ trả lương");
+    }
+
+    private void requireDetailsText(JsonNode details, String pointer, String label) {
+        JsonNode value = details.at(pointer);
+        if (!value.isTextual() || value.asText().isBlank()) {
+            throw AppException.badRequest(label + " là bắt buộc trong chi tiết offer");
+        }
     }
 
     private boolean isOutsideSalaryRange(Application application, BigDecimal salary) {
@@ -502,6 +554,20 @@ public class OfferService {
             return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException exception) {
             throw AppException.badRequest("Dữ liệu phụ cấp không hợp lệ");
+        }
+    }
+
+    private String canonicalOptionalObject(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return null;
+        }
+        if (!node.isObject()) {
+            throw AppException.badRequest("Dữ liệu chi tiết phải là JSON object");
+        }
+        try {
+            return objectMapper.writeValueAsString(node);
+        } catch (JsonProcessingException exception) {
+            throw AppException.badRequest("Dữ liệu chi tiết không hợp lệ");
         }
     }
 
@@ -544,6 +610,14 @@ public class OfferService {
             return;
         }
         throw AppException.forbidden("Chỉ HR có thẩm quyền được thao tác offer");
+    }
+
+    private void requireOfferViewer(Long actorId) {
+        User actor = requireUser(actorId);
+        if (actor.getRole() == Role.ADMIN || actor.getRole() == Role.CEO || isHrManagement(actor)) {
+            return;
+        }
+        throw AppException.forbidden("Chỉ HR, người duyệt hoặc CEO được xem chi tiết offer");
     }
 
     private void requireHrHead(Long actorId) {
@@ -601,6 +675,7 @@ public class OfferService {
             BigDecimal probationSalaryRate,
             LocalDate expectedStartDate,
             String contractTerms,
+            JsonNode offerDetails,
             String fileUrl,
             String outOfRangeReason) {}
 
@@ -611,11 +686,18 @@ public class OfferService {
     public record PublicOfferView(Long offerId, Integer versionNumber, String candidateName,
                                   String jobTitle, BigDecimal baseSalary, String allowancesJson,
                                   Integer probationMonths, BigDecimal probationSalaryRate,
-                                  LocalDate expectedStartDate, String contractTerms, String fileUrl,
+                                  LocalDate expectedStartDate, String contractTerms, String offerDetailsJson, String fileUrl,
                                   OfferDispatchStatus dispatchStatus, LocalDateTime responseDeadline,
-                                  boolean expired) {}
+                                  boolean expired, LocalDateTime viewedAt, Integer viewCount,
+                                  String candidateResponseJson) {}
 
     public record SeatEventView(Long id, Long seatId, String eventType, String fromStatus,
                                 String toStatus, Long applicationId, Long offerId, Long actorId,
                                 String reason, LocalDateTime occurredAt) {}
+
+    public record OfferActivityView(Long offerId, Integer versionNumber, OfferStatus offerStatus,
+                                    OfferDispatchStatus dispatchStatus, LocalDateTime responseDeadline,
+                                    LocalDateTime sentAt, LocalDateTime viewedAt, Integer viewCount,
+                                    LocalDateTime respondedAt, String candidateComment,
+                                    String candidateResponseJson) {}
 }

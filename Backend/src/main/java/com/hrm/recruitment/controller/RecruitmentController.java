@@ -31,6 +31,7 @@ public class RecruitmentController {
     private final AiRecruiterDigestService aiRecruiterDigestService;
     private final RecruitmentTransitionService recruitmentTransitionService;
     private final AiAnalysisService aiAnalysisService;
+    private final com.hrm.ai.service.AiCriteriaSuggestionService aiCriteriaSuggestionService;
 
     // --- JOB POSTINGS ---
 
@@ -72,6 +73,19 @@ public class RecruitmentController {
         }
         JobPosting job = jobPostingService.createJob(request, userDetails);
         return ResponseEntity.ok(ApiResponse.ok(job, "Tạo tin tuyển dụng thành công"));
+    }
+
+    @PostMapping("/jobs/criteria/suggest")
+    @PreAuthorize("hasAnyRole('TRUONG_PHONG', 'GIAM_DOC_PHONG_BAN', 'CEO', 'ADMIN')")
+    public ResponseEntity<ApiResponse<List<ScreeningCriterionRequest>>> suggestCriteria(
+            @RequestBody CriteriaSuggestionRequest request,
+            @org.springframework.security.core.annotation.AuthenticationPrincipal com.hrm.security.CustomUserDetails userDetails) {
+        if (!jobPostingService.isSpecialRole(userDetails)) {
+            throw com.hrm.exception.AppException.forbidden("Bạn không có quyền tạo bộ tiêu chí tuyển dụng");
+        }
+        return ResponseEntity.ok(ApiResponse.ok(
+                aiCriteriaSuggestionService.suggest(request),
+                "AI đã đề xuất bộ tiêu chí; người tuyển dụng phải kiểm tra trước khi lưu"));
     }
 
     @PutMapping("/jobs/{id}")
@@ -118,10 +132,15 @@ public class RecruitmentController {
             @RequestParam(required = false) Long jobPostingId,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String search,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false) java.math.BigDecimal minEvidence,
+            @RequestParam(required = false) Boolean mustHaveOnly,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @org.springframework.security.core.annotation.AuthenticationPrincipal com.hrm.security.CustomUserDetails userDetails) {
-        return ResponseEntity.ok(ApiResponse.ok(applicationService.getApplicationsPaginated(jobPostingId, status, search, page, size, userDetails), "Thành công"));
+        return ResponseEntity.ok(ApiResponse.ok(applicationService.getApplicationsPaginated(
+                jobPostingId, status, search, sortBy, minEvidence, mustHaveOnly,
+                page, size, userDetails), "Thành công"));
     }
 
     @GetMapping("/applications/{id}")
@@ -251,6 +270,13 @@ public class RecruitmentController {
             Integer weight,
             List<String> synonyms,
             String evidenceExpected
+    ) {}
+    public record CriteriaSuggestionRequest(
+            String title,
+            String description,
+            String requirements,
+            String level,
+            String workMode
     ) {}
     public record StatusRequest(String status, String reason) {}
     public record PriorityRequest(boolean isPriority) {}

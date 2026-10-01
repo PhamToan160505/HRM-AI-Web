@@ -52,6 +52,14 @@ public class Offer {
     @Column(name = "contract_terms", nullable = false, columnDefinition = "TEXT")
     private String contractTerms;
 
+    /**
+     * Snapshot có cấu trúc của offer tại thời điểm tạo version. Các trường
+     * cốt lõi (lương, thử việc, ngày bắt đầu) vẫn được giữ ở cột riêng
+     * để không làm thay đổi luồng cũ.
+     */
+    @Column(name = "offer_details_json", columnDefinition = "JSON")
+    private String offerDetailsJson;
+
     @Column(name = "file_url", length = 500)
     private String fileUrl;
 
@@ -79,7 +87,7 @@ public class Offer {
     public static Offer draft(Long applicationId, int versionNumber, Long previousOfferId,
                               BigDecimal baseSalary, String allowancesJson, int probationMonths,
                               BigDecimal probationSalaryRate, LocalDate expectedStartDate,
-                              String contractTerms, String fileUrl, boolean salaryOutOfRange,
+                              String contractTerms, String offerDetailsJson, String fileUrl, boolean salaryOutOfRange,
                               String outOfRangeReason, Long createdBy) {
         Offer offer = new Offer();
         offer.applicationId = applicationId;
@@ -92,6 +100,7 @@ public class Offer {
         offer.probationSalaryRate = probationSalaryRate;
         offer.expectedStartDate = expectedStartDate;
         offer.contractTerms = contractTerms;
+        offer.offerDetailsJson = offerDetailsJson;
         offer.fileUrl = fileUrl;
         offer.salaryOutOfRange = salaryOutOfRange;
         offer.outOfRangeReason = outOfRangeReason;

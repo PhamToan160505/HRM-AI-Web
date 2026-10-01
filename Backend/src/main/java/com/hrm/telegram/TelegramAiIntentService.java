@@ -27,6 +27,9 @@ public class TelegramAiIntentService {
     @Value("${app.gemini.base-url}")
     private String geminiBaseUrl;
 
+    @Value("${app.gemini.model:gemini-3.5-flash-lite}")
+    private String geminiModel;
+
     /**
      * Intent của câu hỏi Telegram.
      */
@@ -77,8 +80,7 @@ public class TelegramAiIntentService {
     }
 
     private Mono<String> callGemini(String prompt) {
-        String modelName = "gemini-1.5-flash";
-        String url = geminiBaseUrl + "/models/" + modelName + ":generateContent?key=" + geminiApiKey;
+        String url = geminiBaseUrl + "/models/" + geminiModel + ":generateContent?key=" + geminiApiKey;
 
         Map<String, Object> requestBody = Map.of(
                 "contents", List.of(Map.of(

@@ -26,9 +26,14 @@ public class JobPostingService {
     private final RecruitmentTransitionService recruitmentTransitionService;
     private final PostingVersionLockService postingVersionLockService;
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+    private final InterviewService interviewService;
 
     private static final Pattern NONLATIN = Pattern.compile("[^\\w-]");
     private static final Pattern WHITESPACE = Pattern.compile("[\\s]");
+    private static final java.util.Set<String> SENSITIVE_SCREENING_TERMS = java.util.Set.of(
+            "tuoi", "gioi tinh", "hon nhan", "ton giao", "dan toc", "que quan",
+            "ngoai hinh", "chieu cao", "can nang", "khuyet tat",
+            "age", "gender", "marital", "religion", "ethnicity", "disability", "appearance");
 
     public boolean isSpecialRole(com.hrm.security.CustomUserDetails user) {
         if (user.getRole() == com.hrm.common.entity.Role.CEO || user.getRole() == com.hrm.common.entity.Role.ADMIN) {
@@ -110,7 +115,10 @@ public class JobPostingService {
         
         org.springframework.data.domain.Page<JobPosting> jobPage;
         if (restrictToRequester && requesterId != null) {
-            jobPage = jobPostingRepository.findWithFiltersStrictRequester(departmentId, capBac, requesterId, pageable);
+            List<Long> assignedJobIds = interviewService.assignedJobPostingIds(requesterId);
+            if (assignedJobIds.isEmpty()) assignedJobIds = List.of(-1L);
+            jobPage = jobPostingRepository.findWithFiltersForRequesterOrInterviewer(
+                    departmentId, capBac, requesterId, assignedJobIds, pageable);
         } else {
             jobPage = jobPostingRepository.findWithFilters(departmentId, capBac, requesterId, pageable);
         }
@@ -182,6 +190,8 @@ public class JobPostingService {
     public JobPosting createJob(
             com.hrm.recruitment.controller.RecruitmentController.JobPostingRequest request,
             com.hrm.security.CustomUserDetails actor) {
+        validateDepartment(request.departmentId());
+
         if (!request.ngayBatDau().isBefore(request.hanNopHoSo())) {
             throw new IllegalArgumentException("Ngày bắt đầu phải trước hạn nộp hồ sơ");
         }
@@ -204,6 +214,7 @@ public class JobPostingService {
                     org.springframework.http.HttpStatus.CONFLICT,
                     "Chỉ có thể tạo chiến dịch từ yêu cầu tuyển dụng đã được duyệt");
         }
+        validateRequisitionDepartment(requisition, request.departmentId());
 
         String slug = toSlug(request.title()) + "-" + System.currentTimeMillis();
         String criteriaDefinition = validateAndSerializeCriteria(request, null);
@@ -257,6 +268,17 @@ public class JobPostingService {
             com.hrm.security.CustomUserDetails actor) {
         JobPosting job = jobPostingRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy tin tuyển dụng"));
+
+        validateDepartment(request.departmentId());
+        Long requisitionId = request.jobRequisitionId() != null
+                ? request.jobRequisitionId()
+                : job.getJobRequisitionId();
+        if (requisitionId == null) {
+            throw com.hrm.exception.AppException.badRequest("Chiến dịch phải gắn với một yêu cầu tuyển dụng");
+        }
+        JobRequisition requisition = jobRequisitionRepository.findById(requisitionId)
+                .orElseThrow(() -> com.hrm.exception.AppException.badRequest("Không tìm thấy yêu cầu tuyển dụng"));
+        validateRequisitionDepartment(requisition, request.departmentId());
                 
         if (!request.ngayBatDau().isBefore(request.hanNopHoSo())) {
             throw new IllegalArgumentException("Ngày bắt đầu phải trước hạn nộp hồ sơ");
@@ -312,6 +334,24 @@ public class JobPostingService {
                     "Cập nhật nội dung JD/tiêu chí của posting đã mở");
         }
         return saved;
+    }
+
+    private void validateDepartment(Long departmentId) {
+        if (departmentId == null) {
+            throw com.hrm.exception.AppException.badRequest("Phòng ban tuyển dụng là bắt buộc");
+        }
+        com.hrm.common.entity.Department department = departmentRepository.findById(departmentId)
+                .orElseThrow(() -> com.hrm.exception.AppException.badRequest("Phòng ban tuyển dụng không tồn tại"));
+        if (Boolean.TRUE.equals(department.getIsLock())) {
+            throw com.hrm.exception.AppException.badRequest("Phòng ban tuyển dụng đã bị khóa");
+        }
+    }
+
+    private void validateRequisitionDepartment(JobRequisition requisition, Long departmentId) {
+        if (!java.util.Objects.equals(requisition.getDepartmentId(), departmentId)) {
+            throw com.hrm.exception.AppException.badRequest(
+                    "Phòng ban của chiến dịch phải trùng với phòng ban trong yêu cầu tuyển dụng");
+        }
     }
 
     @org.springframework.transaction.annotation.Transactional
@@ -383,7 +423,12 @@ public class JobPostingService {
             }
             criteria = List.of(new com.hrm.recruitment.controller.RecruitmentController.ScreeningCriterionRequest(
                     "C1", request.title(), "MUST", 100, List.of(),
-                    request.requirements() == null ? request.description() : request.requirements()));
+                    request.requirements() == null || request.requirements().isBlank()
+                            ? request.description()
+                            : request.requirements()));
+        }
+        if (criteria.size() > 8) {
+            throw com.hrm.exception.AppException.badRequest("Bộ tiêu chí chỉ được có tối đa 8 tiêu chí");
         }
         java.util.Set<String> ids = new java.util.HashSet<>();
         int totalWeight = 0;
@@ -394,6 +439,10 @@ public class JobPostingService {
             if (criterion.name() == null || criterion.name().isBlank()) {
                 throw com.hrm.exception.AppException.badRequest("Tên tiêu chí là bắt buộc");
             }
+            if (criterion.evidenceExpected() == null || criterion.evidenceExpected().isBlank()) {
+                throw com.hrm.exception.AppException.badRequest("Mỗi tiêu chí phải mô tả bằng chứng mong đợi trong CV");
+            }
+            assertObjectiveCriterion(criterion.name() + " " + criterion.evidenceExpected());
             if (!"MUST".equals(criterion.type()) && !"NICE".equals(criterion.type())) {
                 throw com.hrm.exception.AppException.badRequest("Loại tiêu chí chỉ nhận MUST hoặc NICE");
             }
@@ -410,5 +459,21 @@ public class JobPostingService {
         } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
             throw new IllegalStateException("Không thể lưu bộ tiêu chí chấm CV", exception);
         }
+    }
+
+    private void assertObjectiveCriterion(String value) {
+        String normalized = Normalizer.normalize(value, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .toLowerCase(Locale.ROOT);
+        if (SENSITIVE_SCREENING_TERMS.stream().anyMatch(term -> containsWholeTerm(normalized, term))) {
+            throw com.hrm.exception.AppException.badRequest(
+                    "Không được dùng thông tin nhạy cảm hoặc đặc điểm được bảo vệ làm tiêu chí tuyển dụng");
+        }
+    }
+
+    private boolean containsWholeTerm(String value, String term) {
+        return Pattern.compile("(^|[^a-z0-9])" + Pattern.quote(term) + "([^a-z0-9]|$)")
+                .matcher(value)
+                .find();
     }
 }

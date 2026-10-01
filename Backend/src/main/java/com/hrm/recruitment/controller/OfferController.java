@@ -1,5 +1,6 @@
 package com.hrm.recruitment.controller;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.hrm.approval.entity.ApprovalDecision;
 import com.hrm.exception.ApiResponse;
 import com.hrm.recruitment.entity.CandidateOfferAction;
@@ -33,13 +34,23 @@ public class OfferController {
     }
 
     @GetMapping("/api/recruitment/applications/{applicationId}/offers")
-    @PreAuthorize("hasAnyRole('TRUONG_PHONG','GIAM_DOC_PHONG_BAN','CEO')")
+    @PreAuthorize("hasAnyRole('TRUONG_PHONG','GIAM_DOC_PHONG_BAN','CEO','ADMIN')")
     public ResponseEntity<ApiResponse<List<Offer>>> list(
             @PathVariable Long applicationId,
             @org.springframework.security.core.annotation.AuthenticationPrincipal CustomUserDetails user) {
         return ResponseEntity.ok(ApiResponse.ok(
                 offerService.getApplicationOffers(applicationId, user.getUserId()),
                 "Lấy lịch sử offer thành công"));
+    }
+
+    @GetMapping("/api/recruitment/applications/{applicationId}/offer-activity")
+    @PreAuthorize("hasAnyRole('TRUONG_PHONG','GIAM_DOC_PHONG_BAN','CEO','ADMIN')")
+    public ResponseEntity<ApiResponse<List<OfferService.OfferActivityView>>> activity(
+            @PathVariable Long applicationId,
+            @org.springframework.security.core.annotation.AuthenticationPrincipal CustomUserDetails user) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                offerService.getApplicationOfferActivity(applicationId, user.getUserId()),
+                "Lấy lịch sử gửi và phản hồi offer thành công"));
     }
 
     @GetMapping("/api/recruitment/requisitions/{requisitionId}/seats")
@@ -165,7 +176,7 @@ public class OfferController {
             @RequestHeader(name = "X-Request-ID", required = false) String requestId,
             @RequestHeader(name = "Idempotency-Key") String idempotencyKey) {
         return ResponseEntity.ok(ApiResponse.ok(
-                offerService.respond(token, body.action(), body.comment(), requestId, idempotencyKey),
+                offerService.respond(token, body.action(), body.comment(), body.responseDetails(), requestId, idempotencyKey),
                 "Đã ghi nhận phản hồi offer"));
     }
 
@@ -173,5 +184,5 @@ public class OfferController {
     public record SendRequest(LocalDateTime responseDeadline, boolean overbookConfirmed, String overbookReason) {}
     public record ExtendRequest(LocalDateTime responseDeadline) {}
     public record RevokeRequest(String reason) {}
-    public record CandidateResponse(CandidateOfferAction action, String comment) {}
+    public record CandidateResponse(CandidateOfferAction action, String comment, JsonNode responseDetails) {}
 }

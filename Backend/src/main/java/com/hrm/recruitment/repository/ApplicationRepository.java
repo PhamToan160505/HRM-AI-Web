@@ -29,7 +29,7 @@ public interface ApplicationRepository extends JpaRepository<Application, Long>,
     
     java.util.List<Application> findTop5ByOrderByCreatedAtDesc();
     
-    boolean existsByEmailAndJobPostingIdAndCreatedAtAfter(String email, Long jobPostingId, LocalDateTime time);
+    boolean existsByEmailIgnoreCaseAndJobPostingId(String email, Long jobPostingId);
     long countByJobPostingId(Long jobPostingId);
     long countByJobPostingIdAndFirstViewedAtIsNull(Long jobPostingId);
     long countByJobPostingIdAndApprovalStatus(Long jobPostingId, com.hrm.recruitment.entity.ApplicationStatus status);

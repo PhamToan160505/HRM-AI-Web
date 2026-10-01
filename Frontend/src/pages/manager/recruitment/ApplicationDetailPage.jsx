@@ -8,11 +8,19 @@ import api, { apiAi } from '../../../services/api';
 import ApplicationAttachmentsBlock from './components/ApplicationAttachmentsBlock';
 import ApplicationPersonalInfoForm from './components/ApplicationPersonalInfoForm';
 import CandidateExperienceList from './components/CandidateExperienceList';
-import AIFitScoreCard from './components/AIFitScoreCard';
-import AIFraudFlagCard from './components/AIFraudFlagCard';
 import AIDecisionReasonModal from './components/AIDecisionReasonModal';
 import AIInterviewQuestionsList from './components/AIInterviewQuestionsList';
 import InterviewPanel from './components/InterviewPanel';
+import OfferComposer from './components/OfferComposer';
+import OfferReviewPanel from './components/OfferReviewPanel';
+import OfferActivityCard from './components/OfferActivityCard';
+import {
+  buildOfferDetails,
+  createEmptyOfferFields,
+  legacyAllowancesFromFields,
+  offerToFields,
+  validateOfferFields,
+} from '../../../utils/offer';
 
 export default function ApplicationDetailPage() {
   const { id } = useParams();
@@ -22,7 +30,7 @@ export default function ApplicationDetailPage() {
   const [application, setApplication] = useState(null);
   const [loading, setLoading] = useState(true);
   const [extractedData, setExtractedData] = useState(null);
-  const [aiLogs, setAiLogs] = useState([]);
+  const [, setAiLogs] = useState([]);
   const [aiAnalyses, setAiAnalyses] = useState([]);
   const [decisionLogModal, setDecisionLogModal] = useState({ isOpen: false, log: null });
   const [runningAi, setRunningAi] = useState(false);
@@ -31,20 +39,52 @@ export default function ApplicationDetailPage() {
   const [submitModal, setSubmitModal] = useState({ isOpen: false, isPriority: false });
   const [rejectModal, setRejectModal] = useState({ isOpen: false, reason: '' });
   const [offerLink, setOfferLink] = useState('');
+  const [offerHistory, setOfferHistory] = useState([]);
+  const [offerActivity, setOfferActivity] = useState([]);
+  const [offerModalLoading, setOfferModalLoading] = useState(false);
+  const [approveActionLoading, setApproveActionLoading] = useState(false);
   const latestAi = aiAnalyses[0];
+  const aiComputedResult = latestAi?.computedResult || {};
+  const aiCriteria = Array.isArray(aiComputedResult.criteria) ? aiComputedResult.criteria : [];
+  const aiFlags = Array.isArray(aiComputedResult.flags) ? aiComputedResult.flags : [];
+  const aiVerifyPoints = Array.isArray(aiComputedResult.verify_points) ? aiComputedResult.verify_points : [];
   const [approveModal, setApproveModal] = useState({ 
     isOpen: false, 
     feedback: '', 
-    fields: {
-      luongCoBan: '', phuCap: '', probationMonths: '2', probationRate: '85',
-      startDate: '', salaryRangeReason: '', responseDeadline: '', overbookConfirmed: false, overbookReason: ''
-    }
+    fields: createEmptyOfferFields()
   });
 
-  const emptyOfferFields = () => ({
-    luongCoBan: '', phuCap: '', probationMonths: '2', probationRate: '85',
-    startDate: '', salaryRangeReason: '', responseDeadline: '', overbookConfirmed: false, overbookReason: ''
-  });
+  const emptyOfferFields = () => createEmptyOfferFields(application);
+
+  const openApproveModal = async () => {
+    const state = application?.approvalStatus;
+    setApproveModal({ isOpen: true, feedback: '', fields: createEmptyOfferFields(application) });
+    if (!['PENDING_HR_OFFER', 'PENDING_OFFER_APPROVAL', 'OFFER_INTERNALLY_APPROVED', 'OFFER_EXPIRED'].includes(state)) return;
+
+    setOfferModalLoading(true);
+    try {
+      const [offersResponse, departmentsResponse] = await Promise.all([
+        api.get(`/api/recruitment/applications/${id}/offers`),
+        api.get('/api/departments'),
+      ]);
+      const offers = offersResponse.data.data || [];
+      const departments = departmentsResponse.data.data || [];
+      const departmentName = departments.find(item => Number(item.id) === Number(application?.jobPosting?.departmentId))?.tenPhong || '';
+      const latest = offers[0];
+      setOfferHistory(offers);
+      setApproveModal({
+        isOpen: true,
+        feedback: state === 'PENDING_HR_OFFER' ? latest?.contractTerms || '' : '',
+        fields: state === 'PENDING_HR_OFFER'
+          ? offerToFields(latest, application, departmentName)
+          : createEmptyOfferFields(application, departmentName),
+      });
+    } catch (error) {
+      showNotification('Lỗi', error.response?.data?.message || 'Không thể tải dữ liệu offer', 'error');
+    } finally {
+      setOfferModalLoading(false);
+    }
+  };
 
   const reloadApplication = async () => {
     const response = await api.get(`/api/recruitment/applications/${id}`);
@@ -75,24 +115,42 @@ export default function ApplicationDetailPage() {
       .catch(() => setLoading(false));
   }, [id]);
 
+  useEffect(() => {
+    const canView = role === 'admin' || role === 'ceo'
+      || ((role === 'truong_phong' || role === 'giam_doc_phong_ban') && user?.tenPhong === 'Nhân sự');
+    if (!application || !canView || (!application.approvalStatus?.includes('OFFER') && application.approvalStatus !== 'PENDING_HR_OFFER')) {
+      setOfferActivity([]);
+      return;
+    }
+    let active = true;
+    api.get(`/api/recruitment/applications/${id}/offer-activity`)
+      .then(response => { if (active) setOfferActivity(response.data.data || []); })
+      .catch(() => { if (active) setOfferActivity([]); });
+    return () => { active = false; };
+  }, [id, application, role, user?.tenPhong]);
+
   const executeApprove = async () => {
+    if (approveActionLoading || offerModalLoading) return;
+    setApproveActionLoading(true);
     try {
       const state = application?.approvalStatus;
       const operationKey = crypto.randomUUID();
 
       if (state === 'PENDING_HR_OFFER') {
         const salary = Number(approveModal.fields.luongCoBan.replace(/\D/g, ''));
-        if (!salary || !approveModal.fields.startDate || !approveModal.feedback.trim()) {
-          showNotification('Thiếu thông tin', 'Vui lòng nhập lương, ngày bắt đầu và điều khoản hợp đồng', 'error');
+        const validationError = validateOfferFields(approveModal.fields, approveModal.feedback);
+        if (validationError) {
+          showNotification('Thiếu thông tin', validationError, 'error');
           return;
         }
         const draft = await api.post(`/api/recruitment/applications/${id}/offers`, {
           baseSalary: salary,
-          allowances: { description: approveModal.fields.phuCap || '' },
+          allowances: legacyAllowancesFromFields(approveModal.fields),
           probationMonths: Number(approveModal.fields.probationMonths),
           probationSalaryRate: Number(approveModal.fields.probationRate),
           expectedStartDate: approveModal.fields.startDate,
           contractTerms: approveModal.feedback,
+          offerDetails: buildOfferDetails(approveModal.fields),
           fileUrl: null,
           outOfRangeReason: approveModal.fields.salaryRangeReason || null
         });
@@ -164,6 +222,8 @@ export default function ApplicationDetailPage() {
       }
     } catch (e) {
       showNotification('Lỗi', e.response?.data?.message || 'Không thể phê duyệt', 'error');
+    } finally {
+      setApproveActionLoading(false);
     }
   };
 
@@ -288,13 +348,13 @@ export default function ApplicationDetailPage() {
           if (updated.extractedData) setExtractedData(JSON.parse(updated.extractedData));
         } catch { /* Dữ liệu cũ có thể không phải JSON hợp lệ. */ }
         
-        // Fetch lại logs mới sau khi AI chạy xong
-        api.get(`/api/recruitment/applications/${id}/ai-logs`).then(lRes => {
-           if (lRes.data.success) setAiLogs(lRes.data.data);
-        });
-        api.get(`/api/recruitment/applications/${id}/ai-analyses`).then(aRes => {
-          if (aRes.data.success) setAiAnalyses(aRes.data.data || []);
-        });
+        // Chờ lấy kết quả chi tiết mới nhất trước khi báo hoàn tất.
+        const [logsResponse, analysesResponse] = await Promise.all([
+          api.get(`/api/recruitment/applications/${id}/ai-logs`),
+          api.get(`/api/recruitment/applications/${id}/ai-analyses`)
+        ]);
+        if (logsResponse.data.success) setAiLogs(logsResponse.data.data);
+        if (analysesResponse.data.success) setAiAnalyses(analysesResponse.data.data || []);
         
         showNotification('Hoàn tất', 'AI đã đánh giá hồ sơ thành công!', 'success');
       }
@@ -363,7 +423,7 @@ export default function ApplicationDetailPage() {
           <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
             {canApprove() && (
                 <button 
-                  onClick={() => setApproveModal({ ...approveModal, isOpen: true })}
+                  onClick={openApproveModal}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-medium transition-colors text-sm border bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200"
                 >
                   <Check size={16} /> {approveActionLabel}
@@ -402,6 +462,8 @@ export default function ApplicationDetailPage() {
           <p className="mt-2 text-xs text-blue-700">Trong môi trường thật, link được chuyển qua outbox/email.</p>
         </div>
       )}
+
+      <OfferActivityCard activity={offerActivity} />
 
       <InterviewPanel
         applicationId={Number(id)}
@@ -629,6 +691,115 @@ export default function ApplicationDetailPage() {
                           </div>
                         </div>
                         <p className="mt-3 text-xs text-slate-500">Profile #{latestAi.scoringProfileVersionId} · Criteria #{latestAi.criteriaVersionId}</p>
+
+                        <div className="mt-5 border-t border-slate-100 pt-5">
+                          <div className="mb-3 flex items-center justify-between gap-3">
+                            <h4 className="text-sm font-bold text-slate-900">Tiêu chí đã dùng để đánh giá</h4>
+                            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                              {aiCriteria.length} tiêu chí
+                            </span>
+                          </div>
+
+                          {aiCriteria.length === 0 ? (
+                            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                              Kết quả này chưa chứa chi tiết tiêu chí. Hãy chạy lại AI để tạo kết quả theo phiên bản hiện tại.
+                            </div>
+                          ) : (
+                            <div className="space-y-3">
+                              {aiCriteria.map((criterion, index) => {
+                                const evidence = Array.isArray(criterion.evidence) ? criterion.evidence : [];
+                                const levelLabels = {
+                                  NONE: 'Không có bằng chứng',
+                                  LISTED_ONLY: 'Chỉ được liệt kê',
+                                  MENTIONED_IN_EXPERIENCE: 'Có trong kinh nghiệm',
+                                  DEMONSTRATED: 'Có bằng chứng thực hành'
+                                };
+                                const levelClasses = {
+                                  NONE: 'bg-rose-50 text-rose-700 border-rose-200',
+                                  LISTED_ONLY: 'bg-amber-50 text-amber-700 border-amber-200',
+                                  MENTIONED_IN_EXPERIENCE: 'bg-blue-50 text-blue-700 border-blue-200',
+                                  DEMONSTRATED: 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                };
+
+                                return (
+                                  <div key={criterion.id || index} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="min-w-0">
+                                        <p className="text-sm font-bold text-slate-900">{criterion.name || `Tiêu chí ${index + 1}`}</p>
+                                        <p className="mt-1 text-xs text-slate-500">
+                                          {criterion.type === 'MUST' ? 'Bắt buộc' : 'Ưu tiên'} · Trọng số {criterion.weight || 0}%
+                                        </p>
+                                      </div>
+                                      <span className={`shrink-0 rounded-full border px-2 py-1 text-[11px] font-semibold ${levelClasses[criterion.evidence_level] || levelClasses.NONE}`}>
+                                        {levelLabels[criterion.evidence_level] || criterion.evidence_level || 'Chưa xác định'}
+                                      </span>
+                                    </div>
+
+                                    {criterion.missing && (
+                                      <div className="mt-3 rounded-lg border border-rose-100 bg-white p-3">
+                                        <p className="text-xs font-semibold text-rose-700">Lý do chưa đạt</p>
+                                        <p className="mt-1 text-sm leading-relaxed text-slate-700">{criterion.missing}</p>
+                                      </div>
+                                    )}
+
+                                    {criterion.downgrade_reason && (
+                                      <p className="mt-3 text-xs text-amber-700">Bị hạ mức: {criterion.downgrade_reason}</p>
+                                    )}
+
+                                    {evidence.length > 0 && (
+                                      <div className="mt-3 space-y-2">
+                                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Bằng chứng xác minh từ CV</p>
+                                        {evidence.map((item, evidenceIndex) => (
+                                          <div key={evidenceIndex} className="rounded-lg border border-emerald-100 bg-white p-3">
+                                            <p className="text-sm italic leading-relaxed text-slate-700">“{item.quote}”</p>
+                                            <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-slate-500">
+                                              <span className="rounded bg-slate-100 px-2 py-0.5">Mục: {item.section}</span>
+                                              {(item.detail_types || []).map((detail) => (
+                                                <span key={detail} className="rounded bg-blue-50 px-2 py-0.5 text-blue-700">{detail}</span>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+
+                        {aiVerifyPoints.length > 0 && (
+                          <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                            <h4 className="text-sm font-bold text-amber-900">Nội dung cần xác minh thêm</h4>
+                            <div className="mt-3 space-y-3">
+                              {aiVerifyPoints.map((point, index) => (
+                                <div key={index} className="text-sm text-amber-900">
+                                  <p className="font-semibold">{point.claim}</p>
+                                  <p className="mt-0.5">{point.why}</p>
+                                  {(point.suggested_questions || []).map((question, questionIndex) => (
+                                    <p key={questionIndex} className="mt-1 text-xs italic text-amber-800">Gợi ý hỏi: {question}</p>
+                                  ))}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {aiFlags.length > 0 && (
+                          <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                            <h4 className="text-sm font-bold text-slate-900">Cảnh báo kiểm tra</h4>
+                            <div className="mt-3 space-y-3">
+                              {aiFlags.map((flag, index) => (
+                                <div key={`${flag.code || 'flag'}-${index}`} className="rounded-lg bg-white p-3 text-sm">
+                                  <p className="font-semibold text-slate-800">{flag.code}</p>
+                                  <p className="mt-1 text-slate-600">{flag.detail}</p>
+                                  {flag.suggested_question && <p className="mt-1 text-xs italic text-blue-700">Gợi ý hỏi: {flag.suggested_question}</p>}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </>
                     ) : (
                       <p className="text-sm text-amber-700">{latestAi?.errorMessage || 'Hồ sơ cần HR kiểm tra thủ công.'}</p>
@@ -720,84 +891,33 @@ export default function ApplicationDetailPage() {
       {approveModal.isOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center">
           <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setApproveModal({...approveModal, isOpen: false})}></div>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg relative p-6 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
+          <div className={`bg-white rounded-2xl shadow-xl w-full relative p-6 animate-in zoom-in-95 duration-200 max-h-[92vh] overflow-y-auto ${application?.approvalStatus === 'PENDING_HR_OFFER' || application?.approvalStatus === 'PENDING_OFFER_APPROVAL' ? 'max-w-5xl' : 'max-w-2xl'}`}>
+            <h3 className="text-xl font-bold text-slate-800 mb-5 flex items-center gap-2">
               <Check className="text-emerald-500" /> {approveModalTitle}
             </h3>
-            
-            {application?.approvalStatus === 'PENDING_HR_OFFER' ? (
-              <div className="space-y-4 mb-6">
-                <p className="text-sm text-slate-600">Vui lòng soạn Bảng Đề xuất Offer để trình lên Tổng Giám đốc phê duyệt.</p>
+            {offerModalLoading ? (
+              <div className="grid min-h-56 place-items-center text-slate-500"><Loader2 className="animate-spin text-emerald-600" size={28} /></div>
+            ) : application?.approvalStatus === 'PENDING_HR_OFFER' ? (
+              <div className="mb-6">
+                <OfferComposer
+                  application={application}
+                  fields={approveModal.fields}
+                  onFieldsChange={fields => setApproveModal(current => ({ ...current, fields }))}
+                  terms={approveModal.feedback}
+                  onTermsChange={feedback => setApproveModal(current => ({ ...current, feedback }))}
+                />
+              </div>
+            ) : application?.approvalStatus === 'PENDING_OFFER_APPROVAL' ? (
+              <div className="mb-6 space-y-5">
+                <OfferReviewPanel offers={offerHistory} application={application} />
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Lương cơ bản</label>
-                  <input 
-                    type="text" 
-                    className="w-full border border-slate-200 rounded-xl p-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-slate-50 text-sm"
-                    placeholder="VD: 20.000.000"
-                    value={approveModal.fields.luongCoBan}
-                    onChange={(e) => {
-                      const rawValue = e.target.value.replace(/\D/g, '');
-                      let formatted = '';
-                      if (rawValue) {
-                        formatted = Number(rawValue).toLocaleString('vi-VN');
-                      }
-                      setApproveModal({...approveModal, fields: {...approveModal.fields, luongCoBan: formatted}});
-                    }}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Phụ cấp & Phúc lợi</label>
-                  <input 
-                    type="text" 
-                    className="w-full border border-slate-200 rounded-xl p-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-slate-50 text-sm"
-                    placeholder="VD: Phụ cấp ăn trưa 50k/ngày, BHXH..."
-                    value={approveModal.fields.phuCap}
-                    onChange={(e) => setApproveModal({...approveModal, fields: {...approveModal.fields, phuCap: e.target.value}})}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Thời gian thử việc (tháng)</label>
-                  <input
-                    type="number" min="0"
-                    className="w-full border border-slate-200 rounded-xl p-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-slate-50 text-sm"
-                    value={approveModal.fields.probationMonths}
-                    onChange={(e) => setApproveModal({...approveModal, fields: {...approveModal.fields, probationMonths: e.target.value}})}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Tỷ lệ lương thử việc (%)</label>
-                    <input type="number" min="1" max="100"
-                      className="w-full border border-slate-200 rounded-xl p-2.5 bg-slate-50 text-sm"
-                      value={approveModal.fields.probationRate}
-                      onChange={(e) => setApproveModal({...approveModal, fields: {...approveModal.fields, probationRate: e.target.value}})} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Ngày bắt đầu dự kiến</label>
-                    <input type="date"
-                      className="w-full border border-slate-200 rounded-xl p-2.5 bg-slate-50 text-sm"
-                      value={approveModal.fields.startDate}
-                      onChange={(e) => setApproveModal({...approveModal, fields: {...approveModal.fields, startDate: e.target.value}})} />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Lý do vượt khung lương (nếu có)</label>
-                  <input className="w-full border border-slate-200 rounded-xl p-2.5 bg-slate-50 text-sm"
-                    value={approveModal.fields.salaryRangeReason}
-                    onChange={(e) => setApproveModal({...approveModal, fields: {...approveModal.fields, salaryRangeReason: e.target.value}})} />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Điều khoản hợp đồng</label>
-                  <textarea
-                    className="w-full border border-slate-200 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-slate-50 min-h-[80px] text-sm"
-                    placeholder="Nhập điều khoản và lưu ý của offer..."
-                    value={approveModal.feedback}
-                    onChange={e => setApproveModal({...approveModal, feedback: e.target.value})}
-                  />
+                  <label className="mb-1.5 block text-sm font-semibold text-slate-700">Nhận xét phê duyệt (tùy chọn)</label>
+                  <textarea className="min-h-24 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100" placeholder="Ghi chú nội bộ cho phiên bản offer này..." value={approveModal.feedback} onChange={event => setApproveModal({ ...approveModal, feedback: event.target.value })} />
                 </div>
               </div>
             ) : ['OFFER_INTERNALLY_APPROVED', 'OFFER_EXPIRED'].includes(application?.approvalStatus) ? (
               <div className="space-y-4 mb-6">
+                <OfferReviewPanel offers={offerHistory} application={application} />
                 <p className="text-sm text-slate-600">Khi gửi, hệ thống sẽ giữ một suất tuyển và phát hành link phản hồi mới.</p>
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1">Hạn phản hồi</label>
@@ -839,9 +959,10 @@ export default function ApplicationDetailPage() {
               </button>
               <button 
                 onClick={executeApprove}
-                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg"
+                disabled={approveActionLoading || offerModalLoading}
+                className="inline-flex items-center gap-2 px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {approveActionLabel}
+                {approveActionLoading && <Loader2 className="animate-spin" size={16} />}{approveActionLabel}
               </button>
             </div>
           </div>
