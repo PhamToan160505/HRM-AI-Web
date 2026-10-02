@@ -11,7 +11,7 @@ import axios from 'axios';
  */
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080',
+  baseURL: import.meta.env.VITE_API_URL || '',
   timeout: 60000,
   headers: {
     'Content-Type': 'application/json',
@@ -20,7 +20,7 @@ const api = axios.create({
 
 // Instance cho các lệnh AI lâu (timeout 180 giây)
 export const apiAi = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080',
+  baseURL: import.meta.env.VITE_API_URL || '',
   timeout: 180000,
   headers: {
     'Content-Type': 'application/json',
