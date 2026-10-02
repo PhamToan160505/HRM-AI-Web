@@ -23,12 +23,9 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-import org.springframework.boot.web.servlet.FilterRegistrationBean;
-import org.springframework.core.Ordered;
-import org.springframework.web.filter.CorsFilter;
-
 import com.hrm.common.repository.UserRepository;
 
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -45,7 +42,7 @@ public class SecurityConfig {
     private final JwtAuthFilter jwtAuthFilter;
     private final UserRepository userRepository;
 
-    @Value("${app.cors.allowed-origins:*}")
+    @Value("${app.cors.allowed-origins:http://localhost:5173,https://*.vercel.app}")
     private String allowedOrigins;
 
     @Bean
@@ -82,8 +79,13 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        // Cho phép tất cả Origin (Vercel, Localhost, Ngrok...) tự động khớp pattern
-        config.setAllowedOriginPatterns(List.of("*"));
+        // Dùng origin patterns để hỗ trợ Vercel preview domains (https://*.vercel.app).
+        // setAllowedOrigins không khớp wildcard và sẽ làm preflight bị từ chối.
+        List<String> originPatterns = Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .toList();
+        config.setAllowedOriginPatterns(originPatterns);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setExposedHeaders(List.of("Authorization", "Content-Type"));
@@ -93,13 +95,6 @@ public class SecurityConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
         return source;
-    }
-
-    @Bean
-    public FilterRegistrationBean<CorsFilter> corsFilterRegistrationBean() {
-        FilterRegistrationBean<CorsFilter> bean = new FilterRegistrationBean<>(new CorsFilter(corsConfigurationSource()));
-        bean.setOrder(Ordered.HIGHEST_PRECEDENCE);
-        return bean;
     }
 
     @Bean

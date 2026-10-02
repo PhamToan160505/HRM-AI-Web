@@ -21,6 +21,29 @@ const ACCOUNT_STATUS = {
 
 const accountMeta = value => ACCOUNT_STATUS[value] || { label: value || 'Chưa có', className: 'bg-slate-100 text-slate-600 border-slate-200' };
 
+const EVENT_TYPE_MAP = {
+  EMPLOYEE_CREATED: 'Khởi tạo hồ sơ nhân viên',
+  CHECKLIST_ITEM_COMPLETED: 'Hoàn tất mục checklist',
+  CHECKLIST_COMPLETED: 'Hoàn tất toàn bộ checklist',
+  JOINED: 'Xác nhận đi làm',
+  ONBOARD_CANCELLED: 'Hủy nhận việc',
+  ONBOARDING_CANCELLED: 'Hủy nhận việc',
+  CONTRACT_ACTIVATED: 'Hợp đồng đã kích hoạt',
+  PROVISIONED: 'Cấp quyền tài khoản',
+  ACCOUNT_PROVISIONED: 'Đã cấp quyền tài khoản'
+};
+
+const formatEventType = (type) => EVENT_TYPE_MAP[type] || type;
+
+const formatEventSummary = (summary) => {
+  if (!summary) return '';
+  return summary
+    .replace(/PRE_BOARDING/gi, 'chờ nhận việc')
+    .replace(/EMPLOYED/gi, 'đang làm việc')
+    .replace(/ONBOARD_CANCELLED/gi, 'hủy nhận việc')
+    .replace(/ONBOARDING_CANCELLED/gi, 'hủy nhận việc');
+};
+
 const formatDate = value => value ? new Date(`${value}T00:00:00`).toLocaleDateString('vi-VN') : 'Chưa có';
 
 export default function EmployeeLifecyclePage() {
@@ -151,9 +174,9 @@ export default function EmployeeLifecyclePage() {
               </div>
             )}
 
-            <section className="mt-8"><h3 className="font-bold text-slate-900">Checklist pre-boarding</h3><div className="mt-3 divide-y divide-slate-100 rounded-xl border border-slate-200">{detail.checklist.map(item => <div key={item.id} className="flex items-center gap-3 p-4"><div className={`grid size-8 shrink-0 place-items-center rounded-full ${item.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>{item.status === 'COMPLETED' ? <Check size={17} /> : <CalendarCheck size={17} />}</div><div className="min-w-0 flex-1"><p className="text-sm font-semibold text-slate-800">{item.label}</p><p className="mt-0.5 text-xs text-slate-500">Hạn {formatDate(item.dueDate)}</p></div>{detail.employee.status === 'PRE_BOARDING' && item.status === 'PENDING' && <button onClick={() => completeItem(item.id)} className="rounded-lg bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100">Hoàn tất</button>}</div>)}</div></section>
+            <section className="mt-8"><h3 className="font-bold text-slate-900">Danh mục chuẩn bị nhận việc (Pre-boarding)</h3><div className="mt-3 divide-y divide-slate-100 rounded-xl border border-slate-200">{detail.checklist.map(item => <div key={item.id} className="flex items-center gap-3 p-4"><div className={`grid size-8 shrink-0 place-items-center rounded-full ${item.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>{item.status === 'COMPLETED' ? <Check size={17} /> : <CalendarCheck size={17} />}</div><div className="min-w-0 flex-1"><p className="text-sm font-semibold text-slate-800">{item.label}</p><p className="mt-0.5 text-xs text-slate-500">Hạn {formatDate(item.dueDate)}</p></div>{detail.employee.status === 'PRE_BOARDING' && item.status === 'PENDING' && <button onClick={() => completeItem(item.id)} className="rounded-lg bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100">Hoàn tất</button>}</div>)}</div></section>
 
-            <section className="mt-8"><h3 className="font-bold text-slate-900">Timeline</h3><div className="mt-3 space-y-4 border-l-2 border-blue-100 pl-5">{detail.events.map(event => <div key={event.id}><p className="text-sm font-semibold text-slate-800">{event.eventType}</p><p className="mt-0.5 text-sm text-slate-600">{event.summary}</p><p className="mt-1 text-xs text-slate-400">{new Date(event.eventDate).toLocaleString('vi-VN')}</p></div>)}</div></section>
+            <section className="mt-8"><h3 className="font-bold text-slate-900">Dòng thời gian (Timeline)</h3><div className="mt-3 space-y-4 border-l-2 border-blue-100 pl-5">{detail.events.map(event => <div key={event.id}><p className="text-sm font-semibold text-slate-800">{formatEventType(event.eventType)}</p><p className="mt-0.5 text-sm text-slate-600">{formatEventSummary(event.summary)}</p><p className="mt-1 text-xs text-slate-400">{new Date(event.eventDate).toLocaleString('vi-VN')}</p></div>)}</div></section>
 
             {detail.employee.status === 'PRE_BOARDING' && <div className="mt-9 flex gap-3 border-t border-slate-200 pt-6"><button onClick={() => setAction('CANCEL')} className="flex-1 rounded-xl border border-rose-200 px-4 py-3 text-sm font-semibold text-rose-700 hover:bg-rose-50">Hủy nhận việc</button><button onClick={() => setAction('JOIN')} className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700">Xác nhận đã đi làm</button></div>}
           </aside>

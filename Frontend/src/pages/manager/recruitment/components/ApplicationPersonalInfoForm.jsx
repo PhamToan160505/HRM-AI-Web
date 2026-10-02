@@ -95,6 +95,10 @@ export default function ApplicationPersonalInfoForm({ application, mode = 'manag
   const isEditable = mode === 'public' || mode === 'edit';
 
   const renderField = (name, label, icon, type = 'text', options = null, required = false) => {
+    if (!isEditable && !formData[name]) {
+      return null;
+    }
+
     const confidence = confidences[name];
     const isLowConfidence = confidence !== undefined && confidence < 80;
 
@@ -150,30 +154,36 @@ export default function ApplicationPersonalInfoForm({ application, mode = 'manag
     );
   };
 
-  const renderTextarea = (name, label, icon, required = false) => (
-    <div className="mb-4">
-      <label className="block text-sm font-medium text-slate-700 mb-1">
-        {required && <span className="text-red-500 mr-1">*</span>}
-        {label}
-      </label>
-      <div className="relative">
-        <div className="absolute left-3 top-3 text-slate-400">
-          {icon}
+  const renderTextarea = (name, label, icon, required = false) => {
+    if (!isEditable && !formData[name]) {
+      return null;
+    }
+
+    return (
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-slate-700 mb-1">
+          {required && <span className="text-red-500 mr-1">*</span>}
+          {label}
+        </label>
+        <div className="relative">
+          <div className="absolute left-3 top-3 text-slate-400">
+            {icon}
+          </div>
+          <textarea
+            name={name}
+            value={formData[name]}
+            onChange={handleChange}
+            readOnly={!isEditable}
+            rows={3}
+            placeholder={isEditable ? 'Viết giới thiệu ngắn về bản thân' : ''}
+            className={`w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-y ${
+              !isEditable && 'opacity-80'
+            }`}
+          />
         </div>
-        <textarea
-          name={name}
-          value={formData[name]}
-          onChange={handleChange}
-          readOnly={!isEditable}
-          rows={3}
-          placeholder={isEditable ? 'Viết giới thiệu ngắn về bản thân' : ''}
-          className={`w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-y ${
-            !isEditable && 'opacity-80'
-          }`}
-        />
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="mb-8">

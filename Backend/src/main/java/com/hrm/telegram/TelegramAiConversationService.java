@@ -158,13 +158,16 @@ public class TelegramAiConversationService {
         sb.append("\n=== HUONG DAN TRA LOI ===\n");
         sb.append("1. Tra loi bang tieng Viet co dau, ro rang, chuyen nghiep.\n");
         sb.append("2. Dung emoji phu hop de lam noi bat thong tin quan trong.\n");
-        sb.append("3. Khi nguoi dung hoi ve nhan vien moi gia nhap, nhan su moi, hoac ai moi vao: BAT BUOC goi ham 'get_recent_employees' de tra ve danh sach nhan vien moi nhat tu CSDL.\n");
-        sb.append("4. Khi nguoi dung tim kiem nhan vien (tim ten, tim ma nhan vien): BAT BUOC goi ham 'search_employee'.\n");
-        sb.append("5. Khi can so lieu chi tiet hon (phong ban, luong, don cho duyet, cham cong), hay su dung Function Calling de truy van CSDL thuc te.\n");
-        sb.append("6. Voi cau hoi ve duyet don: nhac nguoi dung dung lenh /request roi /duyet [ID] hoac /tuchoi [ID].\n");
-        sb.append("7. Khong tra loi cac cau hoi hoan toan khong lien quan den cong ty/nhan su.\n");
-        sb.append("8. Tra loi ngan gon, suc tich - toi da 300 tu neu khong can thiet liet ke nhieu.\n");
-        sb.append("9. KHONG dung markdown (**, ##) - chi dung emoji va dau phan cach thuan text.\n");
+        sb.append("3. THONG TIN UNG VIEN VA TUYEN DUNG: He thong CO LUU HOAN TOAN DAY DU HO TEN, EMAIL, SDT, VI TRI UNG TUYEN CUA TUNG UNG VIEN. KHONG BAO GIO DUOC NOI HE THONG KHONG LUU TEN UNG VIEN.\n");
+        sb.append("4. Khi nguoi dung hoi ten ung vien moi nop ho so, danh sach ung vien moi, ai nop CV, ho so tuyen dung gan day: BAT BUOC goi ham 'get_recent_applications' de lay ten va thong tin thuc te tu CSDL.\n");
+        sb.append("5. Khi nguoi dung tim kiem ung vien theo ten/email/vi tri: BAT BUOC goi ham 'search_applications'.\n");
+        sb.append("6. Khi nguoi dung hoi ve nhan vien moi gia nhap, nhan su moi, hoac ai moi vao: BAT BUOC goi ham 'get_recent_employees' de tra ve danh sach nhan vien moi nhat tu CSDL.\n");
+        sb.append("7. Khi nguoi dung tim kiem nhan vien (tim ten, tim ma nhan vien): BAT BUOC goi ham 'search_employee'.\n");
+        sb.append("8. Khi can so lieu chi tiet hon (phong ban, luong, don cho duyet, cham cong), hay su dung Function Calling de truy van CSDL thuc te.\n");
+        sb.append("9. Voi cau hoi ve duyet don: nhac nguoi dung dung lenh /request roi /duyet [ID] hoac /tuchoi [ID].\n");
+        sb.append("10. Khong tra loi cac cau hoi hoan toan khong lien quan den cong ty/nhan su.\n");
+        sb.append("11. Tra loi ngan gon, suc tich - toi da 300 tu neu khong can thiet liet ke nhieu.\n");
+        sb.append("12. KHONG dung markdown (**, ##) - chi dung emoji va dau phan cach thuan text.\n");
 
         return sb.toString();
     }
@@ -232,6 +235,21 @@ public class TelegramAiConversationService {
                 .put("type", "STRING")
                 .put("description", "Tu khoa tim kiem (ten, ma nhan vien, email)");
         p9.putArray("required").add("keyword");
+
+        ObjectNode f10 = funcDecls.addObject();
+        f10.put("name", "get_recent_applications");
+        f10.put("description", "Lay danh sach va HO TEN cac ung vien moi nop ho so / gia nhap he thong tuyen dung gan day.");
+        f10.putObject("parameters").put("type", "OBJECT").putObject("properties");
+
+        ObjectNode f11 = funcDecls.addObject();
+        f11.put("name", "search_applications");
+        f11.put("description", "Tim kiem ho so ung vien theo ten, email hoac vi tri ung tuyen.");
+        ObjectNode p11 = f11.putObject("parameters");
+        p11.put("type", "OBJECT");
+        p11.putObject("properties").putObject("keyword")
+                .put("type", "STRING")
+                .put("description", "Tu khoa tim kiem (ten ung vien, email, vi tri)");
+        p11.putArray("required").add("keyword");
 
         return tools;
     }
@@ -455,6 +473,50 @@ public class TelegramAiConversationService {
                         item.put("email", u.getEmail());
                         item.put("phone", u.getPhone() != null ? u.getPhone() : "N/A");
                         item.put("trangThai", u.getActive() ? "Đang làm việc" : "Đã nghỉ việc");
+                    });
+                }
+                case "get_recent_applications" -> {
+                    var apps = applicationRepository.findAll().stream()
+                            .sorted((a, b) -> (b.getId() != null && a.getId() != null) ? b.getId().compareTo(a.getId()) : 0)
+                            .limit(10)
+                            .toList();
+
+                    result.put("status", "success");
+                    result.put("tongSoUngVienMoiNhat", apps.size());
+                    ArrayNode arr = result.putArray("danhSachUngVienMoiNhat");
+                    apps.forEach(app -> {
+                        ObjectNode item = arr.addObject();
+                        item.put("id", app.getId());
+                        item.put("hoTenUngVien", app.getFullName());
+                        item.put("email", app.getEmail());
+                        item.put("phone", app.getPhone() != null ? app.getPhone() : "N/A");
+                        item.put("viTriUngTuyen", app.getJobPosting() != null ? app.getJobPosting().getTitle() : "Chưa xác định");
+                        item.put("diemPhuHopFitScore", app.getFitScore() != null ? app.getFitScore() + "/100" : "Chưa chấm");
+                        item.put("trangThaiHoSo", app.getApprovalStatus() != null ? app.getApprovalStatus().name() : "N/A");
+                    });
+                }
+                case "search_applications" -> {
+                    String kw = args != null && args.has("keyword") ? args.get("keyword").asText().trim().toLowerCase() : "";
+                    var matched = applicationRepository.findAll().stream()
+                            .filter(a -> (a.getFullName() != null && a.getFullName().toLowerCase().contains(kw))
+                                    || (a.getEmail() != null && a.getEmail().toLowerCase().contains(kw))
+                                    || (a.getJobPosting() != null && a.getJobPosting().getTitle() != null && a.getJobPosting().getTitle().toLowerCase().contains(kw)))
+                            .limit(10)
+                            .toList();
+
+                    result.put("status", "success");
+                    result.put("tuKhoa", kw);
+                    result.put("soKetQua", matched.size());
+                    ArrayNode arr = result.putArray("danhSachKetQua");
+                    matched.forEach(app -> {
+                        ObjectNode item = arr.addObject();
+                        item.put("id", app.getId());
+                        item.put("hoTenUngVien", app.getFullName());
+                        item.put("email", app.getEmail());
+                        item.put("phone", app.getPhone() != null ? app.getPhone() : "N/A");
+                        item.put("viTriUngTuyen", app.getJobPosting() != null ? app.getJobPosting().getTitle() : "Chưa xác định");
+                        item.put("diemPhuHopFitScore", app.getFitScore() != null ? app.getFitScore() + "/100" : "Chưa chấm");
+                        item.put("trangThaiHoSo", app.getApprovalStatus() != null ? app.getApprovalStatus().name() : "N/A");
                     });
                 }
                 default -> {

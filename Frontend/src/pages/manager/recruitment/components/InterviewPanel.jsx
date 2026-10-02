@@ -200,6 +200,8 @@ export default function InterviewPanel({ applicationId, applicationStatus, verif
     expectedSalary: Number(negotiation.expectedSalary),
     preliminarySalary: Number(negotiation.preliminarySalary),
     allowances: { description: negotiation.allowances },
+    otherExpectations: negotiation.expectations || null,
+    notes: negotiation.notes
   }), 'Đã lưu kết quả đàm phán sơ bộ.');
 
   const activeR1Q = round1Questions.length > 0 ? round1Questions : suggestedQuestions;

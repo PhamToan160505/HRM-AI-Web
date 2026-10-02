@@ -34,6 +34,13 @@ const AI_FLAG_LABELS = {
   PROMPT_INJECTION_PATTERN: 'Nghi vấn chèn câu lệnh AI'
 };
 
+const AI_STATUS_MAP = {
+  DONE: 'Đã hoàn tất',
+  RUNNING: 'Đang phân tích',
+  PENDING: 'Chờ xử lý',
+  FAILED: 'Thất bại'
+};
+
 const formatAiClaim = (claim) => AI_FLAG_LABELS[claim] || claim;
 
 export default function ApplicationDetailPage() {
@@ -710,7 +717,7 @@ export default function ApplicationDetailPage() {
                         <h3 className="font-bold text-slate-900">Bằng chứng AI theo JD</h3>
                         <p className="text-xs text-slate-500">Chỉ so sánh trong cùng cặp phiên bản tiêu chí và cấu hình chấm điểm.</p>
                       </div>
-                      <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">{latestAi?.status}</span>
+                      <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">{AI_STATUS_MAP[latestAi?.status] || latestAi?.status}</span>
                     </div>
                     {latestAi?.status === 'DONE' ? (
                       <>
@@ -724,7 +731,7 @@ export default function ApplicationDetailPage() {
                             <p className="mt-1 text-2xl font-bold text-indigo-700">{Number(latestAi.evidenceScore || 0).toFixed(0)}%</p>
                           </div>
                         </div>
-                        <p className="mt-3 text-xs text-slate-500">Profile #{latestAi.scoringProfileVersionId} · Criteria #{latestAi.criteriaVersionId}</p>
+                        <p className="mt-3 text-xs text-slate-500">Cấu hình #{latestAi.scoringProfileVersionId} · Tiêu chí #{latestAi.criteriaVersionId}</p>
 
                         <div className="mt-5 border-t border-slate-100 pt-5">
                           <div className="mb-3 flex items-center justify-between gap-3">

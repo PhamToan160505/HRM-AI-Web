@@ -14,6 +14,8 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.font.PDFont;
+import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.springframework.beans.factory.annotation.Value;
@@ -22,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -31,6 +34,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.List;
@@ -177,7 +181,7 @@ public class ElectronicContractSigningService {
         if (signatureData.length() > 1_500_000) throw AppException.badRequest("Ảnh chữ ký quá lớn");
 
         try {
-            byte[] source = companyPdfBytes(session.contractId(), session.companyFileUrl());
+            byte[] source = companyPdfBytes(session.contractId(), session.companyFileUrl(), session.generatedHtml(), session.contractNumber());
             LocalDateTime signedAt = LocalDateTime.now();
             byte[] completed = appendSignatureEvidence(source, signerName, method, signatureData,
                     signedAt, ipAddress, session.contractNumber());
@@ -276,7 +280,7 @@ public class ElectronicContractSigningService {
                 String.valueOf(contractId), payload);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public DocumentDownload finalDocument(String rawToken) {
         SigningSession session = requireSession(rawToken, true);
         if (!"SIGNED".equals(session.sessionStatus())
@@ -292,7 +296,28 @@ public class ElectronicContractSigningService {
         if (rows.isEmpty() || rows.get(0).bytes() == null) {
             throw AppException.notFound("Không tìm thấy bản hợp đồng hoàn tất");
         }
-        return rows.get(0);
+        byte[] pdfBytes = rows.get(0).bytes();
+        try (PDDocument doc = PDDocument.load(pdfBytes)) {
+            if (doc.getNumberOfPages() <= 1) {
+                byte[] fullBody = renderHtmlToPdf(session.generatedHtml(), session.contractNumber());
+                try (PDDocument bodyDoc = PDDocument.load(fullBody);
+                     PDDocument oldDoc = PDDocument.load(pdfBytes);
+                     ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                    if (oldDoc.getNumberOfPages() > 0) {
+                        bodyDoc.addPage(oldDoc.getPage(0));
+                    }
+                    bodyDoc.save(out);
+                    pdfBytes = out.toByteArray();
+                    jdbcTemplate.update("""
+                            UPDATE contract_artifacts SET file_bytes = ?
+                            WHERE contract_id = ? AND artifact_type = 'FULLY_SIGNED'
+                            """, pdfBytes, session.contractId());
+                }
+            }
+        } catch (Exception e) {
+            // Keep existing bytes if auto-heal encounters issue
+        }
+        return new DocumentDownload(rows.get(0).fileName(), pdfBytes);
     }
 
     private SigningSession requireVerified(String rawToken, String proof) {
@@ -362,25 +387,194 @@ public class ElectronicContractSigningService {
         return rows.get(0);
     }
 
-    private byte[] companyPdfBytes(Long contractId, String fallbackUrl) throws Exception {
+    private byte[] companyPdfBytes(Long contractId, String fallbackUrl, String generatedHtml, String contractNumber) throws Exception {
+        byte[] bytes = null;
         List<byte[]> stored = jdbcTemplate.query("""
                 SELECT file_bytes FROM contract_artifacts
                 WHERE contract_id = ? AND artifact_type = 'COMPANY_SIGNED'
                 ORDER BY version_number DESC LIMIT 1
                 """, (rs, row) -> rs.getBytes(1), contractId);
-        if (!stored.isEmpty() && stored.get(0) != null) return stored.get(0);
-        if (fallbackUrl == null || fallbackUrl.isBlank()) throw AppException.conflict("Không tìm thấy PDF phía công ty đã ký");
-        HttpResponse<InputStream> response = HttpClient.newHttpClient().send(
-                HttpRequest.newBuilder(URI.create(fallbackUrl)).GET().build(),
-                HttpResponse.BodyHandlers.ofInputStream());
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw AppException.conflict("Không thể đọc PDF phía công ty đã ký");
+        if (!stored.isEmpty() && stored.get(0) != null && stored.get(0).length > 0) {
+            bytes = stored.get(0);
+        } else if (fallbackUrl != null && !fallbackUrl.isBlank()) {
+            try {
+                HttpResponse<InputStream> response = HttpClient.newHttpClient().send(
+                        HttpRequest.newBuilder(URI.create(fallbackUrl)).GET().build(),
+                        HttpResponse.BodyHandlers.ofInputStream());
+                if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                    try (InputStream input = response.body()) {
+                        byte[] fetched = input.readNBytes(MAX_FILE_BYTES + 1);
+                        if (fetched.length <= MAX_FILE_BYTES) bytes = fetched;
+                    }
+                }
+            } catch (Exception ignored) {}
         }
-        try (InputStream input = response.body()) {
-            byte[] bytes = input.readNBytes(MAX_FILE_BYTES + 1);
-            if (bytes.length > MAX_FILE_BYTES) throw AppException.badRequest("PDF hợp đồng vượt giới hạn xử lý");
-            return bytes;
+
+        if (bytes != null && bytes.length > 0) {
+            try (PDDocument doc = PDDocument.load(bytes)) {
+                if (doc.getNumberOfPages() > 1) {
+                    return bytes;
+                }
+            } catch (Exception ignored) {}
         }
+
+        return renderHtmlToPdf(generatedHtml, contractNumber);
+    }
+
+    private PDFont loadFont(PDDocument doc, boolean bold) {
+        String[] boldPaths = new String[]{
+                "C:/Windows/Fonts/arialbd.ttf",
+                "C:/Windows/Fonts/calibrib.ttf",
+                "C:/Windows/Fonts/timesbd.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
+        };
+        String[] regularPaths = new String[]{
+                "C:/Windows/Fonts/arial.ttf",
+                "C:/Windows/Fonts/calibri.ttf",
+                "C:/Windows/Fonts/times.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
+        };
+        String[] paths = bold ? boldPaths : regularPaths;
+        for (String path : paths) {
+            File fontFile = new File(path);
+            if (fontFile.exists()) {
+                try {
+                    return PDType0Font.load(doc, fontFile);
+                } catch (Exception ignored) {}
+            }
+        }
+        return bold ? PDType1Font.HELVETICA_BOLD : PDType1Font.HELVETICA;
+    }
+
+    private byte[] renderHtmlToPdf(String html, String contractNumber) throws Exception {
+        try (PDDocument doc = new PDDocument(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            PDPage page = new PDPage(PDRectangle.A4);
+            doc.addPage(page);
+
+            PDFont fontBold = loadFont(doc, true);
+            PDFont fontRegular = loadFont(doc, false);
+            boolean isUnicode = fontRegular instanceof PDType0Font;
+
+            String plainText = stripHtmlToText(html);
+            String[] lines = plainText.split("\r?\n");
+
+            float startX = 54;
+            float startY = 780;
+            float marginY = 54;
+            float width = 487;
+
+            PDPageContentStream stream = new PDPageContentStream(doc, page);
+
+            String title = isUnicode ? "HỢP ĐỒNG LAO ĐỘNG" : "HOP DONG LAO DONG";
+            String numLabel = isUnicode ? "Số: " : "So: ";
+
+            stream.beginText();
+            stream.setFont(fontBold, 18);
+            stream.newLineAtOffset(startX, startY);
+            stream.showText(title);
+            stream.endText();
+
+            stream.beginText();
+            stream.setFont(fontBold, 11);
+            stream.newLineAtOffset(startX, startY - 22);
+            stream.showText(numLabel + (isUnicode ? contractNumber : ascii(contractNumber)));
+            stream.endText();
+
+            float y = startY - 50;
+
+            for (String rawLine : lines) {
+                String lineStr = isUnicode ? rawLine.trim() : ascii(rawLine).trim();
+                if (lineStr.isEmpty()) {
+                    y -= 6;
+                    continue;
+                }
+
+                String cleanHeaderCheck = ascii(lineStr);
+                boolean isHeader = cleanHeaderCheck.startsWith("Dieu ") || cleanHeaderCheck.startsWith("Nguoi ")
+                        || cleanHeaderCheck.startsWith("Dieu khoan") || cleanHeaderCheck.startsWith("Chuc danh")
+                        || cleanHeaderCheck.equalsIgnoreCase("HOP DONG LAO DONG")
+                        || cleanHeaderCheck.equalsIgnoreCase("Employment Contract");
+
+                PDFont font = isHeader ? fontBold : fontRegular;
+                float fontSize = isHeader ? 11 : 10;
+                float currentLeading = isHeader ? 16 : 13;
+
+                List<String> wrapped = wrapText(lineStr, font, fontSize, width);
+                for (String w : wrapped) {
+                    if (y < marginY) {
+                        stream.close();
+                        page = new PDPage(PDRectangle.A4);
+                        doc.addPage(page);
+                        stream = new PDPageContentStream(doc, page);
+                        y = startY;
+                    }
+
+                    stream.beginText();
+                    stream.setFont(font, fontSize);
+                    stream.newLineAtOffset(startX, y);
+                    stream.showText(w);
+                    stream.endText();
+
+                    y -= currentLeading;
+                }
+            }
+
+            stream.close();
+            doc.save(out);
+            return out.toByteArray();
+        }
+    }
+
+    private String stripHtmlToText(String html) {
+        if (html == null || html.isBlank()) return "";
+        String text = html
+                .replaceAll("(?i)<style[^*]*?</style>", "")
+                .replaceAll("(?i)<script[^*]*?</script>", "")
+                .replaceAll("(?i)<br\\s*/?>", "\n")
+                .replaceAll("(?i)</div>", "\n")
+                .replaceAll("(?i)</p>", "\n\n")
+                .replaceAll("(?i)</h[1-6]>", "\n\n")
+                .replaceAll("(?i)</section>", "\n\n")
+                .replaceAll("(?i)<[^>]+>", " ")
+                .replaceAll("&nbsp;", " ")
+                .replaceAll("&amp;", "&")
+                .replaceAll("&lt;", "<")
+                .replaceAll("&gt;", ">")
+                .replaceAll("&quot;", "\"")
+                .replaceAll("&#39;", "'");
+        String[] lines = text.split("\r?\n");
+        StringBuilder sb = new StringBuilder();
+        for (String line : lines) {
+            String cleaned = line.replaceAll("[ \\t]+", " ").trim();
+            if (!cleaned.isEmpty()) {
+                sb.append(cleaned).append("\n");
+            }
+        }
+        return sb.toString();
+    }
+
+    private List<String> wrapText(String text, PDFont font, float fontSize, float maxWidth) throws Exception {
+        List<String> lines = new ArrayList<>();
+        String[] words = text.split(" ");
+        StringBuilder currentLine = new StringBuilder();
+
+        for (String word : words) {
+            if (word.isEmpty()) continue;
+            String candidate = currentLine.length() == 0 ? word : currentLine + " " + word;
+            float width = font.getStringWidth(candidate) / 1000 * fontSize;
+            if (width > maxWidth && currentLine.length() > 0) {
+                lines.add(currentLine.toString());
+                currentLine = new StringBuilder(word);
+            } else {
+                currentLine = new StringBuilder(candidate);
+            }
+        }
+        if (currentLine.length() > 0) {
+            lines.add(currentLine.toString());
+        }
+        return lines;
     }
 
     private byte[] appendSignatureEvidence(byte[] source, String signerName, String method,
@@ -390,16 +584,16 @@ public class ElectronicContractSigningService {
             PDPage page = new PDPage(PDRectangle.A4);
             document.addPage(page);
             try (PDPageContentStream canvas = new PDPageContentStream(document, page)) {
-                write(canvas, 54, 780, 17, "ELECTRONIC SIGNATURE AUDIT");
-                write(canvas, 54, 748, 11, "Contract: " + ascii(contractNumber));
-                write(canvas, 54, 728, 11, "Candidate: " + ascii(signerName));
-                write(canvas, 54, 708, 11, "Method: " + method + " + EMAIL OTP");
-                write(canvas, 54, 688, 11, "Signed at: " + signedAt.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) + " Asia/Ho_Chi_Minh");
-                write(canvas, 54, 668, 11, "IP evidence: " + ascii(ipAddress));
-                write(canvas, 54, 638, 10, "Consent version: " + CONSENT_VERSION);
-                write(canvas, 54, 620, 9, ascii(CONSENT_TEXT));
+                write(document, canvas, 54, 780, 17, "ELECTRONIC SIGNATURE AUDIT");
+                write(document, canvas, 54, 748, 11, "Contract: " + contractNumber);
+                write(document, canvas, 54, 728, 11, "Candidate: " + signerName);
+                write(document, canvas, 54, 708, 11, "Method: " + method + " + EMAIL OTP");
+                write(document, canvas, 54, 688, 11, "Signed at: " + signedAt.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) + " Asia/Ho_Chi_Minh");
+                write(document, canvas, 54, 668, 11, "IP evidence: " + ipAddress);
+                write(document, canvas, 54, 638, 10, "Consent version: " + CONSENT_VERSION);
+                write(document, canvas, 54, 620, 9, CONSENT_TEXT);
                 if ("TYPED".equals(method)) {
-                    write(canvas, 70, 500, 24, ascii(signatureData));
+                    write(document, canvas, 70, 500, 24, signatureData);
                 } else {
                     byte[] image = decodeDataUrl(signatureData);
                     PDImageXObject signature = PDImageXObject.createFromByteArray(document, image, "candidate-signature");
@@ -407,7 +601,7 @@ public class ElectronicContractSigningService {
                     float height = Math.min(120, width * signature.getHeight() / signature.getWidth());
                     canvas.drawImage(signature, 70, 470, width, height);
                 }
-                write(canvas, 54, 420, 9, "Document hash is stored in the HRM audit ledger after this page is appended.");
+                write(document, canvas, 54, 420, 9, "Document hash is stored in the HRM audit ledger after this page is appended.");
             }
             document.getDocumentInformation().setCustomMetadataValue("HRM-Signature-Method", method);
             document.getDocumentInformation().setCustomMetadataValue("HRM-Signed-At", signedAt.toString());
@@ -416,11 +610,16 @@ public class ElectronicContractSigningService {
         }
     }
 
-    private void write(PDPageContentStream canvas, float x, float y, float size, String text) throws Exception {
+    private void write(PDDocument doc, PDPageContentStream canvas, float x, float y, float size, String text) throws Exception {
+        boolean bold = size >= 16;
+        PDFont font = loadFont(doc, bold);
+        boolean isUnicode = font instanceof PDType0Font;
+        String val = isUnicode ? (text == null ? "" : text) : ascii(text);
+
         canvas.beginText();
-        canvas.setFont(size >= 16 ? PDType1Font.HELVETICA_BOLD : PDType1Font.HELVETICA, size);
+        canvas.setFont(font, size);
         canvas.newLineAtOffset(x, y);
-        canvas.showText(text == null ? "" : text.substring(0, Math.min(text.length(), 110)));
+        canvas.showText(val.substring(0, Math.min(val.length(), 110)));
         canvas.endText();
     }
 

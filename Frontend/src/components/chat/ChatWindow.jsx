@@ -77,7 +77,7 @@ export default function ChatWindow({ group }) {
         }
 
         const client = new Client({
-            webSocketFactory: () => new SockJS('http://localhost:8080/ws'),
+            webSocketFactory: () => new SockJS(import.meta.env.VITE_WS_URL || '/ws'),
             connectHeaders: {
                 Authorization: `Bearer ${token}`
             },

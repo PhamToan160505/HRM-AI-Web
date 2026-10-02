@@ -87,34 +87,33 @@ public class TelegramNotificationService {
                     .filter(r -> r.getStatus() == RequestStatus.PENDING).count();
 
             StringBuilder sb = new StringBuilder();
-            sb.append("Good morning! Day la bao cao tu dong cua he thong HRM AI.\n\n");
-            sb.append("BAO CAO SANG - ").append(today.format(DATE_FMT)).append("\n");
+            sb.append("☀️ BÁO CÁO SÁNG - ").append(today.format(DATE_FMT)).append("\n");
             sb.append("━━━━━━━━━━━━━━━━━━━━━━\n\n");
 
-            sb.append("NHAN SU\n");
-            sb.append("Tong nhan vien: ").append(totalEmp).append(" nguoi\n");
-            sb.append("Dang lam viec: ").append(activeEmp).append(" nguoi\n\n");
+            sb.append("👥 NHÂN SỰ\n");
+            sb.append("Tổng nhân viên: ").append(totalEmp).append(" người\n");
+            sb.append("Đang làm việc: ").append(activeEmp).append(" người\n\n");
 
-            sb.append("CHAM CONG HOM QUA (").append(yesterday.format(DATE_FMT)).append(")\n");
-            sb.append("Dung gio: ").append(presentYesterday).append(" nguoi\n");
-            sb.append("Di muon: ").append(lateYesterday).append(" nguoi\n");
-            sb.append("Vang mat: ").append(absentYesterday).append(" nguoi\n\n");
+            sb.append("📅 CHẤM CÔNG HÔM QUA (").append(yesterday.format(DATE_FMT)).append(")\n");
+            sb.append("✅ Đúng giờ: ").append(presentYesterday).append(" người\n");
+            sb.append("⏰ Đi muộn: ").append(lateYesterday).append(" người\n");
+            sb.append("❌ Vắng mặt: ").append(absentYesterday).append(" người\n\n");
 
-            sb.append("TUYEN DUNG\n");
-            sb.append("Vi tri dang tuyen: ").append(openJobs).append(" vi tri\n");
-            sb.append("Ho so dang xet: ").append(pendingCv).append(" ho so\n\n");
+            sb.append("📋 TUYỂN DỤNG\n");
+            sb.append("Vị trí đang tuyển: ").append(openJobs).append(" vị trí\n");
+            sb.append("Hồ sơ đang xét: ").append(pendingCv).append(" hồ sơ\n\n");
 
             if (pendingRequests > 0) {
-                sb.append("CO ").append(pendingRequests).append(" DON CHO DUYET!\n");
-                sb.append("Go /request de xem danh sach.\n\n");
+                sb.append("⏳ CÓ ").append(pendingRequests).append(" ĐƠN CHỜ PHÊ DUYỆT!\n");
+                sb.append("Gõ /request để xem danh sách.\n\n");
             } else {
-                sb.append("Khong co don nao cho duyet.\n\n");
+                sb.append("✨ Không có đơn nào chờ duyệt.\n\n");
             }
 
-            sb.append("Go /dashboard de xem toan bo thong tin.");
+            sb.append("💡 Gõ /dashboard để xem toàn bộ thông tin.");
 
             sendToGroup(chatId, sb.toString());
-            log.info("[TelegramNotify] Da gui bao cao sang vao nhom chatId={}", chatId);
+            log.info("[TelegramNotify] Đã gửi báo cáo sáng vào nhóm chatId={}", chatId);
 
         } catch (Exception e) {
             log.error("[TelegramNotify] Loi gui bao cao sang: {}", e.getMessage(), e);
@@ -235,24 +234,24 @@ public class TelegramNotificationService {
                     .mapToDouble(p -> p.getNetSalary() != null ? p.getNetSalary() : 0).sum();
 
             StringBuilder sb = new StringBuilder();
-            sb.append("CANH BAO: BANG LUONG THANG ").append(now.getMonthValue())
-              .append("/").append(now.getYear()).append(" CHUA HOAN TAT!\n");
+            sb.append("⚠️ CẢNH BÁO: BẢNG LƯƠNG THÁNG ").append(now.getMonthValue())
+              .append("/").append(now.getYear()).append(" CHƯA HOÀN TẤT!\n");
             sb.append("━━━━━━━━━━━━━━━━━━━━━━\n");
-            sb.append("Tong nhan vien trong bang luong: ").append(payrolls.size()).append(" nguoi\n");
-            sb.append("Chua duoc duyet: ").append(notApproved).append(" phieu\n");
-            sb.append("Tong chi phi du kien: ").append(String.format("%,.0f", totalNet)).append(" VND\n\n");
-            sb.append("Vui long vao he thong HRM de duyet bang luong truoc cuoi thang!\n");
-            sb.append("Go /luong de xem chi tiet.");
+            sb.append("Tổng nhân viên trong bảng lương: ").append(payrolls.size()).append(" người\n");
+            sb.append("Chưa được duyệt: ").append(notApproved).append(" phiếu\n");
+            sb.append("Tổng chi phí dự kiến: ").append(String.format("%,.0f", totalNet)).append(" VNĐ\n\n");
+            sb.append("Vui lòng vào hệ thống HRM để duyệt bảng lương trước cuối tháng!\n");
+            sb.append("Gõ /luong để xem chi tiết.");
 
             sendToGroup(chatId, sb.toString());
-            log.info("[TelegramNotify] Da gui canh bao bang luong chua duyet thang {}/{}", now.getMonthValue(), now.getYear());
+            log.info("[TelegramNotify] Đã gửi cảnh báo bảng lương chưa duyệt tháng {}/{}", now.getMonthValue(), now.getYear());
 
         } catch (Exception e) {
-            log.error("[TelegramNotify] Loi canh bao bang luong: {}", e.getMessage(), e);
+            log.error("[TelegramNotify] Lỗi cảnh báo bảng lương: {}", e.getMessage(), e);
         }
     }
 
-    // ── 4. THONG BAO UNG VIEN MOI NOP CV (check 15 phut/lan) ─────────────────
+    // ── 4. THÔNG BÁO ỨNG VIÊN MỚI NỘP CV (check 15 phút/lần) ─────────────────
 
     @Scheduled(fixedDelay = 900000, initialDelay = 120000) // 15 phut
     public void notifyNewApplications() {
@@ -276,24 +275,24 @@ public class TelegramNotificationService {
             long openJobs = jobPostingRepository.countByStatus(JobPostingStatus.OPEN);
 
             StringBuilder sb = new StringBuilder();
-            sb.append("CO ").append(newApps).append(" UNG VIEN MOI NOP HO SO!\n");
+            sb.append("📄 CÓ ").append(newApps).append(" ỨNG VIÊN MỚI NỘP HỒ SƠ!\n");
             sb.append("━━━━━━━━━━━━━━━━━━━━━━\n");
-            sb.append("Tong ho so trong he thong: ").append(currentCount).append("\n");
-            sb.append("Vi tri dang tuyen: ").append(openJobs).append(" vi tri\n");
+            sb.append("Tổng hồ sơ trong hệ thống: ").append(currentCount).append("\n");
+            sb.append("Vị trí đang tuyển: ").append(openJobs).append(" vị trí\n");
             long pendingCv = applicationRepository.countByApprovalStatus(ApplicationStatus.PENDING_HR_CV_REVIEW)
                            + applicationRepository.countByApprovalStatus(ApplicationStatus.PENDING_TECH_CV_REVIEW);
-            sb.append("Ho so cho xet duyet: ").append(pendingCv).append("\n\n");
-            sb.append("Vao he thong HRM de xem va xu ly ho so ung vien.");
+            sb.append("Hồ sơ chờ xét duyệt: ").append(pendingCv).append("\n\n");
+            sb.append("👉 Vào hệ thống HRM để xem và xử lý hồ sơ ứng viên.");
 
             sendToGroup(chatId, sb.toString());
-            log.info("[TelegramNotify] Da gui thong bao {} ung vien moi", newApps);
+            log.info("[TelegramNotify] Đã gửi thông báo {} ứng viên mới", newApps);
 
         } catch (Exception e) {
-            log.error("[TelegramNotify] Loi thong bao ung vien moi: {}", e.getMessage(), e);
+            log.error("[TelegramNotify] Lỗi thông báo ứng viên mới: {}", e.getMessage(), e);
         }
     }
 
-    // ── 5. THONG BAO NHAN VIEN MOI ONBOARD (check 1 tieng/lan) ──────────────
+    // ── 5. THÔNG BÁO NHÂN VIÊN MỚI ONBOARD (check 1 tiếng/lần) ──────────────
 
     @Scheduled(fixedDelay = 3600000, initialDelay = 180000) // 1 tieng
     public void notifyNewOnboard() {
@@ -315,14 +314,14 @@ public class TelegramNotificationService {
             long totalEmp = userRepository.countByRoleIn(EMPLOYEE_ROLES);
 
             StringBuilder sb = new StringBuilder();
-            sb.append("CHAO MUNG ").append(newEmployees).append(" THANH VIEN MOI!\n");
+            sb.append("🎉 CHÀO MỪNG ").append(newEmployees).append(" THÀNH VIÊN MỚI!\n");
             sb.append("━━━━━━━━━━━━━━━━━━━━━━\n");
-            sb.append("He thong hien co ").append(currentActive).append("/").append(totalEmp)
-              .append(" nhan vien dang lam viec.\n\n");
-            sb.append("Vao he thong HRM de xem thong tin nhan vien moi.");
+            sb.append("Hệ thống hiện có ").append(currentActive).append("/").append(totalEmp)
+              .append(" nhân viên đang làm việc.\n\n");
+            sb.append("👉 Vào hệ thống HRM để xem thông tin nhân viên mới.");
 
             sendToGroup(chatId, sb.toString());
-            log.info("[TelegramNotify] Da gui thong bao {} nhan vien moi onboard", newEmployees);
+            log.info("[TelegramNotify] Đã gửi thông báo {} nhân viên mới onboard", newEmployees);
 
         } catch (Exception e) {
             log.error("[TelegramNotify] Loi thong bao nhan vien moi: {}", e.getMessage(), e);

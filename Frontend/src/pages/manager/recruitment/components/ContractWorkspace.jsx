@@ -27,6 +27,21 @@ const STATUS = {
   SIGNING_EXPIRED: ['Link ký hết hạn', 'bg-amber-100 text-amber-800'],
 };
 
+const MISSING_FIELD_LABELS = {
+  '/employee/fullName': 'Họ tên người lao động',
+  '/employee/identityNumber': 'Số CCCD người lao động',
+  '/employee/address': 'Địa chỉ người lao động',
+  '/job/title': 'Chức danh công việc',
+  '/job/workLocation': 'Địa điểm làm việc',
+  '/job/contractType': 'Loại hợp đồng',
+  '/employment/startDate': 'Ngày bắt đầu làm việc',
+  '/employer/representativeName': 'Họ tên người đại diện công ty',
+  '/employer/representativeTitle': 'Chức danh người đại diện công ty',
+  '/compensation/baseSalary': 'Mức lương chính'
+};
+
+const formatMissingField = (path) => MISSING_FIELD_LABELS[path] || path;
+
 const FIELD_GROUPS = [
   ['Thông tin người lao động', [
     ['employee.fullName', 'Họ và tên'], ['employee.identityNumber', 'Số CCCD'],
@@ -309,7 +324,9 @@ export default function ContractWorkspace({ applicationId, applicationStatus }) 
       <ContractLifecyclePanel contract={contract} canEdit={canEdit} canApprove={canReviewLegal} onChanged={load} />
 
       {contract.missingFields?.length > 0 && (
-        <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><b>Còn thiếu dữ liệu pháp lý:</b> {contract.missingFields.join(', ')}</div>
+        <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <b>Còn thiếu dữ liệu pháp lý:</b> {contract.missingFields.map(formatMissingField).join(', ')}
+        </div>
       )}
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(380px,0.9fr)]">

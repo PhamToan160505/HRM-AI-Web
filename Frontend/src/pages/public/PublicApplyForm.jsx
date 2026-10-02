@@ -23,7 +23,7 @@ export default function PublicApplyForm() {
   const [extractedCvData, setExtractedCvData] = useState(null);
 
   useEffect(() => {
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+    const apiUrl = import.meta.env.VITE_API_URL || '';
     fetch(`${apiUrl}/public/apply/${jobSlug}`)
       .then(res => res.json())
       .then(data => {
@@ -58,7 +58,7 @@ export default function PublicApplyForm() {
 
     setExtractingCv(true);
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+      const apiUrl = import.meta.env.VITE_API_URL || '';
       const formData = new FormData();
       formData.append('cvFile', cvFile);
       formData.append('aiConsent', 'true');
@@ -126,7 +126,7 @@ export default function PublicApplyForm() {
       });
       data.append('extractedData', JSON.stringify(formattedData));
 
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+      const apiUrl = import.meta.env.VITE_API_URL || '';
       const res = await fetch(`${apiUrl}/public/apply/${jobSlug}`, {
         method: 'POST',
         body: data
