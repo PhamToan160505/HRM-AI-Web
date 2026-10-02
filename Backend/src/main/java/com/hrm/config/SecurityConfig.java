@@ -23,6 +23,10 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.core.Ordered;
+import org.springframework.web.filter.CorsFilter;
+
 import com.hrm.common.repository.UserRepository;
 
 import java.util.List;
@@ -64,6 +68,7 @@ public class SecurityConfig {
                 .requestMatchers("/ws/**").permitAll()      // WebSocket handshake
                 .requestMatchers("/actuator/health").permitAll()
                 .requestMatchers("/telegram/**").permitAll()  // Telegram Bot webhook
+                .requestMatchers("/error").permitAll()        // Spring Boot error dispatch
                 // Mọi route còn lại yêu cầu xác thực
                 .anyRequest().authenticated()
             )
@@ -88,6 +93,13 @@ public class SecurityConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
         return source;
+    }
+
+    @Bean
+    public FilterRegistrationBean<CorsFilter> corsFilterRegistrationBean() {
+        FilterRegistrationBean<CorsFilter> bean = new FilterRegistrationBean<>(new CorsFilter(corsConfigurationSource()));
+        bean.setOrder(Ordered.HIGHEST_PRECEDENCE);
+        return bean;
     }
 
     @Bean
