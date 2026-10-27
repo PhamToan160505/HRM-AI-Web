@@ -12,6 +12,7 @@ import com.hrm.common.payroll.repository.PayrollRepository;
 import com.hrm.common.repository.DepartmentRepository;
 import com.hrm.common.repository.UserRepository;
 import com.hrm.recruitment.entity.ApplicationStatus;
+import com.hrm.recruitment.entity.JobPosting;
 import com.hrm.recruitment.entity.JobPostingStatus;
 import com.hrm.recruitment.repository.ApplicationRepository;
 import com.hrm.recruitment.repository.JobPostingRepository;
@@ -22,13 +23,17 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.text.Normalizer;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 
 /**
  * AI hoi thoai thong minh cho Telegram Bot.
@@ -50,12 +55,15 @@ public class TelegramAiConversationService {
     private final ApplicationRepository applicationRepository;
     private final EmployeeRequestRepository employeeRequestRepository;
     private final DepartmentRepository departmentRepository;
+    private final com.hrm.recruitment.service.PostingVersionLockService postingVersionLockService;
     private final ObjectMapper objectMapper;
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final List<Role> EMPLOYEE_ROLES = List.of(
             Role.NHAN_VIEN, Role.TRUONG_PHONG, Role.GIAM_DOC_PHONG_BAN, Role.CEO
     );
+    private static final Pattern NONLATIN = Pattern.compile("[^\\w-]");
+    private static final Pattern WHITESPACE = Pattern.compile("[\\s]");
 
     private final Map<String, List<ChatMessage>> conversationHistory =
             new ConcurrentHashMap<>(new LinkedHashMap<>(50, 0.75f, true) {
@@ -96,20 +104,21 @@ public class TelegramAiConversationService {
         LocalDate today = LocalDate.now();
         StringBuilder sb = new StringBuilder();
 
-        sb.append("Ban la HRM AI Bot - tro ly thong minh cua he thong quan tri nhan su HRM-AI-Web, chay qua Telegram.\n");
-        sb.append("Nguoi dung la CEO hoac Giam doc, co toan quyen xem moi du lieu trong he thong.\n\n");
-        sb.append("NGAY HOM NAY: ").append(today.format(DATE_FMT)).append("\n\n");
+        sb.append("🔴 BẮT BUỘC VÀ QUY TẮC TỐI CAO: BẠN PHẢI LUÔN LUÔN TRẢ LỜI BẰNG TIẾNG VIỆT CÓ DẤU CHUẨN XÁC 100%. TUYỆT ĐỐI KHÔNG VIẾT TIẾNG VIỆT KHÔNG DẤU TRONG BẤT KỲ TRƯỜNG HỢP NÀO.\n\n");
+        sb.append("Bạn là HRM AI Bot - trợ lý thông minh của hệ thống quản trị nhân sự HRM-AI-Web, chạy qua Telegram.\n");
+        sb.append("Người dùng là CEO hoặc Giám đốc, có toàn quyền xem mọi dữ liệu trong hệ thống.\n\n");
+        sb.append("NGÀY HÔM NAY: ").append(today.format(DATE_FMT)).append("\n\n");
 
-        sb.append("=== DU LIEU THUC THEO THOI GIAN THUC ===\n");
+        sb.append("=== DỮ LIỆU THỰC TE THỜI GIAN THỰC ===\n");
         try {
             long totalEmp = userRepository.countByRoleIn(EMPLOYEE_ROLES);
             long activeEmp = userRepository.countByActiveAndRoleIn(true, EMPLOYEE_ROLES);
-            sb.append("- Tong nhan vien (dang lam): ").append(activeEmp).append("/").append(totalEmp).append(" nguoi\n");
+            sb.append("- Tổng nhân viên (đang làm việc): ").append(activeEmp).append("/").append(totalEmp).append(" người\n");
             List<Object[]> deptDist = userRepository.getDepartmentDistributionRaw();
             if (!deptDist.isEmpty()) {
-                sb.append("- Phan bo phong ban: ");
+                sb.append("- Phân bổ phòng ban: ");
                 for (Object[] row : deptDist) {
-                    sb.append(row[0]).append("=").append(row[1]).append("ng, ");
+                    sb.append(row[0]).append("=").append(row[1]).append(" người, ");
                 }
                 sb.append("\n");
             }
@@ -119,8 +128,8 @@ public class TelegramAiConversationService {
             long present = attendanceRepository.countByDateAndStatus(today, "PRESENT");
             long late    = attendanceRepository.countByDateAndStatus(today, "LATE");
             long absent  = attendanceRepository.countByDateAndStatus(today, "ABSENT");
-            sb.append("- Cham cong hom nay: ").append(present).append(" dung gio, ")
-              .append(late).append(" muon, ").append(absent).append(" vang\n");
+            sb.append("- Chấm công hôm nay: ").append(present).append(" đúng giờ, ")
+              .append(late).append(" đi muộn, ").append(absent).append(" vắng mặt\n");
         } catch (Exception ignored) {}
 
         try {
@@ -129,8 +138,8 @@ public class TelegramAiConversationService {
                     + applicationRepository.countByApprovalStatus(ApplicationStatus.PENDING_TECH_CV_REVIEW);
             long pendingInterview = applicationRepository.countByApprovalStatus(ApplicationStatus.PENDING_INTERVIEW_1)
                     + applicationRepository.countByApprovalStatus(ApplicationStatus.PENDING_INTERVIEW_2);
-            sb.append("- Tuyen dung: ").append(openJobs).append(" vi tri mo, ")
-              .append(pendingCv).append(" dang xet CV, ").append(pendingInterview).append(" dang phong van\n");
+            sb.append("- Tuyển dụng: ").append(openJobs).append(" vị trí mở, ")
+              .append(pendingCv).append(" đang xét CV, ").append(pendingInterview).append(" đang phỏng vấn\n");
         } catch (Exception ignored) {}
 
         try {
@@ -139,9 +148,9 @@ public class TelegramAiConversationService {
             if (!payrolls.isEmpty()) {
                 double totalNet = payrolls.stream().mapToDouble(p -> p.getNetSalary() != null ? p.getNetSalary() : 0).sum();
                 long approved = payrolls.stream().filter(p -> "APPROVED".equals(p.getStatus())).count();
-                sb.append("- Luong thang ").append(now.getMonthValue()).append("/").append(now.getYear())
-                  .append(": Tong net=").append(String.format("%,.0f", totalNet))
-                  .append(" VND, ").append(approved).append("/").append(payrolls.size()).append(" da duyet\n");
+                sb.append("- Lương tháng ").append(now.getMonthValue()).append("/").append(now.getYear())
+                  .append(": Tổng net=").append(String.format("%,.0f", totalNet))
+                  .append(" VNĐ, ").append(approved).append("/").append(payrolls.size()).append(" đã duyệt\n");
             }
         } catch (Exception ignored) {}
 
@@ -149,25 +158,25 @@ public class TelegramAiConversationService {
             long pendingRequests = employeeRequestRepository.findAll().stream()
                     .filter(r -> r.getStatus() == RequestStatus.PENDING).count();
             if (pendingRequests > 0) {
-                sb.append("- CO ").append(pendingRequests).append(" DON DANG CHO DUYET!\n");
+                sb.append("- CÓ ").append(pendingRequests).append(" ĐƠN ĐANG CHỜ PHÊ DUYỆT!\n");
             } else {
-                sb.append("- Khong co don nao cho duyet\n");
+                sb.append("- Không có đơn nào chờ duyệt\n");
             }
         } catch (Exception ignored) {}
 
-        sb.append("\n=== HUONG DAN TRA LOI ===\n");
-        sb.append("1. Tra loi bang tieng Viet co dau, ro rang, chuyen nghiep.\n");
-        sb.append("2. Dung emoji phu hop de lam noi bat thong tin quan trong.\n");
-        sb.append("3. THONG TIN UNG VIEN VA TUYEN DUNG: He thong CO LUU HOAN TOAN DAY DU HO TEN, EMAIL, SDT, VI TRI UNG TUYEN CUA TUNG UNG VIEN. KHONG BAO GIO DUOC NOI HE THONG KHONG LUU TEN UNG VIEN.\n");
-        sb.append("4. Khi nguoi dung hoi ten ung vien moi nop ho so, danh sach ung vien moi, ai nop CV, ho so tuyen dung gan day: BAT BUOC goi ham 'get_recent_applications' de lay ten va thong tin thuc te tu CSDL.\n");
-        sb.append("5. Khi nguoi dung tim kiem ung vien theo ten/email/vi tri: BAT BUOC goi ham 'search_applications'.\n");
-        sb.append("6. Khi nguoi dung hoi ve nhan vien moi gia nhap, nhan su moi, hoac ai moi vao: BAT BUOC goi ham 'get_recent_employees' de tra ve danh sach nhan vien moi nhat tu CSDL.\n");
-        sb.append("7. Khi nguoi dung tim kiem nhan vien (tim ten, tim ma nhan vien): BAT BUOC goi ham 'search_employee'.\n");
-        sb.append("8. Khi can so lieu chi tiet hon (phong ban, luong, don cho duyet, cham cong), hay su dung Function Calling de truy van CSDL thuc te.\n");
-        sb.append("9. Voi cau hoi ve duyet don: nhac nguoi dung dung lenh /request roi /duyet [ID] hoac /tuchoi [ID].\n");
-        sb.append("10. Khong tra loi cac cau hoi hoan toan khong lien quan den cong ty/nhan su.\n");
-        sb.append("11. Tra loi ngan gon, suc tich - toi da 300 tu neu khong can thiet liet ke nhieu.\n");
-        sb.append("12. KHONG dung markdown (**, ##) - chi dung emoji va dau phan cach thuan text.\n");
+        sb.append("\n=== HƯỚNG DẪN TRẢ LỜI ===\n");
+        sb.append("1. LUÔN LUÔN TRẢ LỜI BẰNG TIẾNG VIỆT CÓ DẤU CHUẨN XÁC 100%, ĐẦY ĐỦ DẤU CÂU VÀ DẤU THANH (NGHIÊM CẤM VIẾT KHÔNG DẤU).\n");
+        sb.append("2. Dùng emoji phù hợp để làm nổi bật thông tin quan trọng.\n");
+        sb.append("3. TẠO / ĐĂNG BÀI TUYỂN DỤNG: Khi người dùng yêu cầu tạo bài tuyển dụng, đăng bài tuyển dụng, hoặc đẩy bài tuyển dụng lên hệ thống -> Bạn BẮT BUỘC gọi hàm 'create_job_posting' để lưu vị trí tuyển dụng thực sự vào CSDL! NGHIÊM CẤM khẳng định đã tạo/đẩy bài thành công nếu KHÔNG gọi hàm 'create_job_posting'.\n");
+        sb.append("4. THÔNG TIN ỨNG VIÊN VÀ TUYỂN DỤNG: Hệ thống CÓ LƯU HOÀN TOÀN ĐẦY ĐỦ HỌ TÊN, EMAIL, SĐT, VỊ TRÍ ỨNG TUYỂN CỦA TỪNG ỨNG VIÊN. KHÔNG BAO GIỜ ĐƯỢC NÓI HỆ THỐNG KHÔNG LƯU TÊN ỨNG VIÊN.\n");
+        sb.append("5. Khi người dùng hỏi tên ứng viên mới nộp hồ sơ, danh sách ứng viên mới, ai nộp CV, hồ sơ tuyển dụng gần đây: BẮT BUỘC gọi hàm 'get_recent_applications' để lấy tên và thông tin thực tế từ CSDL.\n");
+        sb.append("6. Khi người dùng tìm kiếm ứng viên theo tên/email/vị trí: BẮT BUỘC gọi hàm 'search_applications'.\n");
+        sb.append("7. Khi người dùng hỏi về nhân viên mới gia nhập, nhân sự mới, hoặc ai mới vào: BẮT BUỘC gọi hàm 'get_recent_employees' để trả về danh sách nhân viên mới nhất từ CSDL.\n");
+        sb.append("8. Khi người dùng tìm kiếm nhân viên (tìm tên, tìm mã nhân viên): BẮT BUỘC gọi hàm 'search_employee'.\n");
+        sb.append("9. Khi cần số liệu chi tiết hơn (phòng ban, lương, đơn chờ duyệt, chấm công), hãy sử dụng Function Calling để truy vấn CSDL thực tế.\n");
+        sb.append("10. Với câu hỏi về duyệt đơn: nhắc người dùng dùng lệnh /request rồi /duyet [ID] hoặc /tuchoi [ID].\n");
+        sb.append("11. Không trả lời các câu hỏi hoàn toàn không liên quan đến công ty/nhân sự.\n");
+        sb.append("12. Trả lời ngắn gọn, súc tích, tự nhiên, thân thiện và BẮT BUỘC BẰNG TIẾNG VIỆT CÓ DẤU.\n");
 
         return sb.toString();
     }
@@ -250,6 +259,21 @@ public class TelegramAiConversationService {
                 .put("type", "STRING")
                 .put("description", "Tu khoa tim kiem (ten ung vien, email, vi tri)");
         p11.putArray("required").add("keyword");
+
+        ObjectNode f12 = funcDecls.addObject();
+        f12.put("name", "create_job_posting");
+        f12.put("description", "Tao va dang bai tuyen dung moi thuc te vao CSDL he thong HRM. BAT BUOC goi ham nay khi nguoi dung yeu cau tao bai tuyen dung, dang tuyen dung, hoac day bai tuyen dung len he thong.");
+        ObjectNode p12 = f12.putObject("parameters");
+        p12.put("type", "OBJECT");
+        ObjectNode props12 = p12.putObject("properties");
+        props12.putObject("title").put("type", "STRING").put("description", "Ten/Tieu de vi tri tuyen dung (vi du: Nhan vien Kinh doanh, Nhan vien Nhan su)");
+        props12.putObject("departmentName").put("type", "STRING").put("description", "Ten phong ban tuyen dung (vi du: Kinh doanh, Nhan su, Ky thuat)");
+        props12.putObject("description").put("type", "STRING").put("description", "Mo ta chi tiet cong viec");
+        props12.putObject("requirements").put("type", "STRING").put("description", "Yeu cau cong viec (Kinh nghiem, ky nang, trinh do)");
+        props12.putObject("quyenLoi").put("type", "STRING").put("description", "Quyen loi ung vien");
+        props12.putObject("soLuongTuyen").put("type", "INTEGER").put("description", "So luong can tuyen");
+        props12.putObject("mucLuong").put("type", "STRING").put("description", "Muc luong (mac dinh Thoa thuan)");
+        p12.putArray("required").add("title").add("departmentName");
 
         return tools;
     }
@@ -519,6 +543,60 @@ public class TelegramAiConversationService {
                         item.put("trangThaiHoSo", app.getApprovalStatus() != null ? app.getApprovalStatus().name() : "N/A");
                     });
                 }
+                case "create_job_posting" -> {
+                    String title = args != null && args.has("title") ? args.get("title").asText().trim() : "";
+                    String deptName = args != null && args.has("departmentName") ? args.get("departmentName").asText().trim() : "";
+                    String desc = args != null && args.has("description") ? args.get("description").asText().trim() : "Mô tả công việc cho vị trí " + title;
+                    String reqs = args != null && args.has("requirements") ? args.get("requirements").asText().trim() : "Yêu cầu kinh nghiệm và kỹ năng phù hợp vị trí " + title;
+                    String benefits = args != null && args.has("quyenLoi") ? args.get("quyenLoi").asText().trim() : "Mức lương cạnh tranh, BHXH đầy đủ, chế độ đãi ngộ tốt";
+                    int quantity = (args != null && args.has("soLuongTuyen")) ? args.get("soLuongTuyen").asInt() : 1;
+                    String salary = (args != null && args.has("mucLuong")) ? args.get("mucLuong").asText() : "Thỏa thuận";
+
+                    if (title.isBlank()) {
+                        result.put("status", "error");
+                        result.put("message", "Tiêu đề vị trí tuyển dụng không được để trống.");
+                    } else {
+                        var dept = departmentRepository.findFirstByTenPhongContainingIgnoreCase(deptName).orElse(null);
+                        Long deptId = dept != null ? dept.getId() : null;
+
+                        String slugStr = toSlug(title) + "-" + System.currentTimeMillis();
+                        String defaultCriteriaJson = "{\"experience_min\":1,\"hard_skills\":[],\"soft_skills\":[],\"education\":\"Đại học\"}";
+
+                        JobPosting newJob = JobPosting.builder()
+                                .title(title)
+                                .description(desc)
+                                .requirements(reqs)
+                                .quyenLoi(benefits)
+                                .soLuongTuyen(quantity > 0 ? quantity : 1)
+                                .diaDiem("Trụ sở chính")
+                                .hinhThucLamViec("Toàn thời gian")
+                                .ngayBatDau(LocalDateTime.now())
+                                .hanNopHoSo(LocalDateTime.now().plusDays(30))
+                                .mucLuong(salary)
+                                .coThoaThuan(salary.toLowerCase().contains("thỏa thuận") || salary.toLowerCase().contains("thoa thuan"))
+                                .capBac("Nhân viên")
+                                .targetRole(Role.NHAN_VIEN)
+                                .departmentId(deptId)
+                                .status(JobPostingStatus.DRAFT)
+                                .slug(slugStr)
+                                .criteriaDefinition(defaultCriteriaJson)
+                                .build();
+
+                        JobPosting savedDraft = jobPostingRepository.save(newJob);
+                        JobPosting lockedJob = postingVersionLockService.lockInitialPair(savedDraft, 1L);
+                        lockedJob.setStatus(JobPostingStatus.OPEN);
+                        JobPosting savedOpenJob = jobPostingRepository.save(lockedJob);
+
+                        log.info("[TelegramAI] Da tao va mo tin tuyen dung thanh cong: ID={}, Title={}, Dept={}", savedOpenJob.getId(), savedOpenJob.getTitle(), deptId);
+
+                        result.put("status", "success");
+                        result.put("jobId", savedOpenJob.getId());
+                        result.put("title", savedOpenJob.getTitle());
+                        result.put("phongBan", dept != null ? dept.getTenPhong() : "Chưa phân công");
+                        result.put("trangThai", savedOpenJob.getStatus().name());
+                        result.put("message", "Đã tạo và đăng tin tuyển dụng thành công lên CSDL hệ thống với ID=" + savedOpenJob.getId());
+                    }
+                }
                 default -> {
                     result.put("status", "error");
                     result.put("message", "Ham khong ton tai: " + functionName);
@@ -530,5 +608,13 @@ public class TelegramAiConversationService {
             result.put("message", "Loi truy van DB: " + e.getMessage());
         }
         return result;
+    }
+
+    private String toSlug(String input) {
+        if (input == null) return "job";
+        String nowhitespace = WHITESPACE.matcher(input).replaceAll("-");
+        String normalized = Normalizer.normalize(nowhitespace, Normalizer.Form.NFD);
+        String slug = NONLATIN.matcher(normalized).replaceAll("");
+        return slug.toLowerCase(Locale.ENGLISH);
     }
 }
