@@ -1,0 +1,17 @@
+================================================================================
+NHẬT KÝ TÍNH NĂNG VÀ NGHIỆP VỤ PHÒNG CÔNG NGHỆ (HRM AI)
+================================================================================
+File này lưu vết tất cả các tính năng thuộc Phòng Công nghệ đã được hoàn thành.
+Mỗi tính năng hoàn thành sẽ được tự động cập nhật vào đây.
+
+================================================================================
+DANH SÁCH TÍNH NĂNG ĐÃ HOÀN THÀNH:
+================================================================================
+
+1. Quản lý Dự án Công nghệ & Phân bổ Đội ngũ (IT Project & Resource Allocation)
+- Ngày hoàn thành: 2026-11-02 12:35
+- Mô tả: Quản lý vòng đời dự án phần mềm (Nội bộ & Khách hàng, Tech Stack, Timeline, Git/Jira/Figma). Phân bổ kỹ sư theo vai trò chuyên môn (Tech Lead, BE, FE, Fullstack, Mobile, QA, DevOps, UI/UX) kèm tỷ lệ % tải công việc (Allocation %). Cảnh báo quá tải khi tổng tải > 100%, tự động theo dõi danh sách ghế chờ (Bench Management), và tự động giải phóng nguồn lực khi dự án kết thúc. Kỹ sư có giao diện "Dự án của tôi" để xem vai trò và tài nguyên kỹ thuật.
+- Thành phần liên quan:
+  + Backend: TechProjectController, TechProjectService, TechProjectRepository, TechProjectMemberRepository, TechProject, TechProjectMember, V19__tech_department_schema.sql, DataSeeder
+  + Frontend: TechProjectListPage.jsx, MyTechProjectsPage.jsx, ProjectFormModal.jsx, StaffingModal.jsx, AppLayout.jsx, App.jsx
+--------------------------------------------------

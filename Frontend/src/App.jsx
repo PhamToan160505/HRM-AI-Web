@@ -47,6 +47,8 @@ import PayrollViewPage from './pages/manager/payroll/PayrollViewPage';
 import ProfilePage from './pages/common/ProfilePage';
 import MyRequestsPage from './pages/employee/MyRequestsPage';
 import ManagerRequestsPage from './pages/manager/ManagerRequestsPage';
+import TechProjectListPage from './pages/tech/TechProjectListPage';
+import MyTechProjectsPage from './pages/tech/MyTechProjectsPage';
 
 /**
  * App Router — cấu trúc route theo SKILL_react-frontend-patterns.md mục 1.
@@ -129,6 +131,7 @@ export default function App() {
             <Route path="my-requests" element={<MyRequestsPage />} />
             <Route path="holidays" element={<HolidayPage />} />
             <Route path="payroll" element={<PayrollPage />} />
+            <Route path="tech-projects" element={<TechProjectListPage />} />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="chat" element={<GroupChatPage />} />
             <Route path="face-enroll" element={
@@ -149,6 +152,7 @@ export default function App() {
           >
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<DirectorDashboardPage />} />
+            <Route path="tech-projects" element={<TechProjectListPage />} />
             <Route path="employees" element={<EmployeeListPage />} />
             <Route path="lifecycle" element={<EmployeeLifecyclePage />} />
             <Route path="recruitment" element={<RecruitmentLayout />}>
@@ -191,6 +195,7 @@ export default function App() {
           >
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<ManagerDashboardPage />} />
+            <Route path="tech-projects" element={<TechProjectListPage />} />
             <Route path="employees" element={<EmployeeListPage />} />
             <Route path="lifecycle" element={<EmployeeLifecyclePage />} />
             <Route path="attendance" element={<ManagerAttendancePage />} />
@@ -241,6 +246,7 @@ export default function App() {
             <Route path="attendance" element={<EmployeeAttendancePage />} />
             <Route path="requests" element={<MyRequestsPage />} />
             <Route path="payroll" element={<PayrollViewPage />} />
+            <Route path="my-projects" element={<MyTechProjectsPage />} />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="chat" element={<GroupChatPage />} />
           </Route>

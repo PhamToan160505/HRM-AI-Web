@@ -18,6 +18,7 @@ import {
   MessageSquare,
   FileText,
   UserRoundCheck,
+  FolderGit2,
 } from 'lucide-react';
 import logoImg from '../../assets/logo.jpg';
 import { useAuth } from '../../context/AuthContext';
@@ -75,6 +76,7 @@ function SidebarContent({ role, tenPhong, onClose, hasUnreadChat }) {
   const ceoNav = [
     { to: '/ceo/dashboard', icon: LayoutDashboard, label: 'Tổng quan', end: true },
     { to: '/ceo/employees', icon: Users, label: 'Nhân sự' },
+    { to: '/ceo/tech-projects', icon: FolderGit2, label: 'Dự án công nghệ' },
     { to: '/ceo/lifecycle', icon: UserRoundCheck, label: 'Nhân viên mới' },
     { to: '/ceo/recruitment', icon: Briefcase, label: 'Tuyển dụng' },
     { to: '/ceo/attendance', icon: ClipboardCheck, label: 'Quản lý chấm công' },
@@ -93,6 +95,10 @@ function SidebarContent({ role, tenPhong, onClose, hasUnreadChat }) {
     { to: '/director/payroll', icon: Banknote, label: 'Quản lý bảng lương' },
     { to: '/director/chat', icon: MessageSquare, label: 'Thảo luận', hasUnread: hasUnreadChat },
   ];
+  const isTechDept = tenPhong === 'Kỹ thuật' || tenPhong === 'Công nghệ' ||
+    tenPhong?.toLowerCase().includes('kỹ thuật') || tenPhong?.toLowerCase().includes('công nghệ');
+  if (isTechDept) directorNav.splice(2, 0,
+    { to: '/director/tech-projects', icon: FolderGit2, label: 'Dự án công nghệ' });
   if (tenPhong === 'Nhân sự') directorNav.splice(2, 0,
     { to: '/director/lifecycle', icon: UserRoundCheck, label: 'Nhân viên mới' });
   const managerNav = [
@@ -106,6 +112,8 @@ function SidebarContent({ role, tenPhong, onClose, hasUnreadChat }) {
     { to: '/manager/payroll', icon: Banknote, label: 'Lương' },
     { to: '/manager/chat', icon: MessageSquare, label: 'Thảo luận', hasUnread: hasUnreadChat },
   ];
+  if (isTechDept) managerNav.splice(2, 0,
+    { to: '/manager/tech-projects', icon: FolderGit2, label: 'Dự án công nghệ' });
   if (tenPhong === 'Nhân sự') managerNav.splice(2, 0,
     { to: '/manager/lifecycle', icon: UserRoundCheck, label: 'Nhân viên mới' });
   const employeeNav = [
@@ -115,6 +123,8 @@ function SidebarContent({ role, tenPhong, onClose, hasUnreadChat }) {
     { to: '/employee/payroll', icon: Banknote, label: 'Phiếu lương' },
     { to: '/employee/chat', icon: MessageSquare, label: 'Thảo luận', hasUnread: hasUnreadChat },
   ];
+  if (isTechDept) employeeNav.splice(1, 0,
+    { to: '/employee/my-projects', icon: FolderGit2, label: 'Dự án của tôi' });
 
   const navItems =
     role === 'admin' ? adminNav

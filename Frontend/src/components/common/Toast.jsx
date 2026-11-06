@@ -1,4 +1,5 @@
 import React, { useState, useCallback, createContext, useContext } from 'react';
+import { createPortal } from 'react-dom';
 import { CheckCircle2, XCircle, AlertTriangle, Info, X } from 'lucide-react';
 
 // ─── Toast Context ──────────────────────────────────────────────────────────
@@ -26,16 +27,16 @@ function Toast({ id, title, message, type = 'info', onDismiss }) {
     <div
       className={`
         toast-enter flex items-start gap-3 
-        bg-white rounded-xl shadow-lg border border-slate-100 border-l-4 ${BG[type]}
-        px-4 py-3 min-w-[280px] max-w-[360px] w-full
+        bg-white rounded-xl shadow-2xl border border-slate-100 border-l-4 ${BG[type]}
+        px-4 py-3 min-w-[280px] max-w-[380px] w-full
         pointer-events-auto
       `}
       role="alert"
     >
       {ICONS[type]}
       <div className="flex-1 min-w-0">
-        {title && <p className="text-sm font-semibold text-slate-800 leading-tight">{title}</p>}
-        {message && <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{message}</p>}
+        {title && <p className="text-sm font-bold text-slate-800 leading-tight">{title}</p>}
+        {message && <p className="text-xs text-slate-600 mt-1 leading-relaxed font-medium">{message}</p>}
       </div>
       <button
         onClick={() => onDismiss(id)}
@@ -52,15 +53,16 @@ function Toast({ id, title, message, type = 'info', onDismiss }) {
 export function ToastContainer({ toasts, onDismiss }) {
   if (toasts.length === 0) return null;
 
-  return (
+  return createPortal(
     <div
-      className="fixed top-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none"
+      className="fixed top-5 right-5 z-[999999] flex flex-col gap-2.5 pointer-events-none max-w-sm w-full"
       aria-live="polite"
     >
       {toasts.map((t) => (
         <Toast key={t.id} {...t} onDismiss={onDismiss} />
       ))}
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -72,7 +74,7 @@ export function ToastProvider({ children }) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  const show = useCallback((title, message, type = 'info', duration = 4000) => {
+  const show = useCallback((title, message, type = 'info', duration = 5000) => {
     const id = Date.now() + Math.random();
     setToasts((prev) => [...prev, { id, title, message, type }]);
     if (duration > 0) {

@@ -74,6 +74,13 @@ public class GlobalExceptionHandler {
     /**
      * AppException — lỗi nghiệp vụ có HttpStatus cụ thể.
      */
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<ApiResponse<Void>> handleIllegalState(IllegalStateException ex) {
+        log.warn("IllegalStateException: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
     @ExceptionHandler(AppException.class)
     public ResponseEntity<ApiResponse<Void>> handleAppException(AppException ex) {
         log.warn("AppException [{}]: {}", ex.getStatus(), ex.getMessage());

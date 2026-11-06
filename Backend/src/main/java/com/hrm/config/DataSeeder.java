@@ -5,6 +5,13 @@ import com.hrm.common.entity.Role;
 import com.hrm.common.entity.User;
 import com.hrm.common.repository.DepartmentRepository;
 import com.hrm.common.repository.UserRepository;
+import com.hrm.tech.entity.ProjectRole;
+import com.hrm.tech.entity.ProjectStatus;
+import com.hrm.tech.entity.ProjectType;
+import com.hrm.tech.entity.TechProject;
+import com.hrm.tech.entity.TechProjectMember;
+import com.hrm.tech.repository.TechProjectMemberRepository;
+import com.hrm.tech.repository.TechProjectRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
@@ -12,12 +19,13 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 /**
- * Seed dữ liệu mẫu khi khởi động — idempotent (kiểm tra existsByEmail/existsByTenPhong trước).
+ * Seed dữ liệu mẫu khi khởi động — idempotent (kiểm tra
+ * existsByEmail/existsByTenPhong trước).
  *
  * 3 tài khoản mẫu:
- *   - giamdoc@hrm.vn      → GIAM_DOC   (không thuộc phòng)
- *   - truongphong@hrm.vn  → TRUONG_PHONG → phòng "Nhân sự"
- *   - nhanvien@hrm.vn     → NHAN_VIEN    → phòng "Nhân sự"
+ * - giamdoc@hrm.vn → GIAM_DOC (không thuộc phòng)
+ * - truongphong@hrm.vn → TRUONG_PHONG → phòng "Nhân sự"
+ * - nhanvien@hrm.vn → NHAN_VIEN → phòng "Nhân sự"
  *
  * Password mặc định: Admin@123 (BCrypt hash, không hardcode plain text)
  */
@@ -31,17 +39,20 @@ public class DataSeeder implements CommandLineRunner {
     private final DepartmentRepository departmentRepository;
     private final PasswordEncoder passwordEncoder;
     private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+    private final TechProjectRepository techProjectRepository;
+    private final TechProjectMemberRepository techProjectMemberRepository;
 
     private static final String DEFAULT_PASSWORD = "Admin@123";
 
     @Override
     public void run(String... args) {
         // Removed legacy cleanup as we are using ddl-auto: create
-        
+
         seedDepartments();
         seedUsers();
         migrateMaNhanVien();
         updateDemoMaNhanVien();
+        seedTechProjects();
     }
 
     private void migrateApplicationsTable() {
@@ -49,28 +60,32 @@ public class DataSeeder implements CommandLineRunner {
             // Kiểm tra xem cột decision_status còn tồn tại không
             String checkColumnSql = "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'applications' AND COLUMN_NAME = 'decision_status'";
             Integer count = jdbcTemplate.queryForObject(checkColumnSql, Integer.class);
-            
+
             if (count != null && count > 0) {
                 log.info("[Migration] Bắt đầu migrate bảng applications từ decision_status sang approval_status");
-                
+
                 // Map PENDING, PENDING_AI_REVIEW -> approvalStatus='PENDING'
-                jdbcTemplate.execute("UPDATE applications SET approval_status = 'PENDING', needs_verification = false WHERE decision_status IN ('PENDING', 'PENDING_AI_REVIEW')");
-                
+                jdbcTemplate.execute(
+                        "UPDATE applications SET approval_status = 'PENDING', needs_verification = false WHERE decision_status IN ('PENDING', 'PENDING_AI_REVIEW')");
+
                 // Map NEEDS_VERIFICATION -> approvalStatus='PENDING', needsVerification=true
-                jdbcTemplate.execute("UPDATE applications SET approval_status = 'PENDING', needs_verification = true WHERE decision_status = 'NEEDS_VERIFICATION'");
-                
+                jdbcTemplate.execute(
+                        "UPDATE applications SET approval_status = 'PENDING', needs_verification = true WHERE decision_status = 'NEEDS_VERIFICATION'");
+
                 // Map APPROVED -> approvalStatus='APPROVED'
-                jdbcTemplate.execute("UPDATE applications SET approval_status = 'APPROVED' WHERE decision_status = 'APPROVED'");
-                
+                jdbcTemplate.execute(
+                        "UPDATE applications SET approval_status = 'APPROVED' WHERE decision_status = 'APPROVED'");
+
                 // Map REJECTED -> approvalStatus='REJECTED'
-                jdbcTemplate.execute("UPDATE applications SET approval_status = 'REJECTED' WHERE decision_status = 'REJECTED'");
-                
+                jdbcTemplate.execute(
+                        "UPDATE applications SET approval_status = 'REJECTED' WHERE decision_status = 'REJECTED'");
+
                 // Set default for new is_priority column
                 jdbcTemplate.execute("UPDATE applications SET is_priority = false WHERE is_priority IS NULL");
-                
+
                 // Xóa cột cũ
                 jdbcTemplate.execute("ALTER TABLE applications DROP COLUMN decision_status");
-                
+
                 log.info("[Migration] Đã migrate và xóa cột decision_status thành công");
             }
         } catch (Exception e) {
@@ -88,13 +103,13 @@ public class DataSeeder implements CommandLineRunner {
             log.info("[Seed] Tạo phòng ban: Nhân sự");
         }
 
-        if (!departmentRepository.existsByTenPhong("Kỹ thuật")) {
+        if (!departmentRepository.existsByTenPhong("Công nghệ")) {
             Department kyThuat = Department.builder()
-                    .tenPhong("Kỹ thuật")
-                    .moTa("Phòng Kỹ thuật — phát triển sản phẩm")
+                    .tenPhong("Công nghệ")
+                    .moTa("Phòng Công nghệ — phát triển sản phẩm")
                     .build();
             departmentRepository.save(kyThuat);
-            log.info("[Seed] Tạo phòng ban: Kỹ thuật");
+            log.info("[Seed] Tạo phòng ban: Công nghệ");
         }
     }
 
@@ -145,25 +160,27 @@ public class DataSeeder implements CommandLineRunner {
                     .active(true)
                     .build();
             userRepository.save(giamDoc);
-            log.info("[Seed] Tạo tài khoản: giamdocphongban@hrm.vn (GIAM_DOC_PHONG_BAN, phòng Nhân sự id={})", nhanSuDeptId);
+            log.info("[Seed] Tạo tài khoản: giamdocphongban@hrm.vn (GIAM_DOC_PHONG_BAN, phòng Nhân sự id={})",
+                    nhanSuDeptId);
         }
 
-        // 3. Giám đốc phòng ban (ví dụ: phòng Kỹ thuật)
-        Long kyThuatDeptId = departmentRepository.findByTenPhong("Kỹ thuật")
+        // 3. Giám đốc phòng ban (ví dụ: phòng Công nghệ)
+        Long congNgheDeptId = departmentRepository.findByTenPhong("Công nghệ")
                 .map(Department::getId)
                 .orElse(null);
-                
+
         if (!userRepository.existsByEmail("giamdocphong@hrm.vn")) {
             User giamDocPhong = User.builder()
                     .hoTen("Phạm Văn Giám Đốc Phòng")
                     .email("giamdocphong@hrm.vn")
                     .passwordHash(hashedPassword)
                     .role(Role.GIAM_DOC_PHONG_BAN)
-                    .departmentId(kyThuatDeptId)
+                    .departmentId(congNgheDeptId)
                     .active(true)
                     .build();
             userRepository.save(giamDocPhong);
-            log.info("[Seed] Tạo tài khoản: giamdocphong@hrm.vn (GIAM_DOC_PHONG_BAN, phòng Kỹ thuật id={})", kyThuatDeptId);
+            log.info("[Seed] Tạo tài khoản: giamdocphong@hrm.vn (GIAM_DOC_PHONG_BAN, phòng Công nghệ id={})",
+                    congNgheDeptId);
         }
 
         // 4. Trưởng phòng — thuộc phòng Nhân sự (ngoại lệ tuyển dụng theo README mục 3)
@@ -194,29 +211,91 @@ public class DataSeeder implements CommandLineRunner {
             log.info("[Seed] Tạo tài khoản: nhanvien@hrm.vn (NHAN_VIEN, phòng Nhân sự id={})", nhanSuDeptId);
         }
 
+        // 6. Trưởng phòng Công nghệ / Công nghệ
+        if (!userRepository.existsByEmail("truongphong_kt@hrm.vn")) {
+            User tpKt = User.builder()
+                    .hoTen("Trần Văn Trưởng Phòng Công nghệ")
+                    .email("truongphong_kt@hrm.vn")
+                    .passwordHash(hashedPassword)
+                    .role(Role.TRUONG_PHONG)
+                    .departmentId(congNgheDeptId)
+                    .chucVu("Trưởng phòng Công nghệ")
+                    .active(true)
+                    .build();
+            userRepository.save(tpKt);
+            log.info("[Seed] Tạo tài khoản: truongphong_kt@hrm.vn (TRUONG_PHONG, phòng Công nghệ)");
+        }
+
+        // 7. Senior Backend Dev
+        if (!userRepository.existsByEmail("dev_nam@hrm.vn")) {
+            User devNam = User.builder()
+                    .hoTen("Nguyễn Hoàng Nam")
+                    .email("dev_nam@hrm.vn")
+                    .passwordHash(hashedPassword)
+                    .role(Role.NHAN_VIEN)
+                    .departmentId(congNgheDeptId)
+                    .chucVu("Senior Backend Engineer")
+                    .active(true)
+                    .build();
+            userRepository.save(devNam);
+            log.info("[Seed] Tạo tài khoản: dev_nam@hrm.vn");
+        }
+
+        // 8. Frontend Dev
+        if (!userRepository.existsByEmail("dev_lan@hrm.vn")) {
+            User devLan = User.builder()
+                    .hoTen("Phạm Hương Lan")
+                    .email("dev_lan@hrm.vn")
+                    .passwordHash(hashedPassword)
+                    .role(Role.NHAN_VIEN)
+                    .departmentId(congNgheDeptId)
+                    .chucVu("Frontend Developer")
+                    .active(true)
+                    .build();
+            userRepository.save(devLan);
+            log.info("[Seed] Tạo tài khoản: dev_lan@hrm.vn");
+        }
+
+        // 9. QA Tester
+        if (!userRepository.existsByEmail("tester_hung@hrm.vn")) {
+            User testerHung = User.builder()
+                    .hoTen("Đỗ Mạnh Hùng")
+                    .email("tester_hung@hrm.vn")
+                    .passwordHash(hashedPassword)
+                    .role(Role.NHAN_VIEN)
+                    .departmentId(congNgheDeptId)
+                    .chucVu("QA Automation Engineer")
+                    .active(true)
+                    .build();
+            userRepository.save(testerHung);
+            log.info("[Seed] Tạo tài khoản: tester_hung@hrm.vn");
+        }
+
         log.info("[Seed] Hoàn tất. Password mặc định: Admin@123 — đổi ngay trên môi trường production.");
     }
 
     private void migrateMaNhanVien() {
         java.util.List<User> users = userRepository.findAll();
         for (User user : users) {
-            if (user.getMaNhanVien() == null || user.getMaNhanVien().startsWith("23") || user.getMaNhanVien().length() != 8) {
+            if (user.getMaNhanVien() == null || user.getMaNhanVien().startsWith("23")
+                    || user.getMaNhanVien().length() != 8) {
                 String prefix;
-                if (user.getRole() == com.hrm.common.entity.Role.ADMIN || user.getRole() == com.hrm.common.entity.Role.CEO) {
+                if (user.getRole() == com.hrm.common.entity.Role.ADMIN
+                        || user.getRole() == com.hrm.common.entity.Role.CEO) {
                     prefix = "99";
                 } else if (user.getRole() == com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN) {
                     prefix = "88";
                 } else {
                     prefix = String.format("%02d", user.getDepartmentId() != null ? user.getDepartmentId() : 0);
                 }
-                
+
                 String newMaNhanVien;
                 java.util.Random random = new java.util.Random();
                 do {
                     int randomNum = 100000 + random.nextInt(900000);
                     newMaNhanVien = prefix + String.valueOf(randomNum);
                 } while (userRepository.findByMaNhanVien(newMaNhanVien).isPresent());
-                
+
                 user.setMaNhanVien(newMaNhanVien);
                 userRepository.save(user);
                 log.info("[Migration] Cập nhật user {} thành mã mới: {}", user.getEmail(), newMaNhanVien);
@@ -225,12 +304,141 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     private void updateDemoMaNhanVien() {
-        userRepository.findByEmail("admin@hrm.vn").ifPresent(u -> { u.setMaNhanVien("99000001"); userRepository.save(u); });
-        userRepository.findByEmail("ceo@hrm.vn").ifPresent(u -> { u.setMaNhanVien("99000002"); userRepository.save(u); });
-        userRepository.findByEmail("giamdocphongban@hrm.vn").ifPresent(u -> { u.setMaNhanVien("88000001"); userRepository.save(u); });
-        userRepository.findByEmail("giamdocphong@hrm.vn").ifPresent(u -> { u.setMaNhanVien("88000002"); userRepository.save(u); });
-        userRepository.findByEmail("truongphong@hrm.vn").ifPresent(u -> { u.setMaNhanVien("01000001"); userRepository.save(u); });
-        userRepository.findByEmail("nhanvien@hrm.vn").ifPresent(u -> { u.setMaNhanVien("01000002"); userRepository.save(u); });
+        userRepository.findByEmail("admin@hrm.vn").ifPresent(u -> {
+            u.setMaNhanVien("99000001");
+            userRepository.save(u);
+        });
+        userRepository.findByEmail("ceo@hrm.vn").ifPresent(u -> {
+            u.setMaNhanVien("99000002");
+            userRepository.save(u);
+        });
+        userRepository.findByEmail("giamdocphongban@hrm.vn").ifPresent(u -> {
+            u.setMaNhanVien("88000001");
+            userRepository.save(u);
+        });
+        userRepository.findByEmail("giamdocphong@hrm.vn").ifPresent(u -> {
+            u.setMaNhanVien("88000002");
+            userRepository.save(u);
+        });
+        userRepository.findByEmail("truongphong@hrm.vn").ifPresent(u -> {
+            u.setMaNhanVien("01000001");
+            userRepository.save(u);
+        });
+        userRepository.findByEmail("nhanvien@hrm.vn").ifPresent(u -> {
+            u.setMaNhanVien("01000002");
+            userRepository.save(u);
+        });
+        userRepository.findByEmail("truongphong_kt@hrm.vn").ifPresent(u -> {
+            u.setMaNhanVien("02000001");
+            userRepository.save(u);
+        });
+        userRepository.findByEmail("dev_nam@hrm.vn").ifPresent(u -> {
+            u.setMaNhanVien("02000002");
+            userRepository.save(u);
+        });
+        userRepository.findByEmail("dev_lan@hrm.vn").ifPresent(u -> {
+            u.setMaNhanVien("02000003");
+            userRepository.save(u);
+        });
+        userRepository.findByEmail("tester_hung@hrm.vn").ifPresent(u -> {
+            u.setMaNhanVien("02000004");
+            userRepository.save(u);
+        });
         log.info("[Seed] Đã cập nhật mã nhân viên tĩnh cho các tài khoản demo.");
+    }
+
+    private void seedTechProjects() {
+        if (techProjectRepository.count() > 0) {
+            return;
+        }
+
+        User creator = userRepository.findByEmail("giamdocphong@hrm.vn")
+                .or(() -> userRepository.findByEmail("ceo@hrm.vn"))
+                .orElse(null);
+
+        if (creator == null)
+            return;
+
+        User devNam = userRepository.findByEmail("dev_nam@hrm.vn").orElse(null);
+        User devLan = userRepository.findByEmail("dev_lan@hrm.vn").orElse(null);
+        User testerHung = userRepository.findByEmail("tester_hung@hrm.vn").orElse(null);
+
+        // Dự án 1: HRM AI System
+        TechProject hrmPrj = TechProject.builder()
+                .projectCode("PRJ-HRM-AI")
+                .projectName("Hệ thống Quản trị Nhân sự HRM AI")
+                .projectType(ProjectType.INTERNAL)
+                .status(ProjectStatus.IN_PROGRESS)
+                .techStack("[\"Java\", \"Spring Boot 3\", \"React 19\", \"MySQL\", \"Redis\", \"Docker\"]")
+                .startDate(java.time.LocalDate.now().minusMonths(2))
+                .endDate(java.time.LocalDate.now().plusMonths(4))
+                .gitRepoUrl("https://github.com/company/hrm-ai")
+                .jiraUrl("https://jira.company.com/browse/HRM")
+                .figmaUrl("https://figma.com/file/hrm-ui")
+                .description(
+                        "Số hóa toàn diện vòng đời nhân sự, tuyển dụng thông minh bằng AI, chấm công và quản lý dự án công nghệ.")
+                .createdBy(creator.getId())
+                .build();
+        hrmPrj = techProjectRepository.save(hrmPrj);
+
+        if (devNam != null) {
+            techProjectMemberRepository.save(TechProjectMember.builder()
+                    .project(hrmPrj)
+                    .userId(devNam.getId())
+                    .projectRole(ProjectRole.TECH_LEAD)
+                    .allocationPercent(70)
+                    .joinedAt(java.time.LocalDate.now().minusMonths(2))
+                    .isActive(true)
+                    .build());
+        }
+        if (devLan != null) {
+            techProjectMemberRepository.save(TechProjectMember.builder()
+                    .project(hrmPrj)
+                    .userId(devLan.getId())
+                    .projectRole(ProjectRole.FRONTEND_DEV)
+                    .allocationPercent(100)
+                    .joinedAt(java.time.LocalDate.now().minusMonths(2))
+                    .isActive(true)
+                    .build());
+        }
+        if (testerHung != null) {
+            techProjectMemberRepository.save(TechProjectMember.builder()
+                    .project(hrmPrj)
+                    .userId(testerHung.getId())
+                    .projectRole(ProjectRole.QA_TESTER)
+                    .allocationPercent(50)
+                    .joinedAt(java.time.LocalDate.now().minusMonths(1))
+                    .isActive(true)
+                    .build());
+        }
+
+        // Dự án 2: E-Commerce Platform
+        TechProject ecomPrj = TechProject.builder()
+                .projectCode("PRJ-ECOMMERCE")
+                .projectName("Nền tảng Thương mại Điện tử B2C")
+                .projectType(ProjectType.CLIENT)
+                .status(ProjectStatus.PLANNING)
+                .techStack("[\"NodeJS\", \"NestJS\", \"Next.js\", \"PostgreSQL\", \"Tailwind CSS\"]")
+                .startDate(java.time.LocalDate.now().minusWeeks(1))
+                .endDate(java.time.LocalDate.now().plusMonths(6))
+                .gitRepoUrl("https://github.com/company/ecom-b2c")
+                .jiraUrl("https://jira.company.com/browse/ECOM")
+                .description("Hệ thống bán hàng trực tuyến tích hợp thanh toán VnPay, quản lý kho và giao vận tự động.")
+                .createdBy(creator.getId())
+                .build();
+        ecomPrj = techProjectRepository.save(ecomPrj);
+
+        if (devNam != null) {
+            techProjectMemberRepository.save(TechProjectMember.builder()
+                    .project(ecomPrj)
+                    .userId(devNam.getId())
+                    .projectRole(ProjectRole.BACKEND_DEV)
+                    .allocationPercent(30)
+                    .joinedAt(java.time.LocalDate.now().minusWeeks(1))
+                    .isActive(true)
+                    .build());
+        }
+
+        log.info("[Seed] Đã khởi tạo 2 dự án công nghệ mẫu: PRJ-HRM-AI và PRJ-ECOMMERCE kèm phân bổ thành viên.");
     }
 }
