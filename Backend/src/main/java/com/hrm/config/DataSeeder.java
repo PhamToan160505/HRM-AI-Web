@@ -10,8 +10,14 @@ import com.hrm.tech.entity.ProjectStatus;
 import com.hrm.tech.entity.ProjectType;
 import com.hrm.tech.entity.TechProject;
 import com.hrm.tech.entity.TechProjectMember;
+import com.hrm.tech.entity.ProficiencyLevel;
+import com.hrm.tech.entity.UserTechSkill;
+import com.hrm.tech.entity.UserTechCertificate;
 import com.hrm.tech.repository.TechProjectMemberRepository;
 import com.hrm.tech.repository.TechProjectRepository;
+import com.hrm.tech.repository.TechSkillRepository;
+import com.hrm.tech.repository.UserTechSkillRepository;
+import com.hrm.tech.repository.UserTechCertificateRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
@@ -41,6 +47,9 @@ public class DataSeeder implements CommandLineRunner {
     private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
     private final TechProjectRepository techProjectRepository;
     private final TechProjectMemberRepository techProjectMemberRepository;
+    private final TechSkillRepository techSkillRepository;
+    private final UserTechSkillRepository userTechSkillRepository;
+    private final UserTechCertificateRepository userTechCertificateRepository;
 
     private static final String DEFAULT_PASSWORD = "Admin@123";
 
@@ -53,6 +62,7 @@ public class DataSeeder implements CommandLineRunner {
         migrateMaNhanVien();
         updateDemoMaNhanVien();
         seedTechProjects();
+        seedTechSkillsAndCertificates();
     }
 
     private void migrateApplicationsTable() {
@@ -440,5 +450,84 @@ public class DataSeeder implements CommandLineRunner {
         }
 
         log.info("[Seed] Đã khởi tạo 2 dự án công nghệ mẫu: PRJ-HRM-AI và PRJ-ECOMMERCE kèm phân bổ thành viên.");
+    }
+
+    private void seedTechSkillsAndCertificates() {
+        if (userTechSkillRepository.count() > 0) return;
+
+        User devNam = userRepository.findByEmail("dev_nam@hrm.vn").orElse(null);
+        User devLan = userRepository.findByEmail("dev_lan@hrm.vn").orElse(null);
+        User testerHung = userRepository.findByEmail("tester_hung@hrm.vn").orElse(null);
+        User tpKt = userRepository.findByEmail("truongphong_kt@hrm.vn").orElse(null);
+        Long verifierId = tpKt != null ? tpKt.getId() : null;
+
+        // Dev Nam
+        if (devNam != null) {
+            addSkillIfPresent(devNam.getId(), "Java", ProficiencyLevel.SENIOR, 5.0, true, verifierId, "Hệ thống Quản trị Nhân sự HRM AI");
+            addSkillIfPresent(devNam.getId(), "Spring Boot", ProficiencyLevel.SENIOR, 4.5, true, verifierId, "Core Architecture HRM AI");
+            addSkillIfPresent(devNam.getId(), "Docker", ProficiencyLevel.MIDDLE, 3.0, true, verifierId, "Containerized CI/CD");
+            addSkillIfPresent(devNam.getId(), "MySQL", ProficiencyLevel.SENIOR, 4.0, true, verifierId, "Database schema & query tuning");
+            addSkillIfPresent(devNam.getId(), "Microservices Architecture", ProficiencyLevel.MIDDLE, 2.0, false, null, "R&D Prototype");
+
+            userTechCertificateRepository.save(UserTechCertificate.builder()
+                    .userId(devNam.getId())
+                    .certificateName("Oracle Certified Professional: Java SE 17 Developer")
+                    .issuingOrganization("Oracle Corporation")
+                    .issueDate(java.time.LocalDate.now().minusYears(1))
+                    .credentialId("OCP-JAVA-17-9824")
+                    .credentialUrl("https://www.credly.com/org/oracle")
+                    .build());
+        }
+
+        // Dev Lan
+        if (devLan != null) {
+            addSkillIfPresent(devLan.getId(), "React", ProficiencyLevel.MIDDLE, 3.0, true, verifierId, "HRM AI Admin Portal");
+            addSkillIfPresent(devLan.getId(), "TypeScript", ProficiencyLevel.MIDDLE, 2.5, true, verifierId, "Type-safe UI components");
+            addSkillIfPresent(devLan.getId(), "Tailwind CSS", ProficiencyLevel.SENIOR, 3.5, true, verifierId, "Design System & UI Components");
+            addSkillIfPresent(devLan.getId(), "Next.js", ProficiencyLevel.JUNIOR, 1.0, false, null, "E-Commerce Frontend");
+
+            userTechCertificateRepository.save(UserTechCertificate.builder()
+                    .userId(devLan.getId())
+                    .certificateName("Meta Certified Front-End Developer")
+                    .issuingOrganization("Meta / Coursera")
+                    .issueDate(java.time.LocalDate.now().minusMonths(8))
+                    .credentialId("META-FE-7741")
+                    .credentialUrl("https://www.coursera.org/verify/professional-cert")
+                    .build());
+        }
+
+        // Tester Hung
+        if (testerHung != null) {
+            addSkillIfPresent(testerHung.getId(), "Automation Testing", ProficiencyLevel.MIDDLE, 3.0, true, verifierId, "Selenium & Playwright Automation Suite");
+            addSkillIfPresent(testerHung.getId(), "Manual Testing", ProficiencyLevel.SENIOR, 4.5, true, verifierId, "UAT & Performance Testing");
+            addSkillIfPresent(testerHung.getId(), "API Testing (Postman)", ProficiencyLevel.MIDDLE, 2.5, true, verifierId, "Integration API testing");
+            addSkillIfPresent(testerHung.getId(), "Python", ProficiencyLevel.JUNIOR, 1.0, false, null, "Automation test scripting");
+
+            userTechCertificateRepository.save(UserTechCertificate.builder()
+                    .userId(testerHung.getId())
+                    .certificateName("ISTQB Certified Tester Foundation Level (CTFL)")
+                    .issuingOrganization("ISTQB - International Software Testing Qualifications Board")
+                    .issueDate(java.time.LocalDate.now().minusYears(2))
+                    .credentialId("ISTQB-CTFL-5510")
+                    .credentialUrl("https://www.istqb.org")
+                    .build());
+        }
+
+        log.info("[Seed] Đã khởi tạo hồ sơ kỹ năng (Skills Matrix) và chứng chỉ mẫu cho kỹ sư phòng Công nghệ.");
+    }
+
+    private void addSkillIfPresent(Long userId, String skillName, ProficiencyLevel level, Double years, boolean verified, Long verifierId, String project) {
+        techSkillRepository.findBySkillNameIgnoreCase(skillName).ifPresent(skill -> {
+            userTechSkillRepository.save(UserTechSkill.builder()
+                    .userId(userId)
+                    .skill(skill)
+                    .proficiencyLevel(level)
+                    .yearsOfExperience(years)
+                    .isVerified(verified)
+                    .verifiedBy(verified ? verifierId : null)
+                    .verifiedAt(verified ? java.time.LocalDateTime.now().minusWeeks(2) : null)
+                    .highlightProject(project)
+                    .build());
+        });
     }
 }

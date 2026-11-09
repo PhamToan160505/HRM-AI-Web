@@ -27,7 +27,14 @@ const PROJECT_ROLES = [
   { value: 'UI_UX_DESIGNER', label: 'UI/UX Designer', color: 'bg-rose-100 text-rose-700 border-rose-200' },
 ];
 
-export default function StaffingModal({ isOpen, onClose, project, onSuccess }) {
+export default function StaffingModal({
+  isOpen,
+  onClose,
+  project,
+  onSuccess,
+  initialUserId = null,
+  initialAllocation = null
+}) {
   const toast = useToast();
   const [candidates, setCandidates] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -37,6 +44,14 @@ export default function StaffingModal({ isOpen, onClose, project, onSuccess }) {
   const [selectedUserId, setSelectedUserId] = useState('');
   const [selectedRole, setSelectedRole] = useState('BACKEND_DEV');
   const [allocationPercent, setAllocationPercent] = useState(100);
+
+  // Remove confirmation modal state
+  const [removeConfirm, setRemoveConfirm] = useState({
+    isOpen: false,
+    memberId: null,
+    memberName: '',
+  });
+  const [removing, setRemoving] = useState(false);
 
   // State chỉnh sửa thành viên hiện có
   const [editingMemberId, setEditingMemberId] = useState(null);
@@ -48,13 +63,27 @@ export default function StaffingModal({ isOpen, onClose, project, onSuccess }) {
     if (isOpen) {
       fetchCandidates();
       document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
+      if (initialUserId) {
+        setSelectedUserId(String(initialUserId));
+      } else {
+        setSelectedUserId('');
+      }
+      if (initialAllocation !== null && initialAllocation !== undefined) {
+        setAllocationPercent(Number(initialAllocation));
+      } else {
+        setAllocationPercent(100);
+      }
     }
+
     return () => {
-      document.body.style.overflow = 'unset';
+      setTimeout(() => {
+        const remaining = document.querySelectorAll('[data-tech-modal="true"]');
+        if (remaining.length === 0) {
+          document.body.style.overflow = 'unset';
+        }
+      }, 50);
     };
-  }, [isOpen]);
+  }, [isOpen, initialUserId, initialAllocation]);
 
   const fetchCandidates = async () => {
     try {
@@ -109,19 +138,21 @@ export default function StaffingModal({ isOpen, onClose, project, onSuccess }) {
     }
   };
 
-  const handleRemoveMember = async (memberId, memberName) => {
-    if (!window.confirm(`Bạn có chắc chắn muốn rút nhân sự "${memberName}" khỏi dự án này?`)) {
-      return;
-    }
+  const handleConfirmRemove = async () => {
+    if (!removeConfirm.memberId) return;
 
     try {
-      await api.delete(`/api/tech/projects/${project.id}/members/${memberId}`);
-      toast.show('Đã cập nhật', `Đã rút ${memberName} khỏi dự án. Nguồn lực đã được hoàn trả về Bench.`, 'info');
+      setRemoving(true);
+      await api.delete(`/api/tech/projects/${project.id}/members/${removeConfirm.memberId}`);
+      toast.show('Đã cập nhật', `Đã rút ${removeConfirm.memberName} khỏi dự án. Nguồn lực đã được hoàn trả về Bench.`, 'info');
+      setRemoveConfirm({ isOpen: false, memberId: null, memberName: '' });
       onSuccess?.();
       fetchCandidates();
     } catch (err) {
       console.error(err);
       toast.show('Lỗi', 'Không thể rút nhân sự', 'error');
+    } finally {
+      setRemoving(false);
     }
   };
 
@@ -157,7 +188,8 @@ export default function StaffingModal({ isOpen, onClose, project, onSuccess }) {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[9999] overflow-y-auto bg-slate-900/60 backdrop-blur-sm p-4 sm:p-6 flex items-center justify-center animate-fadeIn"
+      data-tech-modal="true"
+      className="fixed inset-0 z-[9990] overflow-y-auto bg-slate-900/60 backdrop-blur-sm p-4 sm:p-6 flex items-center justify-center animate-fadeIn"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -491,7 +523,7 @@ export default function StaffingModal({ isOpen, onClose, project, onSuccess }) {
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleRemoveMember(member.id, member.userName)}
+                          onClick={() => setRemoveConfirm({ isOpen: true, memberId: member.id, memberName: member.userName })}
                           className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
                           title="Rút nhân sự khỏi dự án"
                         >
@@ -518,6 +550,57 @@ export default function StaffingModal({ isOpen, onClose, project, onSuccess }) {
             Đóng cửa sổ
           </button>
         </div>
+
+        {/* ── Popup Xác nhận Rút Nhân sự ─────────────────────────────────── */}
+        {removeConfirm.isOpen && (
+          <div data-tech-modal="true" className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
+            <div
+              className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"
+              onClick={() => !removing && setRemoveConfirm({ isOpen: false, memberId: null, memberName: '' })}
+            />
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 overflow-hidden border border-slate-100 z-10 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 border border-rose-100 flex items-center justify-center shrink-0 shadow-xs">
+                  <Trash2 size={24} className="stroke-[2.2]" />
+                </div>
+                <div className="flex-1 pt-0.5">
+                  <h3 className="text-base font-bold text-slate-900">Xác nhận rút nhân sự</h3>
+                  <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                    Bạn có chắc chắn muốn rút nhân sự <strong className="text-slate-800">{removeConfirm.memberName}</strong> khỏi dự án này không? Toàn bộ % công suất sẽ được hoàn trả về ghế chờ (Bench).
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={removing}
+                  onClick={() => setRemoveConfirm({ isOpen: false, memberId: null, memberName: '' })}
+                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100 transition disabled:opacity-50"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  disabled={removing}
+                  onClick={() => setRemoveConfirm({ isOpen: false, memberId: null, memberName: '' })}
+                  className="px-4 py-2.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition disabled:opacity-50"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="button"
+                  disabled={removing}
+                  onClick={handleConfirmRemove}
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 active:bg-rose-800 rounded-xl transition shadow-xs disabled:opacity-50"
+                >
+                  <Trash2 size={14} />
+                  <span>{removing ? 'Đang rút...' : 'Xác nhận rút nhân sự'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>,
     document.body

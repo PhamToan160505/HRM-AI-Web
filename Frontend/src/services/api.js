@@ -39,19 +39,29 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// ─── Response interceptor — xử lý 401 ───────────────────────────────────────
+// ─── Response interceptor — xử lý 401 & hết hạn session ─────────────────────
+const handleAuthError = (error) => {
+  const isUnauthorized = error.response?.status === 401;
+  const isAccessDeniedSession = error.response?.status === 403 && (
+    error.response?.data?.message === 'Access Denied' ||
+    (typeof error.response?.data?.message === 'string' && error.response.data.message.includes('Full authentication'))
+  );
+
+  if (isUnauthorized || isAccessDeniedSession) {
+    // Token hết hạn hoặc không hợp lệ
+    localStorage.removeItem('hrm_token');
+    localStorage.removeItem('hrm_user');
+    // Redirect về login — không dùng React Router ở đây vì ngoài component tree
+    if (window.location.pathname !== '/login') {
+      window.location.href = '/login';
+    }
+  }
+};
+
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      // Token hết hạn hoặc không hợp lệ
-      localStorage.removeItem('hrm_token');
-      localStorage.removeItem('hrm_user');
-      // Redirect về login — không dùng React Router ở đây vì ngoài component tree
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
-    }
+    handleAuthError(error);
     return Promise.reject(error);
   }
 );
@@ -69,11 +79,7 @@ apiAi.interceptors.request.use(
 apiAi.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('hrm_token');
-      localStorage.removeItem('hrm_user');
-      if (window.location.pathname !== '/login') window.location.href = '/login';
-    }
+    handleAuthError(error);
     return Promise.reject(error);
   }
 );

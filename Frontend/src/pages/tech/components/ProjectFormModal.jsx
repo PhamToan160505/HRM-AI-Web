@@ -104,11 +104,14 @@ export default function ProjectFormModal({ isOpen, onClose, onSuccess, initialDa
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
     }
     return () => {
-      document.body.style.overflow = 'unset';
+      setTimeout(() => {
+        const remaining = document.querySelectorAll('[data-tech-modal="true"]');
+        if (remaining.length === 0) {
+          document.body.style.overflow = 'unset';
+        }
+      }, 50);
     };
   }, [isOpen]);
 
@@ -216,7 +219,8 @@ export default function ProjectFormModal({ isOpen, onClose, onSuccess, initialDa
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[9999] overflow-y-auto bg-slate-900/60 backdrop-blur-sm p-4 sm:p-6 flex items-center justify-center animate-fadeIn"
+      data-tech-modal="true"
+      className="fixed inset-0 z-[9990] overflow-y-auto bg-slate-900/60 backdrop-blur-sm p-4 sm:p-6 flex items-center justify-center animate-fadeIn"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}

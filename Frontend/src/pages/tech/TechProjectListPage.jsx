@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   FolderGit2,
   Plus,
@@ -20,12 +21,17 @@ import {
   Sparkles,
   Layers,
   Activity,
-  Briefcase
+  Briefcase,
+  X,
+  Eye
 } from 'lucide-react';
 import api from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/common/Toast';
 import ProjectFormModal from './components/ProjectFormModal';
 import StaffingModal from './components/StaffingModal';
+import SkillsMatrixTab from './components/SkillsMatrixTab';
+import ProjectDetailModal from './components/ProjectDetailModal';
 
 const STATUS_CONFIG = {
   PLANNING: { label: 'Lên kế hoạch', color: 'bg-blue-100 text-blue-700 border-blue-200' },
@@ -36,6 +42,9 @@ const STATUS_CONFIG = {
 };
 
 export default function TechProjectListPage() {
+  const { user } = useAuth();
+  const isCeo = user?.role?.toUpperCase() === 'CEO';
+  const isReadOnly = isCeo;
   const toast = useToast();
   const [activeTab, setActiveTab] = useState('projects'); // 'projects' | 'bench'
   const [projects, setProjects] = useState([]);
@@ -49,12 +58,34 @@ export default function TechProjectListPage() {
   // Modals
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
+  const [selectedDetailProject, setSelectedDetailProject] = useState(null);
   const [staffingProject, setStaffingProject] = useState(null);
+  const [staffingInitialUserId, setStaffingInitialUserId] = useState(null);
+  const [staffingInitialAllocation, setStaffingInitialAllocation] = useState(null);
+
+  // Delete Confirm Modal State
+  const [deleteConfirm, setDeleteConfirm] = useState({
+    isOpen: false,
+    projectId: null,
+    projectName: '',
+  });
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetchProjects();
     fetchBench();
   }, [statusFilter, keyword]);
+
+  useEffect(() => {
+    if (deleteConfirm.isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [deleteConfirm.isOpen]);
 
   const fetchProjects = async () => {
     try {
@@ -86,18 +117,28 @@ export default function TechProjectListPage() {
     }
   };
 
-  const handleDeleteProject = async (id, name) => {
-    if (!window.confirm(`Bạn có chắc chắn muốn xóa dự án "${name}" không? Toàn bộ phân bổ thành viên sẽ bị xóa.`)) {
-      return;
-    }
+  const requestDeleteProject = (id, name) => {
+    setDeleteConfirm({
+      isOpen: true,
+      projectId: id,
+      projectName: name,
+    });
+  };
+
+  const handleConfirmDeleteProject = async () => {
+    if (!deleteConfirm.projectId) return;
     try {
-      await api.delete(`/api/tech/projects/${id}`);
-      toast.show('Thành công', 'Đã xóa dự án thành công', 'success');
+      setDeleting(true);
+      await api.delete(`/api/tech/projects/${deleteConfirm.projectId}`);
+      toast.show('Thành công', `Đã xóa dự án "${deleteConfirm.projectName}" thành công!`, 'success');
+      setDeleteConfirm({ isOpen: false, projectId: null, projectName: '' });
       fetchProjects();
       fetchBench();
     } catch (err) {
       console.error(err);
-      toast.show('Lỗi', 'Không thể xóa dự án', 'error');
+      toast.show('Lỗi', err.response?.data?.message || 'Không thể xóa dự án', 'error');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -118,25 +159,34 @@ export default function TechProjectListPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
-                Quản lý Dự án Công nghệ & Đội ngũ
+                {isReadOnly ? 'Giám sát Dự án Công nghệ & Nguồn lực' : 'Quản lý Dự án Công nghệ & Đội ngũ'}
               </h1>
               <p className="text-xs text-slate-500 mt-0.5">
-                Theo dõi tiến độ sản phẩm phần mềm, phân bổ kỹ sư và tối ưu nguồn lực ghế chờ (Bench)
+                {isReadOnly
+                  ? 'Theo dõi tiến độ sản phẩm phần mềm, hiệu suất sử dụng nhân sự và năng lực phòng Công nghệ'
+                  : 'Theo dõi tiến độ sản phẩm phần mềm, phân bổ kỹ sư và tối ưu nguồn lực ghế chờ (Bench)'}
               </p>
             </div>
           </div>
         </div>
 
-        <button
-          onClick={() => {
-            setEditingProject(null);
-            setIsFormOpen(true);
-          }}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-md shadow-blue-500/20 text-sm font-semibold transition"
-        >
-          <Plus size={18} />
-          <span>Khởi tạo Dự án Mới</span>
-        </button>
+        {isReadOnly ? (
+          <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-semibold shadow-2xs shrink-0">
+            <Eye size={15} className="text-indigo-600 shrink-0" />
+            <span>Chế độ Giám sát Điều hành (Chỉ xem)</span>
+          </div>
+        ) : (
+          <button
+            onClick={() => {
+              setEditingProject(null);
+              setIsFormOpen(true);
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-md shadow-blue-500/20 text-sm font-semibold transition shrink-0"
+          >
+            <Plus size={18} />
+            <span>Khởi tạo Dự án Mới</span>
+          </button>
+        )}
       </div>
 
       {/* Metrics Row */}
@@ -207,6 +257,18 @@ export default function TechProjectListPage() {
           <Users size={16} />
           <span>Tải Kỹ sư & Ghế chờ Bench ({benchUsers.length})</span>
         </button>
+
+        <button
+          onClick={() => setActiveTab('skills')}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold border-b-2 transition ${
+            activeTab === 'skills'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Sparkles size={16} />
+          <span>Ma trận Kỹ năng (Skills Matrix)</span>
+        </button>
       </div>
 
       {/* TAB 1: PROJECTS */}
@@ -249,7 +311,11 @@ export default function TechProjectListPage() {
             <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-300 p-8">
               <FolderGit2 size={40} className="mx-auto text-slate-300 mb-3" />
               <p className="text-sm font-semibold text-slate-700">Chưa tìm thấy dự án nào</p>
-              <p className="text-xs text-slate-400 mt-1">Bấm nút "Khởi tạo Dự án Mới" ở góc trên để tạo dự án đầu tiên.</p>
+              <p className="text-xs text-slate-400 mt-1">
+                {isReadOnly
+                  ? 'Hiện chưa có dự án công nghệ nào phù hợp với tiêu chí tìm kiếm.'
+                  : 'Bấm nút "Khởi tạo Dự án Mới" ở góc trên để tạo dự án đầu tiên.'}
+              </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -263,7 +329,8 @@ export default function TechProjectListPage() {
                 return (
                   <div
                     key={project.id}
-                    className="bg-white rounded-2xl border border-slate-200/90 hover:border-blue-300 shadow-xs hover:shadow-md transition-all flex flex-col overflow-hidden group"
+                    onClick={() => setSelectedDetailProject(project)}
+                    className="bg-white rounded-2xl border border-slate-200/90 hover:border-blue-400 shadow-xs hover:shadow-md transition-all flex flex-col overflow-hidden group cursor-pointer"
                   >
                     {/* Card Top */}
                     <div className="p-5 flex-1 space-y-3.5">
@@ -330,6 +397,7 @@ export default function TechProjectListPage() {
                             href={project.gitRepoUrl}
                             target="_blank"
                             rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
                             className="inline-flex items-center gap-1 hover:text-blue-600 transition"
                           >
                             <GitBranch size={13} />
@@ -341,6 +409,7 @@ export default function TechProjectListPage() {
                             href={project.jiraUrl}
                             target="_blank"
                             rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
                             className="inline-flex items-center gap-1 hover:text-blue-600 transition"
                           >
                             <Kanban size={13} />
@@ -352,6 +421,7 @@ export default function TechProjectListPage() {
                             href={project.figmaUrl}
                             target="_blank"
                             rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
                             className="inline-flex items-center gap-1 hover:text-blue-600 transition"
                           >
                             <Palette size={13} />
@@ -381,32 +451,70 @@ export default function TechProjectListPage() {
                       </div>
 
                       <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => setStaffingProject(project)}
-                          className="px-2.5 py-1.5 text-xs font-semibold bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 rounded-lg shadow-2xs transition flex items-center gap-1"
-                        >
-                          <UserPlus size={13} />
-                          <span>Phân bổ</span>
-                        </button>
+                        {isReadOnly ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedDetailProject(project);
+                            }}
+                            className="px-3 py-1.5 text-xs font-semibold bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 rounded-lg shadow-2xs transition flex items-center gap-1.5"
+                          >
+                            <Eye size={14} />
+                            <span>Xem chi tiết</span>
+                          </button>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedDetailProject(project);
+                              }}
+                              className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                              title="Xem chi tiết dự án"
+                            >
+                              <Eye size={15} />
+                            </button>
 
-                        <button
-                          onClick={() => {
-                            setEditingProject(project);
-                            setIsFormOpen(true);
-                          }}
-                          className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-slate-200/60 rounded-lg transition"
-                          title="Sửa dự án"
-                        >
-                          <Edit3 size={15} />
-                        </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setStaffingProject(project);
+                              }}
+                              className="px-2.5 py-1.5 text-xs font-semibold bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 rounded-lg shadow-2xs transition flex items-center gap-1"
+                            >
+                              <UserPlus size={13} />
+                              <span>Phân bổ</span>
+                            </button>
 
-                        <button
-                          onClick={() => handleDeleteProject(project.id, project.projectName)}
-                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                          title="Xóa dự án"
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingProject(project);
+                                setIsFormOpen(true);
+                              }}
+                              className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-slate-200/60 rounded-lg transition"
+                              title="Sửa dự án"
+                            >
+                              <Edit3 size={15} />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                requestDeleteProject(project.id, project.projectName);
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                              title="Xóa dự án"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -442,10 +550,10 @@ export default function TechProjectListPage() {
                   <tr className="bg-slate-50 border-b border-slate-200/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                     <th className="py-3 px-4">Kỹ sư</th>
                     <th className="py-3 px-4">Chức vụ / Phòng ban</th>
-                    <th className="py-3 px-4">Mức độ phân bổ (% Tải)</th>
-                    <th className="py-3 px-4">Dung lượng còn trống</th>
+                    <th className="py-3 px-4 whitespace-nowrap">Mức độ phân bổ (% Tải)</th>
+                    <th className="py-3 px-4 whitespace-nowrap">Dung lượng còn trống</th>
                     <th className="py-3 px-4">Dự án đang làm</th>
-                    <th className="py-3 px-4 text-center">Trạng thái</th>
+                    <th className="py-3 px-4 text-center whitespace-nowrap">Trạng thái</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
@@ -496,13 +604,13 @@ export default function TechProjectListPage() {
                           </div>
                         </td>
 
-                        <td className="py-3.5 px-4">
+                        <td className="py-3.5 px-4 whitespace-nowrap">
                           {user.availableCapacity > 0 ? (
-                            <span className="font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                            <span className="font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 whitespace-nowrap">
                               Rảnh {user.availableCapacity}%
                             </span>
                           ) : (
-                            <span className="text-slate-400 font-medium">Hết dung lượng</span>
+                            <span className="text-slate-400 font-medium whitespace-nowrap">Hết dung lượng</span>
                           )}
                         </td>
 
@@ -523,18 +631,18 @@ export default function TechProjectListPage() {
                           )}
                         </td>
 
-                        <td className="py-3.5 px-4 text-center">
+                        <td className="py-3.5 px-4 text-center whitespace-nowrap">
                           {isOverloaded ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">
-                              <AlertTriangle size={11} /> Quá tải
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200 whitespace-nowrap">
+                              <AlertTriangle size={11} className="shrink-0" /> Quá tải
                             </span>
                           ) : isAvailable ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
-                              <CheckCircle2 size={11} /> Có thể gán việc
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+                              <CheckCircle2 size={11} className="shrink-0" /> Có thể gán việc
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">
-                              <CheckCircle2 size={11} /> Full 100%
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200 whitespace-nowrap">
+                              <CheckCircle2 size={11} className="shrink-0" /> Full 100%
                             </span>
                           )}
                         </td>
@@ -548,32 +656,148 @@ export default function TechProjectListPage() {
         </div>
       )}
 
+      {/* TAB 3: SKILLS MATRIX */}
+      {activeTab === 'skills' && (
+        <SkillsMatrixTab
+          projects={projects}
+          isReadOnly={isReadOnly}
+          onOpenStaffingModal={
+            !isReadOnly
+              ? (project, userId, availableCap) => {
+                  setStaffingProject(project);
+                  setStaffingInitialUserId(userId || null);
+                  setStaffingInitialAllocation(availableCap || null);
+                }
+              : undefined
+          }
+          onRefreshData={() => {
+            fetchProjects();
+            fetchBench();
+          }}
+        />
+      )}
+
       {/* Modals */}
-      <ProjectFormModal
-        isOpen={isFormOpen}
-        onClose={() => setIsFormOpen(false)}
-        initialData={editingProject}
-        onSuccess={() => {
-          fetchProjects();
-          fetchBench();
-        }}
+      {!isReadOnly && (
+        <>
+          <ProjectFormModal
+            isOpen={isFormOpen}
+            onClose={() => setIsFormOpen(false)}
+            initialData={editingProject}
+            onSuccess={() => {
+              fetchProjects();
+              fetchBench();
+              if (selectedDetailProject) {
+                api.get(`/api/tech/projects/${selectedDetailProject.id}`).then(res => {
+                  if (res.data?.data) setSelectedDetailProject(res.data.data);
+                }).catch(console.error);
+              }
+            }}
+          />
+
+          <StaffingModal
+            isOpen={!!staffingProject}
+            onClose={() => {
+              setStaffingProject(null);
+              setStaffingInitialUserId(null);
+              setStaffingInitialAllocation(null);
+            }}
+            project={staffingProject}
+            initialUserId={staffingInitialUserId}
+            initialAllocation={staffingInitialAllocation}
+            onSuccess={() => {
+              fetchProjects();
+              fetchBench();
+              if (staffingProject) {
+                // refresh project data for modal
+                api.get(`/api/tech/projects/${staffingProject.id}`).then(res => {
+                  if (res.data?.data) {
+                    setStaffingProject(res.data.data);
+                    if (selectedDetailProject && selectedDetailProject.id === staffingProject.id) {
+                      setSelectedDetailProject(res.data.data);
+                    }
+                  }
+                }).catch(console.error);
+              }
+            }}
+          />
+        </>
+      )}
+
+      {/* ── Popup Xem Chi tiết Dự án ───────────────────────────────────── */}
+      <ProjectDetailModal
+        isOpen={!!selectedDetailProject}
+        onClose={() => setSelectedDetailProject(null)}
+        project={selectedDetailProject}
+        onOpenStaffing={
+          !isReadOnly
+            ? (proj) => {
+                setStaffingProject(proj);
+              }
+            : undefined
+        }
+        onOpenEdit={
+          !isReadOnly
+            ? (proj) => {
+                setEditingProject(proj);
+                setIsFormOpen(true);
+              }
+            : undefined
+        }
       />
 
-      <StaffingModal
-        isOpen={!!staffingProject}
-        onClose={() => setStaffingProject(null)}
-        project={staffingProject}
-        onSuccess={() => {
-          fetchProjects();
-          fetchBench();
-          if (staffingProject) {
-            // refresh project data for modal
-            api.get(`/api/tech/projects/${staffingProject.id}`).then(res => {
-              if (res.data?.data) setStaffingProject(res.data.data);
-            });
-          }
-        }}
-      />
+      {/* ── Popup Hộp thoại Xác nhận Xóa Dự án ─────────────────────────── */}
+      {!isReadOnly && deleteConfirm.isOpen &&
+        createPortal(
+          <div data-tech-modal="true" className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
+            <div
+              className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"
+              onClick={() => !deleting && setDeleteConfirm({ isOpen: false, projectId: null, projectName: '' })}
+            />
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 overflow-hidden border border-slate-100 z-10 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 border border-rose-100 flex items-center justify-center shrink-0 shadow-xs">
+                  <Trash2 size={24} className="stroke-[2.2]" />
+                </div>
+                <div className="flex-1 pt-0.5">
+                  <h3 className="text-base font-bold text-slate-900">Xác nhận xóa dự án</h3>
+                  <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                    Bạn có chắc chắn muốn xóa dự án <strong className="text-slate-800">{deleteConfirm.projectName}</strong> không? Toàn bộ danh sách thành viên phân bổ sẽ được giải phóng và hoàn trả % công suất về ghế chờ (Bench).
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={deleting}
+                  onClick={() => setDeleteConfirm({ isOpen: false, projectId: null, projectName: '' })}
+                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100 transition disabled:opacity-50"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  disabled={deleting}
+                  onClick={() => setDeleteConfirm({ isOpen: false, projectId: null, projectName: '' })}
+                  className="px-4 py-2.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 rounded-xl transition disabled:opacity-50"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="button"
+                  disabled={deleting}
+                  onClick={handleConfirmDeleteProject}
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 active:bg-rose-800 rounded-xl transition shadow-xs disabled:opacity-50"
+                >
+                  <Trash2 size={14} />
+                  <span>{deleting ? 'Đang xóa...' : 'Xác nhận xóa dự án'}</span>
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

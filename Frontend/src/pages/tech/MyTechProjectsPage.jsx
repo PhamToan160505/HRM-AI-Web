@@ -12,10 +12,12 @@ import {
   ShieldCheck,
   CheckCircle2,
   Activity,
-  Layers
+  Layers,
+  Award
 } from 'lucide-react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import MyTechProfileTab from './components/MyTechProfileTab';
 
 const STATUS_CONFIG = {
   PLANNING: { label: 'Lên kế hoạch', color: 'bg-blue-100 text-blue-700 border-blue-200' },
@@ -38,6 +40,7 @@ const PROJECT_ROLE_LABELS = {
 
 export default function MyTechProjectsPage() {
   const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState('projects'); // 'projects' | 'profile'
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -101,10 +104,39 @@ export default function MyTechProjectsPage() {
         </div>
       </div>
 
-      {/* Projects Content */}
-      {loading ? (
-        <div className="p-12 text-center text-slate-400 text-sm">Đang tải danh sách dự án của bạn...</div>
-      ) : projects.length === 0 ? (
+      {/* Navigation Tabs */}
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-1">
+        <button
+          onClick={() => setActiveTab('projects')}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold border-b-2 transition ${
+            activeTab === 'projects'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <FolderGit2 size={16} />
+          <span>Dự án đang tham gia ({projects.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('profile')}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold border-b-2 transition ${
+            activeTab === 'profile'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Award size={16} />
+          <span>Hồ sơ Năng lực Kỹ thuật (My Tech Profile)</span>
+        </button>
+      </div>
+
+      {/* TAB 1: PROJECTS */}
+      {activeTab === 'projects' && (
+        <>
+          {loading ? (
+            <div className="p-12 text-center text-slate-400 text-sm">Đang tải danh sách dự án của bạn...</div>
+          ) : projects.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-slate-300 p-8">
           <Layers size={44} className="mx-auto text-slate-300 mb-3" />
           <h3 className="text-base font-bold text-slate-700">Bạn hiện chưa tham gia dự án nào</h3>
@@ -264,6 +296,13 @@ export default function MyTechProjectsPage() {
             );
           })}
         </div>
+      )}
+        </>
+      )}
+
+      {/* TAB 2: MY TECH PROFILE */}
+      {activeTab === 'profile' && (
+        <MyTechProfileTab />
       )}
     </div>
   );

@@ -1,5 +1,6 @@
 package com.hrm.tech.controller;
 
+import com.hrm.common.entity.Role;
 import com.hrm.exception.ApiResponse;
 import com.hrm.security.CustomUserDetails;
 import com.hrm.tech.dto.*;
@@ -43,7 +44,9 @@ public class TechProjectController {
     @PreAuthorize("hasAnyRole('CEO', 'GIAM_DOC_PHONG_BAN', 'TRUONG_PHONG', 'ADMIN')")
     public ResponseEntity<ApiResponse<List<TechBenchUserResponse>>> getBenchEngineers(
             @AuthenticationPrincipal CustomUserDetails userDetails) {
-        Long deptId = userDetails.getDepartmentId();
+        Long deptId = (userDetails.getRole() == Role.CEO || userDetails.getRole() == Role.ADMIN)
+                ? null
+                : userDetails.getDepartmentId();
         List<TechBenchUserResponse> bench = techProjectService.getBenchEngineers(deptId);
         return ResponseEntity.ok(ApiResponse.ok(bench));
     }
@@ -56,7 +59,7 @@ public class TechProjectController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('CEO', 'GIAM_DOC_PHONG_BAN', 'TRUONG_PHONG', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('GIAM_DOC_PHONG_BAN', 'TRUONG_PHONG', 'ADMIN')")
     public ResponseEntity<ApiResponse<TechProjectResponse>> createProject(
             @Valid @RequestBody CreateProjectRequest request,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
@@ -65,7 +68,7 @@ public class TechProjectController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('CEO', 'GIAM_DOC_PHONG_BAN', 'TRUONG_PHONG', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('GIAM_DOC_PHONG_BAN', 'TRUONG_PHONG', 'ADMIN')")
     public ResponseEntity<ApiResponse<TechProjectResponse>> updateProject(
             @PathVariable Long id,
             @Valid @RequestBody UpdateProjectRequest request) {
@@ -74,14 +77,14 @@ public class TechProjectController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('CEO', 'GIAM_DOC_PHONG_BAN', 'TRUONG_PHONG', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('GIAM_DOC_PHONG_BAN', 'TRUONG_PHONG', 'ADMIN')")
     public ResponseEntity<ApiResponse<Void>> deleteProject(@PathVariable Long id) {
         techProjectService.deleteProject(id);
         return ResponseEntity.ok(ApiResponse.ok(null, "Đã xóa dự án thành công"));
     }
 
     @PostMapping("/{id}/members")
-    @PreAuthorize("hasAnyRole('CEO', 'GIAM_DOC_PHONG_BAN', 'TRUONG_PHONG', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('GIAM_DOC_PHONG_BAN', 'TRUONG_PHONG', 'ADMIN')")
     public ResponseEntity<ApiResponse<TechProjectMemberResponse>> addMember(
             @PathVariable Long id,
             @Valid @RequestBody AddProjectMemberRequest request) {
@@ -90,7 +93,7 @@ public class TechProjectController {
     }
 
     @PutMapping("/{id}/members/{memberId}")
-    @PreAuthorize("hasAnyRole('CEO', 'GIAM_DOC_PHONG_BAN', 'TRUONG_PHONG', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('GIAM_DOC_PHONG_BAN', 'TRUONG_PHONG', 'ADMIN')")
     public ResponseEntity<ApiResponse<TechProjectMemberResponse>> updateMember(
             @PathVariable Long id,
             @PathVariable Long memberId,
@@ -100,7 +103,7 @@ public class TechProjectController {
     }
 
     @DeleteMapping("/{id}/members/{memberId}")
-    @PreAuthorize("hasAnyRole('CEO', 'GIAM_DOC_PHONG_BAN', 'TRUONG_PHONG', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('GIAM_DOC_PHONG_BAN', 'TRUONG_PHONG', 'ADMIN')")
     public ResponseEntity<ApiResponse<Void>> removeMember(
             @PathVariable Long id,
             @PathVariable Long memberId) {
