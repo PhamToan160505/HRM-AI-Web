@@ -48,6 +48,7 @@ import ProfilePage from './pages/common/ProfilePage';
 import MyRequestsPage from './pages/employee/MyRequestsPage';
 import ManagerRequestsPage from './pages/manager/ManagerRequestsPage';
 import TechProjectListPage from './pages/tech/TechProjectListPage';
+import CeoTechProjectsPage from './pages/tech/ceo/CeoTechProjectsPage';
 import MyTechProjectsPage from './pages/tech/MyTechProjectsPage';
 
 /**
@@ -131,7 +132,7 @@ export default function App() {
             <Route path="my-requests" element={<MyRequestsPage />} />
             <Route path="holidays" element={<HolidayPage />} />
             <Route path="payroll" element={<PayrollPage />} />
-            <Route path="tech-projects" element={<TechProjectListPage />} />
+            <Route path="tech-projects" element={<CeoTechProjectsPage />} />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="chat" element={<GroupChatPage />} />
             <Route path="face-enroll" element={

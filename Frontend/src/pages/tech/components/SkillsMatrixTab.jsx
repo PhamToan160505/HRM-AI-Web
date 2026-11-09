@@ -1,66 +1,68 @@
-import React, { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useState, useMemo } from 'react';
 import {
-  Layers,
   Search,
-  Filter,
   CheckCircle2,
   Clock,
-  Sparkles,
-  Award,
   ChevronRight,
   UserCheck,
-  Zap,
-  ShieldCheck,
-  X,
-  ExternalLink,
-  Sliders,
-  Check,
-  RotateCcw,
   UserPlus,
-  FolderGit2,
-  Briefcase,
-  Info
+  RotateCcw,
+  Check,
+  ShieldCheck,
+  Cpu,
+  X,
 } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+} from 'recharts';
 import api from '../../../services/api';
 import { useToast } from '../../../components/common/Toast';
 import TechRadarChart from './TechRadarChart';
+import {
+  PROFICIENCY_CONFIG,
+  RADAR_DIMENSIONS,
+  sortSkillsByLevel,
+} from '../techHelpers';
 
-const PROFICIENCY_CONFIG = {
-  FRESHER: { label: 'Fresher', bg: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
-  JUNIOR: { label: 'Junior', bg: 'bg-sky-50 text-sky-700 border-sky-200', dot: 'bg-sky-500' },
-  MIDDLE: { label: 'Middle', bg: 'bg-indigo-50 text-indigo-700 border-indigo-200', dot: 'bg-indigo-500' },
-  SENIOR: { label: 'Senior', bg: 'bg-amber-50 text-amber-800 border-amber-300 font-semibold', dot: 'bg-amber-500' },
-  EXPERT: { label: 'Expert', bg: 'bg-purple-50 text-purple-800 border-purple-300 font-bold', dot: 'bg-purple-600' },
-};
+function TechCoverageTooltip({ active, payload }) {
+  if (!active || !payload || !payload.length) return null;
+  const d = payload[0].payload;
+  return (
+    <div className="bg-[#0F2557] text-white p-3 rounded-xl shadow-xl border border-blue-800/80 text-xs space-y-1">
+      <p className="font-bold text-white">{d.skillName}</p>
+      <div className="space-y-0.5 text-[11px] tabular">
+        <p className="text-blue-200">
+          Đã xác thực: <strong className="text-white">{d.verified} kỹ sư</strong>
+        </p>
+        <p className="text-slate-300">
+          Chờ duyệt: <strong className="text-white">{d.unverified} kỹ sư</strong>
+        </p>
+        <p className="text-emerald-300 pt-0.5 border-t border-blue-800/80">
+          Tổng nhân sự biết: <strong>{d.total} người</strong>
+        </p>
+      </div>
+    </div>
+  );
+}
 
-export const LEVEL_ORDER = {
-  FRESHER: 0,
-  JUNIOR: 1,
-  MIDDLE: 2,
-  SENIOR: 3,
-  EXPERT: 4,
-};
-
-export const sortSkillsByLevel = (skills = []) => {
-  return [...skills].sort((a, b) => {
-    const orderA = LEVEL_ORDER[a.proficiencyLevel] ?? 99;
-    const orderB = LEVEL_ORDER[b.proficiencyLevel] ?? 99;
-    if (orderA !== orderB) return orderA - orderB;
-    const yA = a.yearsOfExperience ?? 0;
-    const yB = b.yearsOfExperience ?? 0;
-    if (yA !== yB) return yA - yB;
-    return (a.skillName || '').localeCompare(b.skillName || '');
-  });
-};
-
-export default function SkillsMatrixTab({ projects = [], isReadOnly = false, onOpenStaffingModal, onRefreshData }) {
+export default function SkillsMatrixTab({
+  matrixData = [],
+  availableSkills = [],
+  isReadOnly = false,
+  onInspectEngineer,
+  onOpenProjectSelect,
+  onVerifySkill,
+  verifyingId = null,
+}) {
   const toast = useToast();
-  const [loading, setLoading] = useState(false);
-  const [matrixData, setMatrixData] = useState([]);
-  const [availableSkills, setAvailableSkills] = useState([]);
 
-  // Bộ lọc Matcher
+  // Smart Skill Matcher State
   const [selectedSkillIds, setSelectedSkillIds] = useState([]);
   const [minLevel, setMinLevel] = useState('MIDDLE');
   const [benchOnly, setBenchOnly] = useState(false);
@@ -68,120 +70,68 @@ export default function SkillsMatrixTab({ projects = [], isReadOnly = false, onO
   const [matchResults, setMatchResults] = useState(null);
   const [matching, setMatching] = useState(false);
 
-  // Modal xem chi tiết hồ sơ kỹ sư
-  const [selectedProfile, setSelectedProfile] = useState(null);
-  const [loadingDetail, setLoadingDetail] = useState(false);
+  // Matrix Directory Filter State
+  const [matrixKeyword, setMatrixKeyword] = useState('');
+  const [verificationFilter, setVerificationFilter] = useState('all'); // 'all' | 'pending' | 'verified'
+  const [benchOnlyView, setBenchOnlyView] = useState(false);
 
-  // Modal Chọn Dự án Phân bổ
-  const [projectList, setProjectList] = useState(projects || []);
-  const [staffingCandidate, setStaffingCandidate] = useState(null);
-  const [isProjectSelectOpen, setIsProjectSelectOpen] = useState(false);
-  const [projectSearchKeyword, setProjectSearchKeyword] = useState('');
+  // Compute Department Average 6-Axis Radar & Tech Coverage
+  const capabilitySummary = useMemo(() => {
+    const count = matrixData.length;
+    const avgScores = {};
+    RADAR_DIMENSIONS.forEach((dim) => {
+      if (count === 0) {
+        avgScores[dim.key] = 0;
+      } else {
+        const sum = matrixData.reduce((acc, p) => acc + (p.radarScores?.[dim.key] || 0), 0);
+        avgScores[dim.key] = Math.round(sum / count);
+      }
+    });
 
-  // State xác thực kỹ năng
-  const [verifyingId, setVerifyingId] = useState(null);
+    let totalSkills = 0;
+    let verifiedSkills = 0;
+    let pendingSkills = 0;
+    const skillAgg = {};
 
-  useEffect(() => {
-    fetchMatrix();
-    fetchSkills();
-  }, []);
-
-  useEffect(() => {
-    if (selectedProfile || isProjectSelectOpen) {
-      document.body.style.overflow = 'hidden';
-    }
-    return () => {
-      setTimeout(() => {
-        const remaining = document.querySelectorAll('[data-tech-modal="true"]');
-        if (remaining.length === 0) {
-          document.body.style.overflow = 'unset';
+    matrixData.forEach((profile) => {
+      const skillsList = profile.skills || [];
+      totalSkills += profile.totalSkills || skillsList.length || 0;
+      verifiedSkills += profile.verifiedSkills || 0;
+      skillsList.forEach((s) => {
+        if (!s.isVerified) pendingSkills += 1;
+        const name = s.skillName;
+        if (!name) return;
+        if (!skillAgg[name]) {
+          skillAgg[name] = { skillName: name, verified: 0, unverified: 0, total: 0 };
         }
-      }, 50);
+        skillAgg[name].total += 1;
+        if (s.isVerified) skillAgg[name].verified += 1;
+        else skillAgg[name].unverified += 1;
+      });
+    });
+
+    const topTechStack = Object.values(skillAgg)
+      .sort((a, b) => b.total - a.total || b.verified - a.verified)
+      .slice(0, 7);
+
+    const verificationRate = totalSkills > 0 ? Math.round((verifiedSkills / totalSkills) * 100) : 0;
+
+    const rankedDims = [...RADAR_DIMENSIONS]
+      .map((d) => ({ ...d, score: avgScores[d.key] || 0 }))
+      .sort((a, b) => b.score - a.score);
+
+    return {
+      avgScores,
+      totalSkills,
+      verifiedSkills,
+      pendingSkills,
+      verificationRate,
+      topTechStack,
+      strongestDim: rankedDims[0],
+      weakestDim: rankedDims[rankedDims.length - 1],
     };
-  }, [selectedProfile, isProjectSelectOpen]);
+  }, [matrixData]);
 
-  useEffect(() => {
-    if (projects && projects.length > 0) {
-      setProjectList(projects);
-    } else {
-      fetchProjects();
-    }
-  }, [projects]);
-
-  const fetchProjects = async () => {
-    try {
-      const res = await api.get('/api/tech/projects');
-      if (res.data?.data) {
-        setProjectList(res.data.data);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const fetchMatrix = async () => {
-    try {
-      setLoading(true);
-      const res = await api.get('/api/tech/skills/matrix');
-      if (res.data?.data) {
-        setMatrixData(res.data.data);
-      }
-    } catch (err) {
-      console.error(err);
-      toast.show('Lỗi', 'Không thể tải ma trận kỹ năng', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchSkills = async () => {
-    try {
-      const res = await api.get('/api/tech/skills');
-      if (res.data?.data) {
-        setAvailableSkills(res.data.data);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  // Xử lý xác thực kỹ năng
-  const handleVerifySkill = async (skillRecordId, engineerName, skillName) => {
-    try {
-      setVerifyingId(skillRecordId);
-      await api.put(`/api/tech/skills/${skillRecordId}/verify`);
-      toast.show('Thành công', `Đã xác thực kỹ năng "${skillName}" cho ${engineerName}!`, 'success');
-      // Cập nhật lại ma trận và profile đang mở
-      await fetchMatrix();
-      if (selectedProfile) {
-        const detailRes = await api.get(`/api/tech/skills/profile/${selectedProfile.userId}`);
-        if (detailRes.data?.data) setSelectedProfile(detailRes.data.data);
-      }
-    } catch (err) {
-      console.error(err);
-      toast.show('Thất bại', err.response?.data?.message || 'Không thể xác thực kỹ năng', 'error');
-    } finally {
-      setVerifyingId(null);
-    }
-  };
-
-  // Mở modal xem hồ sơ chi tiết
-  const handleViewDetail = async (userId) => {
-    try {
-      setLoadingDetail(true);
-      const res = await api.get(`/api/tech/skills/profile/${userId}`);
-      if (res.data?.data) {
-        setSelectedProfile(res.data.data);
-      }
-    } catch (err) {
-      console.error(err);
-      toast.show('Lỗi', 'Không thể tải chi tiết hồ sơ', 'error');
-    } finally {
-      setLoadingDetail(false);
-    }
-  };
-
-  // Thực hiện tìm kiếm & ghép nối
   const handleRunMatcher = async (e) => {
     e.preventDefault();
     if (selectedSkillIds.length === 0) {
@@ -194,8 +144,8 @@ export default function SkillsMatrixTab({ projects = [], isReadOnly = false, onO
       const res = await api.post('/api/tech/skills/match', {
         skillIds: selectedSkillIds,
         minProficiencyLevel: minLevel,
-        benchOnly: benchOnly,
-        strictLevel: strictLevel,
+        benchOnly,
+        strictLevel,
       });
       if (res.data?.data) {
         setMatchResults(res.data.data);
@@ -216,834 +166,565 @@ export default function SkillsMatrixTab({ projects = [], isReadOnly = false, onO
     setMatchResults(null);
   };
 
-  // Mở modal chọn dự án phân bổ
-  const handleOpenProjectSelect = (candidateOrProfile) => {
-    const candidateData = {
-      userId: candidateOrProfile.userId || candidateOrProfile.id,
-      hoTen: candidateOrProfile.hoTen,
-      chucVu: candidateOrProfile.chucVu,
-      availableCapacity: candidateOrProfile.availableCapacity !== undefined
-        ? candidateOrProfile.availableCapacity
-        : (candidateOrProfile.radarScores ? 100 : 0),
-      skills: candidateOrProfile.allSkills || candidateOrProfile.skills || candidateOrProfile.matchedSkills || [],
-    };
-    setStaffingCandidate(candidateData);
-    setProjectSearchKeyword('');
-    setIsProjectSelectOpen(true);
-    // Luôn làm mới ngầm danh sách dự án để đảm bảo danh sách thành viên mới nhất
-    api.get('/api/tech/projects').then(res => {
-      if (res.data?.data) {
-        setProjectList(res.data.data);
+  const filteredMatrix = useMemo(() => {
+    const kw = matrixKeyword.trim().toLowerCase();
+    return matrixData.filter((profile) => {
+      if (benchOnlyView && (profile.availableCapacity || 0) <= 0) return false;
+      if (verificationFilter === 'pending') {
+        const hasPending = (profile.skills || []).some((s) => !s.isVerified);
+        if (!hasPending) return false;
       }
-    }).catch(console.error);
-  };
-
-  // Chọn 1 dự án để bắt đầu phân bổ
-  const handleSelectProjectForStaffing = (project) => {
-    if (!staffingCandidate) return;
-    setIsProjectSelectOpen(false);
-    if (onOpenStaffingModal) {
-      onOpenStaffingModal(project, staffingCandidate.userId, staffingCandidate.availableCapacity);
-    } else {
-      toast.show('Thông báo', `Vui lòng chuyển qua tab "Danh sách Dự án Công nghệ" để phân bổ vào dự án ${project.projectName}`, 'info');
-    }
-  };
+      if (kw) {
+        const matchName = profile.hoTen?.toLowerCase().includes(kw);
+        const matchCode = profile.maNhanVien?.toLowerCase().includes(kw);
+        const matchRole = profile.chucVu?.toLowerCase().includes(kw);
+        const matchSkill = (profile.skills || []).some((s) =>
+          s.skillName?.toLowerCase().includes(kw)
+        );
+        if (!matchName && !matchCode && !matchRole && !matchSkill) return false;
+      }
+      return true;
+    });
+  }, [matrixData, matrixKeyword, benchOnlyView, verificationFilter]);
 
   return (
-    <div className="space-y-6 animate-fadeIn">
-      {/* ── Cụm 1: Smart Skill Matcher (Công cụ Săn tìm & Ghép nối) ──────────── */}
-      <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-2xl shadow-xl border border-slate-800 text-white p-6 relative overflow-hidden">
-        {/* Glow decoration */}
-        <div className="absolute -right-20 -top-20 w-72 h-72 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -left-20 -bottom-20 w-72 h-72 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="relative z-10 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400">
-                <Sparkles size={20} />
-              </div>
-              <div>
-                <h3 className="font-bold text-base text-white">Smart Skill Matcher (Ghép nối Kỹ sư Dự án)</h3>
-                <p className="text-xs text-slate-400">
-                  Lọc nhanh kỹ sư đáp ứng Tech Stack dự án, kiểm tra độ tương thích và sẵn sàng ghế chờ
-                </p>
-              </div>
+    <div className="space-y-5">
+      {/* 1. Department Capability Analytics Bento */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        {/* Left: Average 6-Axis Department Radar */}
+        <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200/90 shadow-[0_4px_20px_-4px_rgba(30,58,138,0.05)] p-5 flex flex-col justify-between space-y-3">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Bản đồ Năng lực 6 Chiều Toàn Phòng</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Điểm năng lực trung bình theo chuyên môn của {matrixData.length} kỹ sư
+              </p>
             </div>
-
-            {matchResults && (
-              <button
-                onClick={handleResetMatcher}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-medium text-slate-300 transition"
-              >
-                <RotateCcw size={14} />
-                <span>Đặt lại bộ lọc</span>
-              </button>
-            )}
+            <span className="text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-full whitespace-nowrap tabular">
+              {capabilitySummary.verificationRate}% đã xác thực
+            </span>
           </div>
 
-          {/* Form Matcher */}
-          <form onSubmit={handleRunMatcher} className="space-y-4 pt-2">
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-              {/* Chọn kỹ năng */}
-              <div className="md:col-span-6 space-y-1.5">
-                <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
-                  Chọn công nghệ yêu cầu ({selectedSkillIds.length} đã chọn)
-                </label>
-                <div className="flex flex-wrap gap-1.5 p-2 bg-white/5 border border-white/10 rounded-xl max-h-28 overflow-y-auto">
-                  {availableSkills.map((skill) => {
-                    const isSelected = selectedSkillIds.includes(skill.id);
-                    return (
-                      <button
-                        key={skill.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedSkillIds((prev) =>
-                            isSelected ? prev.filter((id) => id !== skill.id) : [...prev, skill.id]
-                          );
-                        }}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-medium transition flex items-center gap-1.5 ${
-                          isSelected
-                            ? 'bg-blue-600 text-white shadow-xs'
-                            : 'bg-white/10 text-slate-300 hover:bg-white/20'
-                        }`}
-                      >
-                        {isSelected && <Check size={12} />}
-                        <span>{skill.skillName}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+          <div className="flex items-center justify-center py-1">
+            <TechRadarChart scores={capabilitySummary.avgScores} size={255} />
+          </div>
 
-              {/* Cấp độ kỳ vọng & Tùy chọn lọc */}
-              <div className="md:col-span-3 space-y-1.5">
-                <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
-                  Cấp độ kỹ năng kỳ vọng
-                </label>
-                <select
-                  value={minLevel}
-                  onChange={(e) => setMinLevel(e.target.value)}
-                  className="w-full px-3.5 py-2 text-xs bg-slate-800 border border-white/10 rounded-xl text-white outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="FRESHER">Fresher trở lên</option>
-                  <option value="JUNIOR">Junior trở lên</option>
-                  <option value="MIDDLE">Middle trở lên (Khuyên dùng)</option>
-                  <option value="SENIOR">Senior trở lên</option>
-                  <option value="EXPERT">Expert (Chuyên gia)</option>
-                </select>
-
-                <div className="space-y-1.5 pt-1.5">
-                  <label className="flex items-center gap-2 cursor-pointer text-xs select-none">
-                    <input
-                      type="checkbox"
-                      checked={strictLevel}
-                      onChange={(e) => setStrictLevel(e.target.checked)}
-                      className="rounded text-amber-500 focus:ring-amber-400"
-                    />
-                    <span className={strictLevel ? "font-bold text-amber-300" : "text-slate-300"}>
-                      Lọc nghiêm ngặt cấp bậc
-                    </span>
-                  </label>
-
-                  <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300 select-none">
-                    <input
-                      type="checkbox"
-                      checked={benchOnly}
-                      onChange={(e) => setBenchOnly(e.target.checked)}
-                      className="rounded text-blue-600 focus:ring-blue-500"
-                    />
-                    <span>Chỉ tìm người đang ngồi Bench (Rảnh việc)</span>
-                  </label>
-                </div>
-              </div>
-
-              {/* Nút tìm kiếm */}
-              <div className="md:col-span-3 flex flex-col justify-end">
-                <button
-                  type="submit"
-                  disabled={matching || selectedSkillIds.length === 0}
-                  className="w-full py-2.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-blue-500/25 transition disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {matching ? (
-                    'Đang tính toán...'
-                  ) : (
-                    <>
-                      <Search size={16} />
-                      <span>Săn tìm Kỹ sư phù hợp</span>
-                    </>
-                  )}
-                </button>
-              </div>
+          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-xs">
+            <div className="p-2.5 rounded-xl bg-blue-50/70 border border-blue-100">
+              <span className="text-[10px] font-semibold text-blue-700 block">Mũi nhọn nổi bật</span>
+              <p className="font-bold text-slate-900 mt-0.5 tabular">
+                {capabilitySummary.strongestDim?.label || 'N/A'} ({capabilitySummary.strongestDim?.score || 0}đ)
+              </p>
             </div>
-          </form>
+            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
+              <span className="text-[10px] font-semibold text-slate-500 block">Trụ cột cần bồi đắp</span>
+              <p className="font-bold text-slate-900 mt-0.5 tabular">
+                {capabilitySummary.weakestDim?.label || 'N/A'} ({capabilitySummary.weakestDim?.score || 0}đ)
+              </p>
+            </div>
+          </div>
+        </div>
 
-          {/* Kết quả ghép nối */}
-          {matchResults && (
-            <div className="pt-4 border-t border-white/10 space-y-3 animate-fadeIn">
-              <div className="flex items-center justify-between text-xs text-slate-400">
-                <span>
-                  Tìm thấy <strong className="text-white">{matchResults.length}</strong> ứng viên đáp ứng yêu cầu:
-                </span>
-              </div>
+        {/* Right: Top Core Tech Stack Coverage Chart */}
+        <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200/90 shadow-[0_4px_20px_-4px_rgba(30,58,138,0.05)] p-5 flex flex-col justify-between space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Độ phủ Công nghệ Nòng cốt &amp; Xác thực</h3>
+              <p className="text-xs text-slate-500 mt-0.5 tabular">
+                Phân bổ kỹ sư sở hữu công nghệ chủ chốt ({capabilitySummary.verifiedSkills}/{capabilitySummary.totalSkills} đã duyệt
+                {capabilitySummary.pendingSkills > 0 && ` • ${capabilitySummary.pendingSkills} kỹ năng chờ duyệt`})
+              </p>
+            </div>
+            <div className="flex items-center gap-3 text-[11px] font-semibold text-slate-600 shrink-0">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-xs bg-blue-600" /> Đã xác thực
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-xs bg-slate-300" /> Chờ duyệt
+              </span>
+            </div>
+          </div>
 
-              {matchResults.length === 0 ? (
-                <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-center text-xs text-slate-400">
-                  Không tìm thấy kỹ sư nào phù hợp với toàn bộ tiêu chí trên. Vui lòng hạ bớt cấp độ hoặc bỏ chọn lọc Ghế chờ.
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {matchResults.map((candidate) => (
-                    <div
-                      key={candidate.userId}
-                      className="p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition flex flex-col justify-between space-y-3"
-                    >
-                      <div className="space-y-2">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-xs shadow-xs">
-                              {candidate.hoTen.charAt(0)}
-                            </div>
-                            <div>
-                              <p className="text-xs font-bold text-white">{candidate.hoTen}</p>
-                              <p className="text-[11px] text-slate-400">{candidate.chucVu}</p>
-                            </div>
-                          </div>
-
-                          <div className="px-2 py-0.5 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-300 font-bold text-[11px]">
-                            {candidate.matchScore}% Khớp
-                          </div>
-                        </div>
-
-                        {/* Tình trạng tải */}
-                        <div className="flex items-center justify-between text-[11px] pt-1">
-                          <span className="text-slate-400">Dung lượng rảnh:</span>
-                          <span
-                            className={`font-semibold ${
-                              candidate.availableCapacity > 0 ? 'text-emerald-400' : 'text-slate-400'
-                            }`}
-                          >
-                            {candidate.availableCapacity > 0 ? `Rảnh ${candidate.availableCapacity}%` : 'Full 100%'}
-                          </span>
-                        </div>
-
-                        {/* Kỹ năng khớp */}
-                        <div className="space-y-1">
-                          <p className="text-[10px] text-slate-400 uppercase font-semibold">Kỹ năng đáp ứng:</p>
-                          <div className="flex flex-wrap gap-1">
-                            {sortSkillsByLevel(candidate.matchedSkills || []).map((ms) => {
-                              const conf = PROFICIENCY_CONFIG[ms.proficiencyLevel] || PROFICIENCY_CONFIG.MIDDLE;
-                              return (
-                                <span
-                                  key={ms.id}
-                                  className={`px-2 py-0.5 rounded text-[10px] border flex items-center gap-1 ${conf.bg}`}
-                                >
-                                  <span>{ms.skillName}</span>
-                                  <span className="opacity-75">({conf.label})</span>
-                                  {ms.isVerified && <CheckCircle2 size={10} className="text-blue-600" />}
-                                </span>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className={`grid ${isReadOnly ? 'grid-cols-1' : 'grid-cols-2'} gap-2 pt-2 border-t border-white/10`}>
-                        <button
-                          type="button"
-                          onClick={() => handleViewDetail(candidate.userId)}
-                          className="py-1.5 px-3 rounded-lg bg-white/10 hover:bg-white/20 text-white border border-white/15 text-xs font-semibold transition flex items-center justify-center gap-1.5"
-                          title="Xem chi tiết Radar & kỹ năng"
-                        >
-                          <UserCheck size={13} className="text-blue-300" />
-                          <span>Tech Profile</span>
-                        </button>
-
-                        {!isReadOnly && (
-                          <button
-                            type="button"
-                            onClick={() => handleOpenProjectSelect(candidate)}
-                            className="py-1.5 px-3 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-blue-500/20"
-                            title="Chọn dự án để phân bổ nhân sự này"
-                          >
-                            <UserPlus size={13} />
-                            <span>Phân bổ</span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+          {capabilitySummary.topTechStack.length === 0 ? (
+            <div className="h-64 flex items-center justify-center text-xs text-slate-400">
+              Chưa có dữ liệu kỹ năng được khai báo.
+            </div>
+          ) : (
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={capabilitySummary.topTechStack}
+                  layout="vertical"
+                  margin={{ top: 4, right: 20, left: 8, bottom: 4 }}
+                  barSize={18}
+                >
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E2E8F0" />
+                  <XAxis
+                    type="number"
+                    allowDecimals={false}
+                    tick={{ fontSize: 11, fill: '#64748B' }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="skillName"
+                    width={130}
+                    tick={{ fontSize: 11, fill: '#1E293B', fontWeight: 600 }}
+                    axisLine={{ stroke: '#CBD5E1' }}
+                    tickLine={false}
+                  />
+                  <Tooltip content={<TechCoverageTooltip />} cursor={{ fill: '#EFF6FF' }} />
+                  <Bar dataKey="verified" stackId="stack" fill="#2563EB" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="unverified" stackId="stack" fill="#CBD5E1" radius={[0, 6, 6, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           )}
         </div>
       </div>
 
-      {/* ── Cụm 2: Ma trận Kỹ năng toàn phòng (Skills Heatmap Matrix) ───────── */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/50">
+      {/* 2. Smart Skill Matcher — Crisp Deep Sapphire Architectural Panel */}
+      <div className="bg-[#0F2557] rounded-2xl border border-blue-900/80 shadow-[0_8px_28px_-6px_rgba(15,37,87,0.3)] text-white p-5 sm:p-6 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-200 shrink-0">
+              <Cpu size={20} />
+            </div>
+            <div>
+              <h3 className="font-bold text-base text-white">
+                Smart Skill Matcher — Kiểm tra &amp; Ghép nối Kỹ sư
+              </h3>
+              <p className="text-xs text-blue-100/75 mt-0.5">
+                Lọc nhanh kỹ sư đáp ứng Tech Stack, kiểm tra tải công việc và điều phối trực tiếp vào dự án phù hợp
+              </p>
+            </div>
+          </div>
+
+          {matchResults && (
+            <button
+              type="button"
+              onClick={handleResetMatcher}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-blue-100 transition cursor-pointer shrink-0"
+            >
+              <RotateCcw size={13} />
+              <span>Đặt lại bộ lọc</span>
+            </button>
+          )}
+        </div>
+
+        <form onSubmit={handleRunMatcher} className="space-y-4 pt-1">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+            {/* Skill Multi-select */}
+            <div className="md:col-span-6 space-y-1.5">
+              <label className="text-[11px] font-semibold text-blue-100/90 block">
+                Chọn công nghệ yêu cầu ({selectedSkillIds.length} đã chọn)
+              </label>
+              <div className="flex flex-wrap gap-1.5 p-2.5 bg-slate-950/35 border border-white/10 rounded-xl max-h-28 overflow-y-auto">
+                {availableSkills.map((skill) => {
+                  const isSelected = selectedSkillIds.includes(skill.id);
+                  return (
+                    <button
+                      key={skill.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedSkillIds((prev) =>
+                          isSelected ? prev.filter((id) => id !== skill.id) : [...prev, skill.id]
+                        );
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium transition flex items-center gap-1.5 cursor-pointer ${
+                        isSelected
+                          ? 'bg-blue-600 text-white border border-blue-400'
+                          : 'bg-white/10 text-blue-100 hover:bg-white/20 border border-transparent'
+                      }`}
+                    >
+                      {isSelected && <Check size={12} />}
+                      <span>{skill.skillName}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Level & options */}
+            <div className="md:col-span-3 space-y-2">
+              <label className="text-[11px] font-semibold text-blue-100/90 block">
+                Cấp độ chuyên môn kỳ vọng
+              </label>
+              <select
+                value={minLevel}
+                onChange={(e) => setMinLevel(e.target.value)}
+                className="w-full px-3 py-2 text-xs bg-slate-900 border border-white/15 rounded-xl text-white outline-none focus:ring-2 focus:ring-blue-400 cursor-pointer"
+              >
+                <option value="FRESHER" className="bg-slate-900 text-white">Fresher trở lên</option>
+                <option value="JUNIOR" className="bg-slate-900 text-white">Junior trở lên</option>
+                <option value="MIDDLE" className="bg-slate-900 text-white">Middle trở lên (Khuyên dùng)</option>
+                <option value="SENIOR" className="bg-slate-900 text-white">Senior trở lên</option>
+                <option value="EXPERT" className="bg-slate-900 text-white">Expert (Chuyên gia)</option>
+              </select>
+
+              <div className="space-y-1.5 pt-1">
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-blue-100/90 select-none">
+                  <input
+                    type="checkbox"
+                    checked={strictLevel}
+                    onChange={(e) => setStrictLevel(e.target.checked)}
+                    className="rounded border-white/30 text-blue-500 focus:ring-blue-400"
+                  />
+                  <span className={strictLevel ? 'font-bold text-white' : ''}>Lọc nghiêm ngặt cấp bậc</span>
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-blue-100/90 select-none">
+                  <input
+                    type="checkbox"
+                    checked={benchOnly}
+                    onChange={(e) => setBenchOnly(e.target.checked)}
+                    className="rounded border-white/30 text-blue-500 focus:ring-blue-400"
+                  />
+                  <span>Chỉ xét nhân sự còn dung lượng trống</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Trigger Button */}
+            <div className="md:col-span-3 flex flex-col justify-end gap-1.5">
+              {selectedSkillIds.length === 0 && (
+                <p className="text-[11px] text-blue-200/75 text-center md:text-left">
+                  Chọn ít nhất 1 công nghệ bên trái để tìm kiếm
+                </p>
+              )}
+              <button
+                type="submit"
+                disabled={matching || selectedSkillIds.length === 0}
+                className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/40 text-white rounded-xl text-xs font-bold border border-blue-400/30 transition disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Search size={15} />
+                <span>{matching ? 'Đang tìm kiếm...' : 'Tìm kỹ sư phù hợp'}</span>
+              </button>
+            </div>
+          </div>
+        </form>
+
+        {/* Match Results */}
+        {matchResults && (
+          <div className="pt-4 border-t border-white/10 space-y-3">
+            <div className="flex items-center justify-between text-xs text-blue-100/80 tabular">
+              <span>
+                Phát hiện <strong className="text-white">{matchResults.length} kỹ sư</strong> đáp ứng cấu hình công nghệ đã chọn:
+              </span>
+            </div>
+
+            {matchResults.length === 0 ? (
+              <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-center text-xs text-blue-100/75">
+                Hiện chưa có kỹ sư nào đáp ứng đầy đủ tổ hợp tiêu chí này. Hãy thử hạ cấp bậc hoặc mở rộng ra toàn phòng.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {matchResults.map((candidate) => (
+                  <div
+                    key={candidate.userId}
+                    className="p-4 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 transition flex flex-col justify-between space-y-3"
+                  >
+                    <div className="space-y-2.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-xs shrink-0">
+                            {candidate.hoTen ? candidate.hoTen.charAt(0).toUpperCase() : 'U'}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-white truncate">{candidate.hoTen}</p>
+                            <p className="text-[11px] text-blue-100/75 truncate">{candidate.chucVu}</p>
+                          </div>
+                        </div>
+
+                        <span className="px-2 py-0.5 rounded-full bg-blue-500/30 border border-blue-300/30 text-blue-100 font-bold text-[11px] whitespace-nowrap shrink-0 tabular">
+                          {candidate.matchScore}% Khớp
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[11px] pt-0.5 tabular">
+                        <span className="text-blue-100/70">Công suất sẵn sàng:</span>
+                        <span
+                          className={`font-bold ${
+                            candidate.availableCapacity > 0 ? 'text-emerald-300' : 'text-blue-200/80'
+                          }`}
+                        >
+                          {candidate.availableCapacity > 0 ? `Rảnh ${candidate.availableCapacity}%` : 'Full 100%'}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap gap-1.5">
+                        {sortSkillsByLevel(candidate.matchedSkills || []).map((ms) => {
+                          const conf = PROFICIENCY_CONFIG[ms.proficiencyLevel] || PROFICIENCY_CONFIG.MIDDLE;
+                          return (
+                            <span
+                              key={ms.id}
+                              className={`px-2 py-0.5 rounded-md text-[10px] border inline-flex items-center gap-1 whitespace-nowrap ${conf.bg}`}
+                            >
+                              <span>{ms.skillName}</span>
+                              <span className="opacity-75">({conf.label})</span>
+                              {ms.isVerified && (
+                                <CheckCircle2
+                                  size={10}
+                                  className={conf.isDark ? 'text-blue-300 shrink-0' : 'text-blue-600 shrink-0'}
+                                />
+                              )}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className={`grid ${isReadOnly ? 'grid-cols-1' : 'grid-cols-2'} gap-2 pt-2 border-t border-white/10`}>
+                      <button
+                        type="button"
+                        onClick={() => onInspectEngineer && onInspectEngineer(candidate.userId)}
+                        className="py-2 px-3 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/15 text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+                      >
+                        <UserCheck size={13} className="text-blue-200 shrink-0" />
+                        <span>Tech Profile</span>
+                      </button>
+
+                      {!isReadOnly && onOpenProjectSelect && (
+                        <button
+                          type="button"
+                          onClick={() => onOpenProjectSelect(candidate)}
+                          className="py-2 px-3 rounded-xl bg-white text-[#0F2557] hover:bg-blue-50 text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+                        >
+                          <UserPlus size={13} className="shrink-0" />
+                          <span>Phân bổ</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 3. Department Engineer Skills Directory */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden">
+        <div className="p-5 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-slate-50/40">
           <div>
-            <h3 className="text-base font-bold text-slate-800">Ma trận Kỹ năng Đội ngũ Kỹ sư (Skills Matrix)</h3>
+            <h3 className="text-sm font-bold text-slate-900">
+              Ma trận Kỹ năng Đội ngũ Kỹ sư ({filteredMatrix.length})
+            </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Theo dõi trình độ chuyên môn (Fresher → Expert), số năm kinh nghiệm và xác thực năng lực
+              Theo dõi trình độ chuyên môn (Fresher → Expert), số năm kinh nghiệm và xác thực năng lực kỹ sư
             </p>
           </div>
 
-          <div className="flex items-center gap-2 text-xs">
-            <span className="text-slate-400">Cấp bậc:</span>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-slate-400 font-medium mr-1">Cấp bậc:</span>
             {Object.entries(PROFICIENCY_CONFIG).map(([key, conf]) => (
-              <span key={key} className={`px-2 py-0.5 rounded text-[10px] border ${conf.bg}`}>
+              <span key={key} className={`px-2.5 py-0.5 rounded-lg text-[10px] border whitespace-nowrap ${conf.bg}`}>
                 {conf.label}
               </span>
             ))}
           </div>
         </div>
 
-        {/* Danh sách Kỹ sư & Ma trận */}
-        {loading ? (
-          <div className="p-12 text-center text-xs text-slate-400">Đang tải ma trận kỹ năng...</div>
-        ) : matrixData.length === 0 ? (
-          <div className="p-12 text-center text-xs text-slate-400">Chưa có dữ liệu kỹ sư công nghệ nào.</div>
+        {/* Directory Search & Filter Bar */}
+        <div className="px-5 py-3 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-white">
+          <div className="relative flex-1 max-w-sm">
+            <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={matrixKeyword}
+              onChange={(e) => setMatrixKeyword(e.target.value)}
+              placeholder="Tìm kỹ sư, mã NV hoặc công nghệ..."
+              className="w-full pl-9 pr-8 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15"
+            />
+            {matrixKeyword && (
+              <button
+                type="button"
+                onClick={() => setMatrixKeyword('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                aria-label="Xóa tìm kiếm"
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {!isReadOnly && (
+              <button
+                type="button"
+                onClick={() => setVerificationFilter((v) => (v === 'pending' ? 'all' : 'pending'))}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition cursor-pointer inline-flex items-center gap-1.5 tabular ${
+                  verificationFilter === 'pending'
+                    ? 'bg-orange-600 text-white border-orange-600'
+                    : 'bg-white text-slate-600 border-slate-200 hover:border-orange-300'
+                }`}
+              >
+                <Clock size={13} />
+                <span>Chờ duyệt xác thực ({capabilitySummary.pendingSkills})</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setVerificationFilter((v) => (v === 'verified' ? 'all' : 'verified'))}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition cursor-pointer inline-flex items-center gap-1.5 ${
+                verificationFilter === 'verified'
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'
+              }`}
+            >
+              <ShieldCheck size={13} />
+              <span>Chỉ hiện kỹ năng đã duyệt</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setBenchOnlyView((v) => !v)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition cursor-pointer inline-flex items-center gap-1.5 ${
+                benchOnlyView
+                  ? 'bg-emerald-600 text-white border-emerald-600'
+                  : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-300'
+              }`}
+            >
+              <Clock size={13} />
+              <span>Chỉ kỹ sư còn trống Bench</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Directory List */}
+        {filteredMatrix.length === 0 ? (
+          <div className="p-12 text-center text-xs text-slate-400">
+            Không tìm thấy kỹ sư nào khớp với tiêu chí lọc.
+          </div>
         ) : (
           <div className="divide-y divide-slate-100">
-            {matrixData.map((profile) => (
-              <div key={profile.userId} className="p-5 hover:bg-slate-50/60 transition space-y-3">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                  {/* Info kỹ sư */}
-                  <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 text-white font-bold text-sm flex items-center justify-center shadow-xs">
-                      {profile.hoTen.charAt(0)}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm text-slate-800">{profile.hoTen}</span>
-                        <span className="text-[11px] text-slate-400">({profile.maNhanVien})</span>
+            {filteredMatrix.map((profile) => {
+              const rawSkills = profile.skills || [];
+              const filteredSkills =
+                verificationFilter === 'verified'
+                  ? rawSkills.filter((s) => s.isVerified)
+                  : verificationFilter === 'pending'
+                  ? rawSkills.filter((s) => !s.isVerified)
+                  : rawSkills;
+              const displayedSkills = sortSkillsByLevel(filteredSkills);
+
+              return (
+                <div key={profile.userId} className="p-5 hover:bg-blue-50/25 transition space-y-3">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    {/* Info */}
+                    <div className="flex items-center gap-3">
+                      <div className="w-11 h-11 rounded-xl bg-[#1E3A8A] text-white font-bold text-sm flex items-center justify-center shrink-0">
+                        {profile.hoTen ? profile.hoTen.charAt(0).toUpperCase() : 'U'}
                       </div>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        {profile.chucVu} • {profile.departmentName}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Chỉ số nhanh & Hành động */}
-                  <div className="flex items-center gap-3">
-                    <div className="text-right">
-                      <p className="text-[11px] text-slate-400 font-medium">Tải công việc:</p>
-                      <p className="text-xs font-bold text-slate-700">
-                        {profile.totalAllocation}% ({profile.availableCapacity > 0 ? `Rảnh ${profile.availableCapacity}%` : 'Full tải'})
-                      </p>
-                    </div>
-
-                    <div className="text-right pl-3 border-l border-slate-200">
-                      <p className="text-[11px] text-slate-400 font-medium">Kỹ năng / Đã duyệt:</p>
-                      <p className="text-xs font-bold text-blue-600 whitespace-nowrap">
-                        {profile.totalSkills} kỹ năng • {profile.verifiedSkills} đã duyệt
-                      </p>
-                    </div>
-
-                    <button
-                      onClick={() => handleViewDetail(profile.userId)}
-                      className="px-3 py-1.5 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 text-xs font-semibold transition flex items-center gap-1"
-                    >
-                      <span>Tech Profile</span>
-                      <ChevronRight size={14} />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Danh sách Badges Kỹ năng của Kỹ sư */}
-                <div className="flex flex-wrap gap-2 pt-1">
-                  {profile.skills.length === 0 ? (
-                    <span className="text-xs text-slate-400 italic">Chưa khai báo kỹ năng nào</span>
-                  ) : (
-                    sortSkillsByLevel(profile.skills).map((skill) => {
-                      const conf = PROFICIENCY_CONFIG[skill.proficiencyLevel] || PROFICIENCY_CONFIG.MIDDLE;
-                      return (
-                        <div
-                          key={skill.id}
-                          className={`group relative inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs border shadow-xs ${conf.bg}`}
-                        >
-                          <span className={`w-1.5 h-1.5 rounded-full ${conf.dot}`} />
-                          <span className="font-semibold">{skill.skillName}</span>
-                          <span className="text-[10px] opacity-75 font-normal">
-                            ({conf.label} • {skill.yearsOfExperience}n)
-                          </span>
-
-                          {/* Trạng thái xác thực */}
-                          {skill.isVerified ? (
-                            <span title={`Đã xác thực bởi ${skill.verifierName || 'Quản lý'}`}>
-                              <CheckCircle2 size={13} className="text-blue-600 ml-0.5" />
-                            </span>
-                          ) : isReadOnly ? (
-                            <span title="Chờ Trưởng phòng / Giám đốc Công nghệ duyệt">
-                              <Clock size={12} className="text-slate-400 ml-0.5" />
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => handleVerifySkill(skill.id, profile.hoTen, skill.skillName)}
-                              disabled={verifyingId === skill.id}
-                              className="ml-1 px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold shadow-xs transition whitespace-nowrap shrink-0"
-                              title="Bấm để xác thực kỹ năng này"
-                            >
-                              {verifyingId === skill.id ? '...' : 'Duyệt'}
-                            </button>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-sm text-slate-900">{profile.hoTen}</span>
+                          {profile.maNhanVien && (
+                            <span className="text-[11px] font-mono text-slate-400 tabular">({profile.maNhanVien})</span>
                           )}
                         </div>
-                      );
-                    })
-                  )}
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {profile.chucVu || 'Kỹ sư phần mềm'} • {profile.departmentName || 'Công nghệ'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Metrics & Actions */}
+                    <div className="flex flex-wrap items-center gap-4">
+                      <div className="text-left sm:text-right tabular">
+                        <p className="text-[11px] text-slate-400 font-medium">Tải công việc</p>
+                        <p
+                          className={`text-xs font-bold ${
+                            profile.totalAllocation > 100
+                              ? 'text-rose-600'
+                              : profile.availableCapacity > 0
+                              ? 'text-emerald-700'
+                              : 'text-slate-800'
+                          }`}
+                        >
+                          {profile.totalAllocation}% (
+                          {profile.availableCapacity > 0 ? `Rảnh ${profile.availableCapacity}%` : 'Full tải'})
+                        </p>
+                      </div>
+
+                      <div className="text-left sm:text-right sm:pl-4 sm:border-l sm:border-slate-200 tabular">
+                        <p className="text-[11px] text-slate-400 font-medium">Kỹ năng / Đã duyệt</p>
+                        <p className="text-xs font-bold text-blue-700 whitespace-nowrap">
+                          {profile.totalSkills} kỹ năng • {profile.verifiedSkills} đã duyệt
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => onInspectEngineer && onInspectEngineer(profile.userId)}
+                        className="px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white border border-blue-200 hover:border-blue-600 text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                      >
+                        <span>Tech Profile</span>
+                        <ChevronRight size={14} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Skill Badges with inline Duyệt action */}
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {displayedSkills.length === 0 ? (
+                      <span className="text-xs text-slate-400 italic">
+                        {verificationFilter === 'verified'
+                          ? 'Chưa có kỹ năng nào được xác thực.'
+                          : 'Chưa khai báo kỹ năng nào.'}
+                      </span>
+                    ) : (
+                      displayedSkills.map((skill) => {
+                        const conf = PROFICIENCY_CONFIG[skill.proficiencyLevel] || PROFICIENCY_CONFIG.MIDDLE;
+                        return (
+                          <div
+                            key={skill.id}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs border ${conf.bg}`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${conf.dot}`} />
+                            <span className="font-semibold whitespace-nowrap">{skill.skillName}</span>
+                            <span className="text-[10px] opacity-80 whitespace-nowrap tabular">
+                              ({conf.label} • {skill.yearsOfExperience}n)
+                            </span>
+
+                            {skill.isVerified ? (
+                              <span
+                                title={`Đã xác thực bởi ${skill.verifierName || 'Quản lý'}`}
+                                className="inline-flex items-center shrink-0"
+                              >
+                                <CheckCircle2
+                                  size={13}
+                                  className={conf.isDark ? 'text-blue-300' : 'text-blue-600'}
+                                />
+                              </span>
+                            ) : isReadOnly || !onVerifySkill ? (
+                              <span title="Chờ Trưởng phòng / Giám đốc Công nghệ duyệt" className="inline-flex items-center shrink-0">
+                                <Clock size={12} className="text-slate-400" />
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => onVerifySkill(skill.id, profile.hoTen, skill.skillName)}
+                                disabled={verifyingId === skill.id}
+                                className="ml-1 px-2 py-0.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold transition whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-50"
+                                title="Bấm để cấp tích xanh xác thực kỹ năng này"
+                              >
+                                {verifyingId === skill.id ? '...' : 'Duyệt'}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
-
-      {/* ── Modal Xem Hồ sơ Kỹ thuật (Tech Profile Modal) ────────────────────── */}
-      {selectedProfile &&
-        createPortal(
-          <div data-tech-modal="true" className="fixed inset-0 z-[9980] overflow-y-auto bg-slate-900/60 backdrop-blur-sm p-4 sm:p-6 flex items-center justify-center animate-fadeIn">
-            <div className="relative w-full max-w-4xl bg-white rounded-2xl shadow-2xl border border-slate-100 flex flex-col max-h-[92vh] overflow-hidden animate-scaleUp">
-              {/* Header */}
-              <div className="px-6 py-4.5 bg-gradient-to-r from-slate-900 via-blue-900 to-indigo-950 text-white flex items-center justify-between shrink-0 shadow-sm">
-                <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-full bg-white/10 flex items-center justify-center border border-white/20 font-bold text-base text-white">
-                    {selectedProfile.hoTen.charAt(0)}
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-base text-white">{selectedProfile.hoTen}</h3>
-                    <p className="text-xs text-white/80">
-                      {selectedProfile.chucVu} • {selectedProfile.email}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSelectedProfile(null)}
-                  className="p-1.5 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-
-              {/* Body */}
-              <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-                  {/* Cột trái: Radar Chart 6 chiều */}
-                  <div className="md:col-span-5 bg-slate-50 border border-slate-200/80 rounded-2xl p-4 flex flex-col items-center justify-center">
-                    <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider text-center">
-                      Biểu đồ Radar Năng lực (6 Chiều)
-                    </h4>
-                    <p className="text-[11px] text-slate-400 text-center mt-0.5">
-                      Thang điểm 0 - 100 theo cấp bậc & độ phủ kỹ năng
-                    </p>
-
-                    <TechRadarChart scores={selectedProfile.radarScores} size={280} />
-                  </div>
-
-                  {/* Cột phải: Toàn bộ Kỹ năng & Chứng chỉ */}
-                  <div className="md:col-span-7 space-y-5">
-                    {/* Danh sách kỹ năng */}
-                    <div className="space-y-2.5">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                          <Layers size={14} className="text-blue-600" />
-                          Bộ sưu tập Kỹ năng ({selectedProfile.skills.length})
-                        </h4>
-                        <span className="text-xs text-blue-600 font-semibold whitespace-nowrap">
-                          {selectedProfile.verifiedSkills} kỹ năng đã xác thực
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto p-1">
-                        {sortSkillsByLevel(selectedProfile.skills).map((skill) => {
-                          const conf = PROFICIENCY_CONFIG[skill.proficiencyLevel] || PROFICIENCY_CONFIG.MIDDLE;
-                          return (
-                            <div
-                              key={skill.id}
-                              className={`p-2.5 rounded-xl border flex items-center justify-between gap-2.5 ${conf.bg}`}
-                            >
-                              <div className="min-w-0 flex-1 space-y-0.5">
-                                <p className="text-xs font-bold text-slate-800 truncate" title={skill.skillName}>
-                                  {skill.skillName}
-                                </p>
-                                <p className="text-[11px] text-slate-500 whitespace-nowrap">
-                                  {conf.label} • {skill.yearsOfExperience} năm KN
-                                </p>
-                                {skill.highlightProject && (
-                                  <p className="text-[10px] text-slate-600 truncate italic" title={skill.highlightProject}>
-                                    {skill.highlightProject}
-                                  </p>
-                                )}
-                              </div>
-
-                              <div className="shrink-0 flex items-center">
-                                {skill.isVerified ? (
-                                  <span className="inline-flex items-center gap-1 text-[10px] text-blue-700 font-semibold bg-white px-2 py-0.5 rounded border border-blue-200 whitespace-nowrap shrink-0">
-                                    <CheckCircle2 size={11} className="text-blue-600 shrink-0" />
-                                    <span>Đã duyệt</span>
-                                  </span>
-                                ) : isReadOnly ? (
-                                  <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 font-medium bg-white/80 px-2 py-0.5 rounded border border-slate-200 whitespace-nowrap shrink-0">
-                                    <Clock size={11} className="text-slate-400 shrink-0" />
-                                    <span>Chờ duyệt</span>
-                                  </span>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleVerifySkill(skill.id, selectedProfile.hoTen, skill.skillName)}
-                                    disabled={verifyingId === skill.id}
-                                    className="px-2.5 py-0.5 rounded bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold transition shadow-xs whitespace-nowrap shrink-0"
-                                  >
-                                    {verifyingId === skill.id ? '...' : 'Xác thực'}
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Chứng chỉ quốc tế */}
-                    <div className="space-y-2.5 pt-3 border-t border-slate-100">
-                      <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                        <Award size={14} className="text-amber-600" />
-                        Chứng chỉ Quốc tế ({selectedProfile.certificates.length})
-                      </h4>
-
-                      {selectedProfile.certificates.length === 0 ? (
-                        <p className="text-xs text-slate-400 italic">Chưa có chứng chỉ quốc tế nào được lưu.</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {selectedProfile.certificates.map((cert) => {
-                            const todayStr = new Date().toISOString().split('T')[0];
-                            const isExpired = cert.expiryDate && cert.expiryDate < todayStr;
-                            const isLifetime = !cert.expiryDate;
-
-                            return (
-                              <div
-                                key={cert.id}
-                                className={`p-3 rounded-xl border flex items-start justify-between gap-3 text-xs ${
-                                  isExpired ? 'bg-slate-50 border-slate-200 opacity-80' : 'bg-amber-50/50 border-amber-200'
-                                }`}
-                              >
-                                <div>
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <p className="font-bold text-slate-900">{cert.certificateName}</p>
-                                    {isLifetime && (
-                                      <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-emerald-700 bg-emerald-100/70 px-1.5 py-0.2 rounded border border-emerald-300">
-                                        Vĩnh viễn
-                                      </span>
-                                    )}
-                                    {!isLifetime && !isExpired && (
-                                      <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-blue-700 bg-blue-100/70 px-1.5 py-0.2 rounded border border-blue-300">
-                                        Còn hiệu lực
-                                      </span>
-                                    )}
-                                    {isExpired && (
-                                      <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-rose-700 bg-rose-100/70 px-1.5 py-0.2 rounded border border-rose-300">
-                                        Đã hết hạn
-                                      </span>
-                                    )}
-                                  </div>
-                                  <p className="text-slate-600 text-[11px] mt-0.5">
-                                    Tổ chức cấp: {cert.issuingOrganization} • Ngày cấp: {cert.issueDate}
-                                    {cert.expiryDate && (
-                                      <span> • Hạn: <span className={isExpired ? 'text-rose-600 font-semibold' : ''}>{cert.expiryDate}</span></span>
-                                    )}
-                                  </p>
-                                  {cert.credentialId && (
-                                    <p className="text-slate-500 text-[10px] mt-0.5">Mã ID: {cert.credentialId}</p>
-                                  )}
-                                </div>
-
-                                {cert.credentialUrl && (
-                                  <a
-                                    href={cert.credentialUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="text-amber-700 hover:text-amber-900 p-1"
-                                    title="Xem chứng chỉ"
-                                  >
-                                    <ExternalLink size={14} />
-                                  </a>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Footer */}
-              <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between shrink-0">
-                <div className="text-xs text-slate-500 hidden sm:block">
-                  Kỹ sư: <strong className="text-slate-800">{selectedProfile.hoTen}</strong> • {selectedProfile.chucVu}
-                </div>
-                <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedProfile(null)}
-                    className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-200/60 rounded-xl transition"
-                  >
-                    Đóng cửa sổ
-                  </button>
-                  {!isReadOnly && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const prof = selectedProfile;
-                        handleOpenProjectSelect(prof);
-                      }}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/25 transition"
-                    >
-                      <UserPlus size={14} />
-                      <span>Phân bổ vào Dự án</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
-
-      {/* ── Modal Chọn Dự án để Phân bổ Kỹ sư ─────────────────────────── */}
-      {!isReadOnly && isProjectSelectOpen && staffingCandidate &&
-        createPortal(
-          <div
-            data-tech-modal="true"
-            className="fixed inset-0 z-[9990] overflow-y-auto bg-slate-900/60 backdrop-blur-sm p-4 sm:p-6 flex items-center justify-center animate-fadeIn"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) setIsProjectSelectOpen(false);
-            }}
-          >
-            <div
-              className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-auto max-h-[88vh] flex flex-col overflow-hidden border border-slate-100 animate-scaleUp"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Header */}
-              <div className="shrink-0 px-6 py-4.5 bg-gradient-to-r from-blue-700 via-indigo-700 to-slate-900 text-white flex items-center justify-between shadow-xs">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center border border-white/20">
-                    <UserPlus size={20} className="text-white" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-base text-white">Chọn Dự án để Phân bổ Kỹ sư</h3>
-                    <p className="text-xs text-white/80">
-                      Kỹ sư: <strong className="text-white">{staffingCandidate.hoTen}</strong>
-                      {staffingCandidate.chucVu && ` • ${staffingCandidate.chucVu}`}
-                      {' '}•{' '}
-                      <span className={staffingCandidate.availableCapacity > 0 ? 'text-emerald-300 font-semibold' : 'text-slate-300'}>
-                        {staffingCandidate.availableCapacity > 0 ? `Dung lượng rảnh: ${staffingCandidate.availableCapacity}%` : 'Đã full 100%'}
-                      </span>
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsProjectSelectOpen(false)}
-                  className="p-1.5 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-
-              {/* Body */}
-              <div className="flex-1 min-h-0 flex flex-col p-6 space-y-4 overflow-hidden">
-                {/* Search */}
-                <div className="relative">
-                  <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    value={projectSearchKeyword}
-                    onChange={(e) => setProjectSearchKeyword(e.target.value)}
-                    placeholder="Tìm theo tên dự án, mã PRJ-, công nghệ tech stack..."
-                    className="w-full pl-9 pr-3.5 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
-                  />
-                </div>
-
-                {/* Danh sách dự án */}
-                <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-                  {(() => {
-                    const candidateId = staffingCandidate.userId;
-                    // Kiểm tra dự án kỹ sư đã là thành viên đang hoạt động
-                    const isCandidateInProject = (p) => {
-                      if (!candidateId) return false;
-                      return (p.members || []).some(
-                        m => (m.isActive ?? true) && String(m.userId) === String(candidateId)
-                      );
-                    };
-
-                    const activeProjects = projectList.filter(p => p.status !== 'COMPLETED' && p.status !== 'PAUSED');
-                    const joinedProjects = activeProjects.filter(p => isCandidateInProject(p));
-                    const availableProjects = activeProjects.filter(p => !isCandidateInProject(p));
-
-                    const filtered = availableProjects.filter(p => {
-                      if (!projectSearchKeyword.trim()) return true;
-                      const kw = projectSearchKeyword.toLowerCase();
-                      return (
-                        p.projectName?.toLowerCase().includes(kw) ||
-                        p.projectCode?.toLowerCase().includes(kw) ||
-                        (p.techStack && p.techStack.some(t => t.toLowerCase().includes(kw)))
-                      );
-                    });
-
-                    if (filtered.length === 0) {
-                      const searchedInJoined = joinedProjects.filter(p => {
-                        if (!projectSearchKeyword.trim()) return false;
-                        const kw = projectSearchKeyword.toLowerCase();
-                        return (
-                          p.projectName?.toLowerCase().includes(kw) ||
-                          p.projectCode?.toLowerCase().includes(kw) ||
-                          (p.techStack && p.techStack.some(t => t.toLowerCase().includes(kw)))
-                        );
-                      });
-
-                      return (
-                        <div className="space-y-3">
-                          {joinedProjects.length > 0 && (
-                            <div className="flex items-center gap-2 text-xs text-blue-700 bg-blue-50/80 border border-blue-200 px-3.5 py-2 rounded-xl">
-                              <Info size={14} className="text-blue-600 shrink-0" />
-                              <span className="truncate">
-                                Đã tự động loại trừ <strong>{joinedProjects.length}</strong> dự án kỹ sư đã tham gia:{' '}
-                                <span className="font-semibold text-blue-900">{joinedProjects.map(p => p.projectName).join(', ')}</span>
-                              </span>
-                            </div>
-                          )}
-                          <div className="py-10 text-center text-xs text-slate-400 space-y-1">
-                            {searchedInJoined.length > 0 ? (
-                              <p className="text-amber-600 font-medium">
-                                Dự án &quot;{searchedInJoined.map(p => p.projectName).join(', ')}&quot; đã có kỹ sư này tham gia nên không thể phân bổ thêm.
-                              </p>
-                            ) : availableProjects.length === 0 ? (
-                              <p>
-                                {joinedProjects.length > 0
-                                  ? `Kỹ sư ${staffingCandidate.hoTen} hiện đã tham gia tất cả các dự án đang hoạt động.`
-                                  : 'Hiện không có dự án nào đang hoạt động để phân bổ.'}
-                              </p>
-                            ) : (
-                              <p>Không tìm thấy dự án nào khớp với từ khóa tìm kiếm.</p>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    }
-
-                    const candidateSkillNames = staffingCandidate.skills.map(s => (s.skillName || s.name || '').toLowerCase());
-
-                    return (
-                      <div className="space-y-3">
-                        {joinedProjects.length > 0 && (
-                          <div className="flex items-center gap-2 text-xs text-blue-700 bg-blue-50/80 border border-blue-200 px-3.5 py-2 rounded-xl">
-                            <Info size={14} className="text-blue-600 shrink-0" />
-                            <span className="truncate">
-                              Đã tự động loại trừ <strong>{joinedProjects.length}</strong> dự án kỹ sư đã tham gia:{' '}
-                              <span className="font-semibold text-blue-900">{joinedProjects.map(p => p.projectName).join(', ')}</span>
-                            </span>
-                          </div>
-                        )}
-                        {filtered.map((proj) => {
-                          const matchedTechs = (proj.techStack || []).filter(t =>
-                            candidateSkillNames.some(cs => cs.includes(t.toLowerCase()) || t.toLowerCase().includes(cs))
-                          );
-                          const isHighMatch = matchedTechs.length > 0;
-
-                          return (
-                            <div
-                              key={proj.id}
-                              className={`p-4 rounded-xl border transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                                isHighMatch
-                                  ? 'bg-blue-50/40 border-blue-200 hover:border-blue-300 hover:bg-blue-50/70'
-                                  : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
-                              }`}
-                            >
-                              <div className="space-y-1.5 flex-1 min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="font-mono text-[11px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
-                                    {proj.projectCode}
-                                  </span>
-                                  <h4 className="font-bold text-xs text-slate-900 truncate">{proj.projectName}</h4>
-                                  <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-slate-100 text-slate-600">
-                                    {proj.projectType === 'INTERNAL' ? 'Nội bộ' : 'Khách hàng'}
-                                  </span>
-                                </div>
-
-                                {/* Tech stack */}
-                                {proj.techStack && proj.techStack.length > 0 && (
-                                  <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                                    <span className="text-[10px] text-slate-400">Tech Stack:</span>
-                                    {proj.techStack.map((tech, tIdx) => {
-                                      const isMatched = matchedTechs.includes(tech);
-                                      return (
-                                        <span
-                                          key={tIdx}
-                                          className={`text-[10px] px-2 py-0.5 rounded-md font-medium border ${
-                                            isMatched
-                                              ? 'bg-blue-100 text-blue-800 border-blue-300 font-bold'
-                                              : 'bg-slate-100 text-slate-600 border-slate-200'
-                                          }`}
-                                        >
-                                          {tech}
-                                        </span>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-
-                                {/* Match indicator & stats */}
-                                <div className="flex items-center gap-3 text-[11px] text-slate-500 pt-0.5">
-                                  {isHighMatch && (
-                                    <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold text-[10px] bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                                      <Sparkles size={11} className="text-emerald-600" />
-                                      Tương thích {matchedTechs.length} công nghệ
-                                    </span>
-                                  )}
-                                  <span>Đội ngũ: <strong>{proj.totalMembersCount || 0}</strong> nhân sự</span>
-                                  <span>Tổng tải: <strong>{proj.totalAllocationSum || 0}%</strong></span>
-                                </div>
-                              </div>
-
-                              <div className="shrink-0 flex items-center justify-end">
-                                <button
-                                  type="button"
-                                  onClick={() => handleSelectProjectForStaffing(proj)}
-                                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center gap-1.5"
-                                >
-                                  <UserPlus size={14} />
-                                  <span>Chọn dự án này</span>
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()}
-                </div>
-              </div>
-
-              {/* Footer */}
-              <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-end shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setIsProjectSelectOpen(false)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-200/60 rounded-xl transition"
-                >
-                  Đóng
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
     </div>
   );
 }
-

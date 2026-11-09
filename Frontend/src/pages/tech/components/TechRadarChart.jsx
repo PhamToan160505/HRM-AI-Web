@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 
 const DIMENSIONS = [
   { key: 'BACKEND', label: 'Backend', angle: -Math.PI / 2 },
@@ -10,6 +10,9 @@ const DIMENSIONS = [
 ];
 
 export default function TechRadarChart({ scores = {}, size = 300 }) {
+  const uid = useId().replace(/:/g, '');
+  const gradientId = `radarGrad-${uid}`;
+  const glowId = `radarGlow-${uid}`;
   const center = size / 2;
   const radius = size * 0.36;
 
@@ -37,18 +40,18 @@ export default function TechRadarChart({ scores = {}, size = 300 }) {
     <div className="flex flex-col items-center justify-center p-3">
       <svg width={size} height={size} className="overflow-visible select-none drop-shadow-xs">
         <defs>
-          <linearGradient id="radarGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.45" />
-            <stop offset="100%" stopColor="#6366f1" stopOpacity="0.25" />
+          <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#2563eb" stopOpacity="0.45" />
+            <stop offset="100%" stopColor="#1e3a8a" stopOpacity="0.25" />
           </linearGradient>
-          <radialGradient id="centerGlow" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.15" />
+          <radialGradient id={glowId} cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="#2563eb" stopOpacity="0.14" />
             <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
           </radialGradient>
         </defs>
 
         {/* Vùng sáng nhẹ ở tâm */}
-        <circle cx={center} cy={center} r={radius} fill="url(#centerGlow)" />
+        <circle cx={center} cy={center} r={radius} fill={`url(#${glowId})`} />
 
         {/* Các vòng đa giác lưới */}
         {rings.map((ringScale, idx) => {
@@ -88,8 +91,8 @@ export default function TechRadarChart({ scores = {}, size = 300 }) {
         {/* Đa giác thể hiện năng lực */}
         <polygon
           points={polygonPoints}
-          fill="url(#radarGradient)"
-          stroke="#3b82f6"
+          fill={`url(#${gradientId})`}
+          stroke="#1d4ed8"
           strokeWidth="2.5"
           className="transition-all duration-700 ease-out"
         />
@@ -113,7 +116,7 @@ export default function TechRadarChart({ scores = {}, size = 300 }) {
                 cy={y}
                 r="4.5"
                 fill="#ffffff"
-                stroke="#2563eb"
+                stroke="#1d4ed8"
                 strokeWidth="2.5"
                 className="transition-all duration-700 ease-out"
               />
@@ -133,7 +136,7 @@ export default function TechRadarChart({ scores = {}, size = 300 }) {
                 y={labelPos.y + 12}
                 textAnchor="middle"
                 dominantBaseline="central"
-                className="text-[10px] font-semibold fill-blue-600"
+                className="text-[10px] font-semibold fill-blue-700 tabular"
               >
                 {Math.round(clampedVal)} điểm
               </text>

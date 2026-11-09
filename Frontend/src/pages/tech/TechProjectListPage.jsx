@@ -1,67 +1,94 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   FolderGit2,
   Plus,
-  Search,
-  Filter,
   Users,
-  Code2,
-  Calendar,
-  ExternalLink,
-  GitBranch,
-  Kanban,
-  Palette,
-  Edit3,
-  Trash2,
-  UserPlus,
+  Cpu,
+  ShieldCheck,
+  RefreshCw,
   AlertTriangle,
-  CheckCircle2,
-  Clock,
-  Sparkles,
-  Layers,
   Activity,
-  Briefcase,
+  Layers,
+  CheckCircle2,
+  Trash2,
   X,
-  Eye
+  Briefcase,
 } from 'lucide-react';
+import { MotionConfig, motion, AnimatePresence } from 'framer-motion';
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/common/Toast';
+import { PROJECT_STATUS_CONFIG, computeTimelineHealth } from './techHelpers';
+import ProjectsPortfolioTab from './components/ProjectsPortfolioTab';
+import CapacityBenchTab from './components/CapacityBenchTab';
+import SkillsMatrixTab from './components/SkillsMatrixTab';
 import ProjectFormModal from './components/ProjectFormModal';
 import StaffingModal from './components/StaffingModal';
-import SkillsMatrixTab from './components/SkillsMatrixTab';
 import ProjectDetailModal from './components/ProjectDetailModal';
+import TechProfileModal from './components/TechProfileModal';
+import ProjectSelectModal from './components/ProjectSelectModal';
 
-const STATUS_CONFIG = {
-  PLANNING: { label: 'Lên kế hoạch', color: 'bg-blue-100 text-blue-700 border-blue-200' },
-  IN_PROGRESS: { label: 'Đang phát triển', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
-  MAINTENANCE: { label: 'Bảo trì & Hỗ trợ', color: 'bg-amber-100 text-amber-700 border-amber-200' },
-  COMPLETED: { label: 'Đã hoàn thành', color: 'bg-slate-100 text-slate-700 border-slate-200' },
-  PAUSED: { label: 'Tạm dừng', color: 'bg-red-100 text-red-700 border-red-200' },
-};
+function StatusDonutTooltip({ active, payload }) {
+  if (!active || !payload || !payload.length) return null;
+  const d = payload[0].payload;
+  return (
+    <div className="bg-[#0F2557] text-white px-3 py-2 rounded-xl shadow-lg border border-blue-800 text-xs tabular">
+      <p className="font-bold">{d.label}</p>
+      <p className="text-blue-100 mt-0.5">
+        <strong className="text-white">{d.value}</strong> dự án ({d.percent}%)
+      </p>
+    </div>
+  );
+}
 
 export default function TechProjectListPage() {
   const { user } = useAuth();
-  const isCeo = user?.role?.toUpperCase() === 'CEO';
+  const roleNormalized = user?.role?.toLowerCase() || '';
+  const isCeo = roleNormalized === 'ceo';
   const isReadOnly = isCeo;
+
+  const roleBadgeLabel =
+    roleNormalized === 'giam_doc_phong_ban'
+      ? 'Giám đốc Công nghệ • Điều hành'
+      : roleNormalized === 'truong_phong'
+      ? 'Trưởng phòng Công nghệ • Điều phối'
+      : isCeo
+      ? 'Giám sát Điều hành (Chỉ xem)'
+      : 'Quản lý Công nghệ';
+
   const toast = useToast();
-  const [activeTab, setActiveTab] = useState('projects'); // 'projects' | 'bench'
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
+
+  // Data states
   const [projects, setProjects] = useState([]);
   const [benchUsers, setBenchUsers] = useState([]);
+  const [matrixData, setMatrixData] = useState([]);
+  const [availableSkills, setAvailableSkills] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [lastUpdated, setLastUpdated] = useState(null);
 
-  // Filters
-  const [statusFilter, setStatusFilter] = useState('');
-  const [keyword, setKeyword] = useState('');
+  // Navigation & filter states
+  const [activeTab, setActiveTab] = useState('projects'); // 'projects' | 'bench' | 'skills'
+  const [projectStatusFilter, setProjectStatusFilter] = useState('');
 
-  // Modals
+  // Nested / Stacked Modals
+  const [selectedDetailProject, setSelectedDetailProject] = useState(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
-  const [selectedDetailProject, setSelectedDetailProject] = useState(null);
   const [staffingProject, setStaffingProject] = useState(null);
   const [staffingInitialUserId, setStaffingInitialUserId] = useState(null);
   const [staffingInitialAllocation, setStaffingInitialAllocation] = useState(null);
+
+  // Engineer Tech Profile & Quick Project Selection
+  const [selectedProfile, setSelectedProfile] = useState(null);
+  const [loadingProfileId, setLoadingProfileId] = useState(null);
+  const [verifyingId, setVerifyingId] = useState(null);
+  const [projectSelectCandidate, setProjectSelectCandidate] = useState(null);
 
   // Delete Confirm Modal State
   const [deleteConfirm, setDeleteConfirm] = useState({
@@ -71,733 +98,878 @@ export default function TechProjectListPage() {
   });
   const [deleting, setDeleting] = useState(false);
 
-  useEffect(() => {
-    fetchProjects();
-    fetchBench();
-  }, [statusFilter, keyword]);
-
-  useEffect(() => {
-    if (deleteConfirm.isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
-    }
-    return () => {
-      document.body.style.overflow = 'unset';
-    };
-  }, [deleteConfirm.isOpen]);
-
-  const fetchProjects = async () => {
+  const loadAllData = useCallback(async ({ manual = false, quiet = false } = {}) => {
     try {
-      setLoading(true);
-      const params = {};
-      if (statusFilter) params.status = statusFilter;
-      if (keyword.trim()) params.keyword = keyword.trim();
+      if (manual) setRefreshing(true);
+      else if (!quiet) setLoading(true);
+      if (!quiet) setErrorMsg('');
 
-      const res = await api.get('/api/tech/projects', { params });
-      if (res.data?.data) {
-        setProjects(res.data.data);
-      }
+      const [projRes, benchRes, matrixRes, skillsRes] = await Promise.all([
+        api.get('/api/tech/projects'),
+        api.get('/api/tech/projects/bench'),
+        api.get('/api/tech/skills/matrix'),
+        api.get('/api/tech/skills'),
+      ]);
+
+      setProjects(projRes.data?.data || []);
+      setBenchUsers(benchRes.data?.data || []);
+      setMatrixData(matrixRes.data?.data || []);
+      setAvailableSkills(skillsRes.data?.data || []);
+      setLastUpdated(new Date());
     } catch (err) {
-      console.error(err);
-      toast.show('Lỗi', 'Không thể tải danh sách dự án', 'error');
+      console.error('Lỗi tải dữ liệu dự án công nghệ:', err);
+      const msg = err.response?.data?.message || 'Không thể kết nối máy chủ để tải dữ liệu phòng Công nghệ.';
+      if (!quiet) setErrorMsg(msg);
+      toastRef.current?.show('Lỗi tải dữ liệu', msg, 'error');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, []);
 
-  const fetchBench = async () => {
-    try {
-      const res = await api.get('/api/tech/projects/bench');
-      if (res.data?.data) {
-        setBenchUsers(res.data.data);
+  useEffect(() => {
+    loadAllData();
+  }, [loadAllData]);
+
+  // Body overflow + Esc key management for Delete Confirm Dialog
+  useEffect(() => {
+    if (!deleteConfirm.isOpen) return;
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && !deleting) {
+        e.stopPropagation();
+        setDeleteConfirm({ isOpen: false, projectId: null, projectName: '' });
       }
-    } catch (err) {
-      console.error(err);
-    }
-  };
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
 
-  const requestDeleteProject = (id, name) => {
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true);
+      setTimeout(() => {
+        const remaining = document.querySelectorAll('[data-tech-modal="true"]');
+        if (remaining.length === 0) {
+          document.body.style.overflow = 'unset';
+        }
+      }, 50);
+    };
+  }, [deleteConfirm.isOpen, deleting]);
+
+  const handleInspectEngineer = useCallback(
+    async (userId) => {
+      if (!userId || loadingProfileId === userId) return;
+      try {
+        setLoadingProfileId(userId);
+        const res = await api.get(`/api/tech/skills/profile/${userId}`);
+        if (res.data?.data) {
+          setSelectedProfile(res.data.data);
+        }
+      } catch (err) {
+        console.error('Lỗi tải Tech Profile:', err);
+        toastRef.current?.show('Lỗi', 'Không thể tải hồ sơ năng lực kỹ sư', 'error');
+      } finally {
+        setLoadingProfileId(null);
+      }
+    },
+    [loadingProfileId]
+  );
+
+  const handleVerifySkill = useCallback(
+    async (userTechSkillId, hoTen, skillName) => {
+      if (isReadOnly || !userTechSkillId || verifyingId === userTechSkillId) return;
+      try {
+        setVerifyingId(userTechSkillId);
+        await api.put(`/api/tech/skills/${userTechSkillId}/verify`);
+        toastRef.current?.show(
+          'Xác thực thành công',
+          `Đã cấp tích xanh xác thực kỹ năng "${skillName}" cho ${hoTen}!`,
+          'success'
+        );
+
+        await loadAllData({ quiet: true });
+        if (selectedProfile?.userId) {
+          const profileRes = await api.get(`/api/tech/skills/profile/${selectedProfile.userId}`);
+          if (profileRes.data?.data) {
+            setSelectedProfile(profileRes.data.data);
+          }
+        }
+      } catch (err) {
+        console.error('Lỗi xác thực kỹ năng:', err);
+        toastRef.current?.show('Thất bại', err.response?.data?.message || 'Không thể xác thực kỹ năng', 'error');
+      } finally {
+        setVerifyingId(null);
+      }
+    },
+    [isReadOnly, verifyingId, selectedProfile, loadAllData]
+  );
+
+  const handleOpenProjectSelect = useCallback((candidate) => {
+    if (!candidate) return;
+    setProjectSelectCandidate(candidate);
+  }, []);
+
+  const handleOpenProjectSelectFromBench = useCallback(
+    (benchUser) => {
+      if (!benchUser) return;
+      const profileMatch = matrixData.find((m) => String(m.userId) === String(benchUser.userId));
+      setProjectSelectCandidate({
+        ...benchUser,
+        skills: profileMatch?.skills || [],
+      });
+    },
+    [matrixData]
+  );
+
+  const handleSelectProjectForCandidate = useCallback(
+    (selectedProject) => {
+      if (!projectSelectCandidate || !selectedProject) return;
+      setStaffingInitialUserId(projectSelectCandidate.userId);
+      setStaffingInitialAllocation(
+        projectSelectCandidate.availableCapacity > 0 ? projectSelectCandidate.availableCapacity : 50
+      );
+      setStaffingProject(selectedProject);
+      setProjectSelectCandidate(null);
+    },
+    [projectSelectCandidate]
+  );
+
+  const requestDeleteProject = useCallback((id, name) => {
     setDeleteConfirm({
       isOpen: true,
       projectId: id,
       projectName: name,
     });
-  };
+  }, []);
 
   const handleConfirmDeleteProject = async () => {
     if (!deleteConfirm.projectId) return;
     try {
       setDeleting(true);
-      await api.delete(`/api/tech/projects/${deleteConfirm.projectId}`);
-      toast.show('Thành công', `Đã xóa dự án "${deleteConfirm.projectName}" thành công!`, 'success');
+      const deletedId = deleteConfirm.projectId;
+      await api.delete(`/api/tech/projects/${deletedId}`);
+      toastRef.current?.show('Thành công', `Đã xóa dự án "${deleteConfirm.projectName}" thành công!`, 'success');
       setDeleteConfirm({ isOpen: false, projectId: null, projectName: '' });
-      fetchProjects();
-      fetchBench();
+      if (selectedDetailProject && String(selectedDetailProject.id) === String(deletedId)) {
+        setSelectedDetailProject(null);
+      }
+      await loadAllData({ quiet: true });
     } catch (err) {
       console.error(err);
-      toast.show('Lỗi', err.response?.data?.message || 'Không thể xóa dự án', 'error');
+      toastRef.current?.show('Lỗi', err.response?.data?.message || 'Không thể xóa dự án', 'error');
     } finally {
       setDeleting(false);
     }
   };
 
-  // Stats calculation
-  const totalProjects = projects.length;
-  const inProgressProjects = projects.filter(p => p.status === 'IN_PROGRESS').length;
-  const benchCount = benchUsers.filter(u => u.availableCapacity > 0).length;
-  const totalEngineers = benchUsers.length;
+  // Telemetry KPIs & Real Portfolio Metrics
+  const telemetry = useMemo(() => {
+    const totalProjects = projects.length;
+    const inProgress = projects.filter((p) => p.status === 'IN_PROGRESS').length;
+    const planning = projects.filter((p) => p.status === 'PLANNING').length;
+    const totalEngineers = benchUsers.length;
+
+    const totalAllocatedPercent = benchUsers.reduce((acc, u) => acc + (u.totalAllocation || 0), 0);
+    const totalAvailablePercent = benchUsers.reduce((acc, u) => acc + (u.availableCapacity || 0), 0);
+    const benchCount = benchUsers.filter((u) => (u.availableCapacity || 0) > 0).length;
+    const overloadedEngineers = benchUsers.filter((u) => (u.totalAllocation || 0) > 100 || u.isOverloaded).length;
+
+    const avgUtilization = totalEngineers > 0 ? Math.round(totalAllocatedPercent / totalEngineers) : 0;
+    const totalDeployedFte = (totalAllocatedPercent / 100).toFixed(1);
+    const totalBenchFte = (totalAvailablePercent / 100).toFixed(1);
+
+    let overdueProjects = 0;
+    let missingLeadProjects = 0;
+    projects.forEach((p) => {
+      if (p.status === 'COMPLETED' || p.status === 'PAUSED') return;
+      const health = computeTimelineHealth(p);
+      if (health.tone === 'overdue') overdueProjects += 1;
+      if (!p.techLeadName) missingLeadProjects += 1;
+    });
+
+    const riskCount = overloadedEngineers + overdueProjects + missingLeadProjects;
+
+    const pendingSkillsCount = matrixData.reduce(
+      (sum, prof) => sum + (prof.skills || []).filter((s) => !s.isVerified).length,
+      0
+    );
+
+    const statusOrder = ['IN_PROGRESS', 'PLANNING', 'MAINTENANCE', 'COMPLETED', 'PAUSED'];
+    const statusBreakdown = statusOrder
+      .map((key) => {
+        const count = projects.filter((p) => p.status === key).length;
+        const cfg = PROJECT_STATUS_CONFIG[key];
+        return {
+          key,
+          label: cfg.label,
+          shortLabel: cfg.shortLabel,
+          value: count,
+          percent: totalProjects > 0 ? Math.round((count / totalProjects) * 100) : 0,
+          color: cfg.chartColor,
+        };
+      })
+      .filter((item) => item.value > 0);
+
+    return {
+      totalProjects,
+      inProgress,
+      planning,
+      totalEngineers,
+      totalAllocatedPercent,
+      benchCount,
+      overloadedEngineers,
+      riskCount,
+      pendingSkillsCount,
+      avgUtilization,
+      totalDeployedFte,
+      totalBenchFte,
+      statusBreakdown,
+    };
+  }, [projects, benchUsers, matrixData]);
+
+  const tabs = [
+    {
+      id: 'projects',
+      label: 'Danh mục Dự án',
+      count: telemetry.totalProjects,
+      icon: FolderGit2,
+    },
+    {
+      id: 'bench',
+      label: 'Công suất & Ghế chờ Bench',
+      count: telemetry.totalEngineers,
+      icon: Activity,
+    },
+    {
+      id: 'skills',
+      label: 'Ma trận Năng lực & Ghép nối',
+      count: matrixData.length,
+      pendingCount: !isReadOnly ? telemetry.pendingSkillsCount : 0,
+      icon: Cpu,
+    },
+  ];
+
+  const handleSelectStatusFromChart = (statusKey) => {
+    setProjectStatusFilter((prev) => (prev === statusKey ? '' : statusKey));
+    setActiveTab('projects');
+  };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-fadeIn">
-      {/* Page Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-blue-600/10 border border-blue-500/20 text-blue-600 flex items-center justify-center shadow-xs">
+    <MotionConfig reducedMotion="user">
+      <div className="space-y-6 max-w-7xl mx-auto pb-12">
+        {/* 1. Command Header */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+          className="flex flex-col md:flex-row md:items-center justify-between gap-4"
+        >
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="w-11 h-11 rounded-2xl bg-[#1E3A8A] text-white flex items-center justify-center shadow-sm shrink-0">
               <FolderGit2 size={22} />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
-                {isReadOnly ? 'Giám sát Dự án Công nghệ & Nguồn lực' : 'Quản lý Dự án Công nghệ & Đội ngũ'}
-              </h1>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight text-balance">
+                  {isReadOnly ? 'Giám sát Dự án & Nguồn lực Công nghệ' : 'Quản lý Dự án & Đội ngũ Công nghệ'}
+                </h1>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-50 text-[#1E3A8A] border border-blue-200 text-[11px] font-bold whitespace-nowrap">
+                  {isReadOnly ? <ShieldCheck size={12} /> : <Briefcase size={12} />}
+                  <span>{roleBadgeLabel}</span>
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5 text-pretty">
                 {isReadOnly
-                  ? 'Theo dõi tiến độ sản phẩm phần mềm, hiệu suất sử dụng nhân sự và năng lực phòng Công nghệ'
-                  : 'Theo dõi tiến độ sản phẩm phần mềm, phân bổ kỹ sư và tối ưu nguồn lực ghế chờ (Bench)'}
+                  ? 'Theo dõi tổng thể tiến độ dự án phần mềm, hiệu suất sử dụng kỹ sư và năng lực chuyên môn toàn phòng'
+                  : 'Điều hành danh mục dự án phần mềm, phân bổ kỹ sư, duyệt kỹ năng chuyên môn và tối ưu ghế chờ (Bench)'}
               </p>
             </div>
           </div>
-        </div>
 
-        {isReadOnly ? (
-          <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-semibold shadow-2xs shrink-0">
-            <Eye size={15} className="text-indigo-600 shrink-0" />
-            <span>Chế độ Giám sát Điều hành (Chỉ xem)</span>
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            {lastUpdated && (
+              <span className="text-[11px] text-slate-400 tabular hidden sm:inline">
+                Cập nhật lúc{' '}
+                {lastUpdated.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+
+            <button
+              type="button"
+              onClick={() => loadAllData({ manual: true })}
+              disabled={refreshing || loading}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-semibold transition cursor-pointer disabled:opacity-60"
+            >
+              <RefreshCw size={14} className={refreshing ? 'animate-spin text-blue-600' : 'text-slate-500'} />
+              <span>{refreshing ? 'Đang đồng bộ' : 'Làm mới'}</span>
+            </button>
+
+            {!isReadOnly && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingProject(null);
+                  setIsFormOpen(true);
+                }}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-[#1E3A8A] hover:bg-blue-700 text-white rounded-xl shadow-xs text-xs sm:text-sm font-bold transition shrink-0 cursor-pointer whitespace-nowrap"
+              >
+                <Plus size={17} />
+                <span>Khởi tạo Dự án Mới</span>
+              </button>
+            )}
+          </div>
+        </motion.div>
+
+        {/* Error Banner */}
+        {errorMsg && (
+          <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-rose-800">
+            <div className="flex items-center gap-2.5">
+              <AlertTriangle size={18} className="text-rose-600 shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => loadAllData()}
+              className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-semibold transition cursor-pointer shrink-0"
+            >
+              Thử lại
+            </button>
+          </div>
+        )}
+
+        {/* Loading Skeleton */}
+        {loading ? (
+          <div className="space-y-5">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+              <div className="lg:col-span-7 h-56 skeleton rounded-2xl" />
+              <div className="lg:col-span-5 h-56 skeleton rounded-2xl" />
+            </div>
+            <div className="h-12 skeleton rounded-2xl" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="h-60 skeleton rounded-2xl" />
+              <div className="h-60 skeleton rounded-2xl" />
+            </div>
           </div>
         ) : (
-          <button
-            onClick={() => {
-              setEditingProject(null);
-              setIsFormOpen(true);
-            }}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-md shadow-blue-500/20 text-sm font-semibold transition shrink-0"
-          >
-            <Plus size={18} />
-            <span>Khởi tạo Dự án Mới</span>
-          </button>
-        )}
-      </div>
-
-      {/* Metrics Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shrink-0">
-            <Layers size={22} />
-          </div>
-          <div>
-            <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Tổng số dự án</p>
-            <p className="text-2xl font-extrabold text-slate-800">{totalProjects}</p>
-          </div>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
-            <Activity size={22} />
-          </div>
-          <div>
-            <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Đang phát triển</p>
-            <p className="text-2xl font-extrabold text-emerald-600">{inProgressProjects}</p>
-          </div>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
-            <Users size={22} />
-          </div>
-          <div>
-            <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Tổng kỹ sư</p>
-            <p className="text-2xl font-extrabold text-slate-800">{totalEngineers}</p>
-          </div>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600 shrink-0">
-            <Clock size={22} />
-          </div>
-          <div>
-            <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Ghế chờ (Bench)</p>
-            <p className="text-2xl font-extrabold text-amber-600">{benchCount} <span className="text-xs font-normal text-slate-400">người rảnh</span></p>
-          </div>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-1">
-        <button
-          onClick={() => setActiveTab('projects')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold border-b-2 transition ${
-            activeTab === 'projects'
-              ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <FolderGit2 size={16} />
-          <span>Danh sách Dự án Công nghệ ({totalProjects})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('bench')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold border-b-2 transition ${
-            activeTab === 'bench'
-              ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <Users size={16} />
-          <span>Tải Kỹ sư & Ghế chờ Bench ({benchUsers.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('skills')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold border-b-2 transition ${
-            activeTab === 'skills'
-              ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <Sparkles size={16} />
-          <span>Ma trận Kỹ năng (Skills Matrix)</span>
-        </button>
-      </div>
-
-      {/* TAB 1: PROJECTS */}
-      {activeTab === 'projects' && (
-        <div className="space-y-4">
-          {/* Search & Filter Bar */}
-          <div className="p-3 bg-white rounded-2xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row gap-3 items-center justify-between">
-            <div className="relative w-full md:w-80">
-              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={keyword}
-                onChange={e => setKeyword(e.target.value)}
-                placeholder="Tìm tên dự án, mã PRJ-..."
-                className="w-full pl-9 pr-3.5 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-
-            <div className="flex items-center gap-2 w-full md:w-auto">
-              <Filter size={15} className="text-slate-400" />
-              <select
-                value={statusFilter}
-                onChange={e => setStatusFilter(e.target.value)}
-                className="px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white outline-none focus:border-blue-500 font-medium"
-              >
-                <option value="">Tất cả trạng thái</option>
-                <option value="PLANNING">Lên kế hoạch</option>
-                <option value="IN_PROGRESS">Đang phát triển</option>
-                <option value="MAINTENANCE">Bảo trì</option>
-                <option value="COMPLETED">Đã hoàn thành</option>
-                <option value="PAUSED">Tạm dừng</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Project Cards Grid */}
-          {loading ? (
-            <div className="p-12 text-center text-slate-400 text-sm">Đang tải danh sách dự án...</div>
-          ) : projects.length === 0 ? (
-            <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-300 p-8">
-              <FolderGit2 size={40} className="mx-auto text-slate-300 mb-3" />
-              <p className="text-sm font-semibold text-slate-700">Chưa tìm thấy dự án nào</p>
-              <p className="text-xs text-slate-400 mt-1">
-                {isReadOnly
-                  ? 'Hiện chưa có dự án công nghệ nào phù hợp với tiêu chí tìm kiếm.'
-                  : 'Bấm nút "Khởi tạo Dự án Mới" ở góc trên để tạo dự án đầu tiên.'}
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {projects.map(project => {
-                const statusInfo = STATUS_CONFIG[project.status] || {
-                  label: project.status,
-                  color: 'bg-slate-100 text-slate-700 border-slate-200'
-                };
-                const activeMembers = (project.members || []).filter(m => m.isActive);
-
-                return (
-                  <div
-                    key={project.id}
-                    onClick={() => setSelectedDetailProject(project)}
-                    className="bg-white rounded-2xl border border-slate-200/90 hover:border-blue-400 shadow-xs hover:shadow-md transition-all flex flex-col overflow-hidden group cursor-pointer"
-                  >
-                    {/* Card Top */}
-                    <div className="p-5 flex-1 space-y-3.5">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-[11px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
-                              {project.projectCode}
-                            </span>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                              project.projectType === 'INTERNAL'
-                                ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                                : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                            }`}>
-                              {project.projectType === 'INTERNAL' ? 'Sản phẩm Nội bộ' : 'Dự án Khách hàng'}
-                            </span>
-                          </div>
-                          <h3 className="text-base font-bold text-slate-900 group-hover:text-blue-600 transition">
-                            {project.projectName}
-                          </h3>
-                        </div>
-
-                        <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full border shrink-0 ${statusInfo.color}`}>
-                          {statusInfo.label}
-                        </span>
-                      </div>
-
-                      {project.description && (
-                        <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
-                          {project.description}
-                        </p>
-                      )}
-
-                      {/* Tech Stack Pills */}
-                      {project.techStack && project.techStack.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 pt-1">
-                          {project.techStack.map((tech, idx) => (
-                            <span
-                              key={idx}
-                              className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200/70"
-                            >
-                              {tech}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Timeline & Tech Lead */}
-                      <div className="pt-2 border-t border-slate-100 grid grid-cols-2 gap-2 text-xs text-slate-600">
-                        <div className="flex items-center gap-1.5">
-                          <Calendar size={13} className="text-slate-400" />
-                          <span>{project.startDate || 'Chưa định'} → {project.endDate || 'Chưa định'}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <Sparkles size={13} className="text-purple-600" />
-                          <span>Lead: <strong>{project.techLeadName}</strong></span>
-                        </div>
-                      </div>
-
-                      {/* External links */}
-                      <div className="flex items-center gap-3 pt-1 text-xs text-slate-500">
-                        {project.gitRepoUrl && (
-                          <a
-                            href={project.gitRepoUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="inline-flex items-center gap-1 hover:text-blue-600 transition"
-                          >
-                            <GitBranch size={13} />
-                            <span>Git</span>
-                          </a>
-                        )}
-                        {project.jiraUrl && (
-                          <a
-                            href={project.jiraUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="inline-flex items-center gap-1 hover:text-blue-600 transition"
-                          >
-                            <Kanban size={13} />
-                            <span>Jira</span>
-                          </a>
-                        )}
-                        {project.figmaUrl && (
-                          <a
-                            href={project.figmaUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="inline-flex items-center gap-1 hover:text-blue-600 transition"
-                          >
-                            <Palette size={13} />
-                            <span>Palette</span>
-                          </a>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Card Footer: Members & Actions */}
-                    <div className="px-5 py-3.5 bg-slate-50/80 border-t border-slate-100 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="flex -space-x-1.5 overflow-hidden">
-                          {activeMembers.slice(0, 4).map((m, idx) => (
-                            <div
-                              key={idx}
-                              title={`${m.userName} (${m.projectRole}) - ${m.allocationPercent}%`}
-                              className="w-7 h-7 rounded-full bg-blue-600 text-white text-[11px] font-bold flex items-center justify-center ring-2 ring-white"
-                            >
-                              {m.userName ? m.userName.charAt(0) : 'U'}
-                            </div>
-                          ))}
-                        </div>
-                        <span className="text-xs font-semibold text-slate-600">
-                          {activeMembers.length} nhân sự ({project.totalAllocationSum}% tải)
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-1">
-                        {isReadOnly ? (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedDetailProject(project);
-                            }}
-                            className="px-3 py-1.5 text-xs font-semibold bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 rounded-lg shadow-2xs transition flex items-center gap-1.5"
-                          >
-                            <Eye size={14} />
-                            <span>Xem chi tiết</span>
-                          </button>
-                        ) : (
-                          <>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedDetailProject(project);
-                              }}
-                              className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                              title="Xem chi tiết dự án"
-                            >
-                              <Eye size={15} />
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setStaffingProject(project);
-                              }}
-                              className="px-2.5 py-1.5 text-xs font-semibold bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 rounded-lg shadow-2xs transition flex items-center gap-1"
-                            >
-                              <UserPlus size={13} />
-                              <span>Phân bổ</span>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingProject(project);
-                                setIsFormOpen(true);
-                              }}
-                              className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-slate-200/60 rounded-lg transition"
-                              title="Sửa dự án"
-                            >
-                              <Edit3 size={15} />
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                requestDeleteProject(project.id, project.projectName);
-                              }}
-                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                              title="Xóa dự án"
-                            >
-                              <Trash2 size={15} />
-                            </button>
-                          </>
-                        )}
-                      </div>
+          <>
+            {/* 2. Bento Telemetry Overview */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: 0.05, ease: [0.22, 1, 0.36, 1] }}
+              className="grid grid-cols-1 lg:grid-cols-12 gap-5"
+            >
+              {/* Left (7 cols): 4 Architectural Telemetry Wells */}
+              <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200/90 shadow-[0_4px_24px_-4px_rgba(30,58,138,0.06)] p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {/* Well 1: Portfolio */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProjectStatusFilter('');
+                    setActiveTab('projects');
+                  }}
+                  className="p-4 rounded-xl bg-slate-50/75 hover:bg-blue-50/50 border border-slate-200/75 hover:border-blue-300 text-left transition flex flex-col justify-between gap-2.5 cursor-pointer"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-slate-600">Danh mục Dự án</span>
+                    <div className="w-8 h-8 rounded-lg bg-blue-100/80 text-blue-700 flex items-center justify-center">
+                      <Layers size={16} />
                     </div>
                   </div>
+                  <div className="tabular">
+                    <p className="text-3xl font-extrabold text-slate-900">{telemetry.totalProjects}</p>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      <strong className="text-emerald-700">{telemetry.inProgress} đang phát triển</strong> •{' '}
+                      {telemetry.planning} lên kế hoạch
+                    </p>
+                  </div>
+                </button>
+
+                {/* Well 2: Deployed FTE */}
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('bench')}
+                  className="p-4 rounded-xl bg-slate-50/75 hover:bg-blue-50/50 border border-slate-200/75 hover:border-blue-300 text-left transition flex flex-col justify-between gap-2.5 cursor-pointer"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-slate-600">Nguồn lực Huy động</span>
+                    <div className="w-8 h-8 rounded-lg bg-[#1E3A8A]/10 text-[#1E3A8A] flex items-center justify-center">
+                      <Users size={16} />
+                    </div>
+                  </div>
+                  <div className="tabular">
+                    <div className="flex items-baseline gap-2">
+                      <p className="text-3xl font-extrabold text-[#1E3A8A]">{telemetry.totalDeployedFte}</p>
+                      <span className="text-xs font-bold text-slate-500">FTE đang chạy</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Quy mô đội ngũ: <strong className="text-slate-800">{telemetry.totalEngineers} kỹ sư</strong> ({telemetry.totalAllocatedPercent}% tải)
+                    </p>
+                  </div>
+                </button>
+
+                {/* Well 3: Utilization Rate */}
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('bench')}
+                  className="p-4 rounded-xl bg-slate-50/75 hover:bg-blue-50/50 border border-slate-200/75 hover:border-blue-300 text-left transition flex flex-col justify-between gap-2.5 cursor-pointer"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-slate-600">Hiệu suất Công suất Phòng</span>
+                    <span
+                      className={`text-xs font-bold px-2 py-0.5 rounded-full border tabular ${
+                        telemetry.avgUtilization > 100
+                          ? 'bg-rose-50 text-rose-700 border-rose-200'
+                          : telemetry.avgUtilization >= 80
+                          ? 'bg-blue-50 text-blue-700 border-blue-200'
+                          : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      }`}
+                    >
+                      {telemetry.avgUtilization > 100 ? 'Căng tải' : telemetry.avgUtilization >= 80 ? 'Tối ưu' : 'Còn trống'}
+                    </span>
+                  </div>
+                  <div className="space-y-2 tabular">
+                    <div className="flex items-baseline justify-between">
+                      <p className="text-2xl font-extrabold text-slate-900">{telemetry.avgUtilization}%</p>
+                      <span className="text-[11px] font-semibold text-emerald-700">
+                        Ghế chờ trống: {telemetry.totalBenchFte} FTE
+                      </span>
+                    </div>
+                    <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${
+                          telemetry.avgUtilization > 100 ? 'bg-rose-600' : 'bg-blue-600'
+                        }`}
+                        style={{ width: `${Math.min(100, telemetry.avgUtilization)}%` }}
+                      />
+                    </div>
+                  </div>
+                </button>
+
+                {/* Well 4: Bench & Actionable Signals */}
+                <button
+                  type="button"
+                  onClick={() => setActiveTab(telemetry.riskCount > 0 ? 'projects' : telemetry.pendingSkillsCount > 0 && !isReadOnly ? 'skills' : 'bench')}
+                  className="p-4 rounded-xl bg-slate-50/75 hover:bg-blue-50/50 border border-slate-200/75 hover:border-blue-300 text-left transition flex flex-col justify-between gap-2.5 cursor-pointer"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-slate-600">Ghế chờ &amp; Tín hiệu Vận hành</span>
+                    <div
+                      className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                        telemetry.riskCount > 0
+                          ? 'bg-orange-100 text-orange-700'
+                          : 'bg-emerald-100 text-emerald-700'
+                      }`}
+                    >
+                      {telemetry.riskCount > 0 ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />}
+                    </div>
+                  </div>
+                  <div className="tabular flex items-end justify-between gap-2">
+                    <div>
+                      <p className="text-2xl font-extrabold text-emerald-700">
+                        {telemetry.benchCount}{' '}
+                        <span className="text-xs font-semibold text-slate-500">kỹ sư rảnh</span>
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-1">
+                        {telemetry.riskCount > 0 ? (
+                          <span className="text-orange-700 font-semibold">
+                            {telemetry.riskCount} điểm cần xử lý (quá tải / hạn chót)
+                          </span>
+                        ) : telemetry.pendingSkillsCount > 0 && !isReadOnly ? (
+                          <span className="text-blue-700 font-semibold">
+                            {telemetry.pendingSkillsCount} kỹ năng đang chờ thẩm định
+                          </span>
+                        ) : (
+                          <span className="text-emerald-700 font-semibold">Vận hành an toàn, không có quá tải</span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              </div>
+
+              {/* Right (5 cols): Interactive Project Status Donut */}
+              <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200/90 shadow-[0_4px_24px_-4px_rgba(30,58,138,0.06)] p-5 flex flex-col justify-between space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-900">Phân bổ Trạng thái Dự án</h2>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Bấm vào trạng thái bên phải để lọc nhanh danh mục dự án
+                    </p>
+                  </div>
+                  {projectStatusFilter && (
+                    <button
+                      type="button"
+                      onClick={() => setProjectStatusFilter('')}
+                      className="text-[11px] font-semibold text-blue-600 hover:underline cursor-pointer shrink-0"
+                    >
+                      Bỏ lọc
+                    </button>
+                  )}
+                </div>
+
+                {telemetry.statusBreakdown.length === 0 ? (
+                  <div className="flex-1 flex items-center justify-center text-xs text-slate-400 py-8">
+                    Chưa có dự án công nghệ nào trong hệ thống.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-12 items-center gap-3 flex-1">
+                    {/* Donut Chart */}
+                    <div className="sm:col-span-5 h-44 relative flex items-center justify-center">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={telemetry.statusBreakdown}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={50}
+                            outerRadius={72}
+                            paddingAngle={3}
+                            dataKey="value"
+                            stroke="none"
+                            onClick={(entry) => handleSelectStatusFromChart(entry.key)}
+                            className="cursor-pointer"
+                          >
+                            {telemetry.statusBreakdown.map((entry) => (
+                              <Cell
+                                key={entry.key}
+                                fill={entry.color}
+                                opacity={
+                                  !projectStatusFilter || projectStatusFilter === entry.key ? 1 : 0.3
+                                }
+                              />
+                            ))}
+                          </Pie>
+                          <Tooltip content={<StatusDonutTooltip />} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none tabular">
+                        <span className="text-2xl font-extrabold text-slate-900 leading-none">
+                          {telemetry.totalProjects}
+                        </span>
+                        <span className="text-[10px] font-semibold text-slate-400 mt-1">Dự án</span>
+                      </div>
+                    </div>
+
+                    {/* Interactive Status Legend */}
+                    <div className="sm:col-span-7 space-y-1.5">
+                      {telemetry.statusBreakdown.map((item) => {
+                        const isSelected = projectStatusFilter === item.key;
+                        return (
+                          <button
+                            type="button"
+                            key={item.key}
+                            onClick={() => handleSelectStatusFromChart(item.key)}
+                            className={`w-full px-3 py-2 rounded-xl border text-left transition flex items-center justify-between gap-2 text-xs cursor-pointer ${
+                              isSelected
+                                ? 'bg-blue-50 border-blue-400'
+                                : 'bg-slate-50/70 border-slate-200/70 hover:border-blue-300 hover:bg-white'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span
+                                className="w-2.5 h-2.5 rounded-full shrink-0"
+                                style={{ backgroundColor: item.color }}
+                              />
+                              <span className="font-semibold text-slate-800 truncate">{item.label}</span>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0 tabular">
+                              <span className="font-bold text-slate-900">{item.value}</span>
+                              <span className="text-[11px] text-slate-400 w-9 text-right">
+                                {item.percent}%
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+
+            {/* 3. Segmented Executive Navigation Tabs */}
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-1.5 inline-flex flex-wrap items-center gap-1 shadow-2xs">
+              {tabs.map((tab) => {
+                const IconComp = tab.icon;
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    type="button"
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`relative px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-colors flex items-center gap-2 cursor-pointer ${
+                      isActive ? 'text-white' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    {isActive && (
+                      <motion.span
+                        layoutId="mgr-tech-active-tab-pill"
+                        transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+                        className="absolute inset-0 bg-[#1E3A8A] rounded-xl shadow-xs"
+                      />
+                    )}
+                    <span className="relative z-10 flex items-center gap-2">
+                      <IconComp size={16} />
+                      <span>{tab.label}</span>
+                      <span
+                        className={`text-[11px] px-2 py-0.5 rounded-full tabular ${
+                          isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        {tab.count}
+                      </span>
+                      {tab.pendingCount > 0 && (
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full tabular ${
+                            isActive
+                              ? 'bg-orange-500 text-white'
+                              : 'bg-orange-50 text-orange-700 border border-orange-200'
+                          }`}
+                          title={`${tab.pendingCount} kỹ năng chờ duyệt xác thực`}
+                        >
+                          {tab.pendingCount} chờ duyệt
+                        </span>
+                      )}
+                    </span>
+                  </button>
                 );
               })}
             </div>
-          )}
-        </div>
-      )}
 
-      {/* TAB 2: BENCH & CAPACITY MONITORING */}
-      {activeTab === 'bench' && (
-        <div className="space-y-4">
-          <div className="p-4 bg-blue-50/70 border border-blue-100 rounded-2xl flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-bold text-blue-900">Giám sát Năng lực & Ghế chờ (Bench Management)</h3>
-              <p className="text-xs text-blue-700/80 mt-0.5">
-                Theo dõi mức độ sử dụng thời gian của kỹ sư trong phòng. Kỹ sư có dung lượng trống (&gt; 0%) sẵn sàng được bốc vào dự án mới.
-              </p>
-            </div>
-            <div className="text-right">
-              <span className="text-xs font-medium text-slate-500">Tỷ lệ rảnh việc:</span>
-              <p className="text-lg font-extrabold text-blue-700">
-                {benchCount} / {totalEngineers} <span className="text-xs font-normal">kỹ sư</span>
-              </p>
-            </div>
-          </div>
+            {/* 4. Active Tab Workspace */}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeTab}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+              >
+                {activeTab === 'projects' && (
+                  <ProjectsPortfolioTab
+                    projects={projects}
+                    statusFilter={projectStatusFilter}
+                    onChangeStatusFilter={setProjectStatusFilter}
+                    onSelectProject={setSelectedDetailProject}
+                    onOpenStaffing={!isReadOnly ? (proj) => setStaffingProject(proj) : undefined}
+                    onOpenEdit={
+                      !isReadOnly
+                        ? (proj) => {
+                            setEditingProject(proj);
+                            setIsFormOpen(true);
+                          }
+                        : undefined
+                    }
+                    onRequestDelete={!isReadOnly ? requestDeleteProject : undefined}
+                    onOpenCreate={
+                      !isReadOnly
+                        ? () => {
+                            setEditingProject(null);
+                            setIsFormOpen(true);
+                          }
+                        : undefined
+                    }
+                    isReadOnly={isReadOnly}
+                  />
+                )}
 
-          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                    <th className="py-3 px-4">Kỹ sư</th>
-                    <th className="py-3 px-4">Chức vụ / Phòng ban</th>
-                    <th className="py-3 px-4 whitespace-nowrap">Mức độ phân bổ (% Tải)</th>
-                    <th className="py-3 px-4 whitespace-nowrap">Dung lượng còn trống</th>
-                    <th className="py-3 px-4">Dự án đang làm</th>
-                    <th className="py-3 px-4 text-center whitespace-nowrap">Trạng thái</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
-                  {benchUsers.map(user => {
-                    const isOverloaded = user.totalAllocation > 100;
-                    const isFull = user.totalAllocation === 100;
-                    const isAvailable = user.availableCapacity > 0;
+                {activeTab === 'bench' && (
+                  <CapacityBenchTab
+                    benchUsers={benchUsers}
+                    onInspectEngineer={handleInspectEngineer}
+                    onQuickAssign={!isReadOnly ? handleOpenProjectSelectFromBench : undefined}
+                    isReadOnly={isReadOnly}
+                  />
+                )}
 
-                    return (
-                      <tr key={user.userId} className="hover:bg-slate-50/80 transition">
-                        <td className="py-3.5 px-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-slate-800 text-white font-bold text-xs flex items-center justify-center shrink-0">
-                              {user.hoTen ? user.hoTen.charAt(0) : 'U'}
-                            </div>
-                            <div>
-                              <p className="font-bold text-slate-900">{user.hoTen}</p>
-                              <p className="text-[11px] text-slate-400 font-mono">{user.email}</p>
-                            </div>
-                          </div>
-                        </td>
+                {activeTab === 'skills' && (
+                  <SkillsMatrixTab
+                    matrixData={matrixData}
+                    availableSkills={availableSkills}
+                    isReadOnly={isReadOnly}
+                    onInspectEngineer={handleInspectEngineer}
+                    onOpenProjectSelect={!isReadOnly ? handleOpenProjectSelect : undefined}
+                    onVerifySkill={!isReadOnly ? handleVerifySkill : undefined}
+                    verifyingId={verifyingId}
+                  />
+                )}
+              </motion.div>
+            </AnimatePresence>
+          </>
+        )}
 
-                        <td className="py-3.5 px-4">
-                          <p className="font-medium text-slate-800">{user.chucVu || 'Kỹ sư phần mềm'}</p>
-                          <p className="text-[11px] text-slate-400">{user.departmentName}</p>
-                        </td>
+        {/* ── Stacked Operational Modals ───────────────────────────────────── */}
+        {!isReadOnly && (
+          <>
+            <ProjectFormModal
+              isOpen={isFormOpen}
+              onClose={() => setIsFormOpen(false)}
+              initialData={editingProject}
+              onSuccess={async () => {
+                await loadAllData({ quiet: true });
+                if (selectedDetailProject?.id) {
+                  try {
+                    const res = await api.get(`/api/tech/projects/${selectedDetailProject.id}`);
+                    if (res.data?.data) setSelectedDetailProject(res.data.data);
+                  } catch (err) {
+                    console.error(err);
+                  }
+                }
+              }}
+            />
 
-                        <td className="py-3.5 px-4 w-44">
-                          <div className="space-y-1">
-                            <div className="flex justify-between text-[11px] font-bold">
-                              <span>{user.totalAllocation}%</span>
-                              <span className={isOverloaded ? 'text-red-600' : 'text-slate-400'}>
-                                {isOverloaded ? 'Quá tải' : 'Tối đa 100%'}
-                              </span>
-                            </div>
-                            <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
-                              <div
-                                className={`h-full rounded-full transition-all ${
-                                  isOverloaded
-                                    ? 'bg-red-500'
-                                    : isFull
-                                    ? 'bg-emerald-500'
-                                    : 'bg-blue-500'
-                                }`}
-                                style={{ width: `${Math.min(100, user.totalAllocation)}%` }}
-                              />
-                            </div>
-                          </div>
-                        </td>
+            <StaffingModal
+              isOpen={!!staffingProject}
+              onClose={() => {
+                setStaffingProject(null);
+                setStaffingInitialUserId(null);
+                setStaffingInitialAllocation(null);
+              }}
+              project={staffingProject}
+              initialUserId={staffingInitialUserId}
+              initialAllocation={staffingInitialAllocation}
+              onSuccess={async () => {
+                const targetProjectId = staffingProject?.id;
+                await loadAllData({ quiet: true });
+                if (targetProjectId) {
+                  try {
+                    const res = await api.get(`/api/tech/projects/${targetProjectId}`);
+                    if (res.data?.data) {
+                      setStaffingProject(res.data.data);
+                      if (selectedDetailProject && String(selectedDetailProject.id) === String(targetProjectId)) {
+                        setSelectedDetailProject(res.data.data);
+                      }
+                    }
+                  } catch (err) {
+                    console.error(err);
+                  }
+                }
+                if (selectedProfile?.userId) {
+                  try {
+                    const profRes = await api.get(`/api/tech/skills/profile/${selectedProfile.userId}`);
+                    if (profRes.data?.data) setSelectedProfile(profRes.data.data);
+                  } catch (err) {
+                    console.error(err);
+                  }
+                }
+              }}
+            />
 
-                        <td className="py-3.5 px-4 whitespace-nowrap">
-                          {user.availableCapacity > 0 ? (
-                            <span className="font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 whitespace-nowrap">
-                              Rảnh {user.availableCapacity}%
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 font-medium whitespace-nowrap">Hết dung lượng</span>
-                          )}
-                        </td>
+            <ProjectSelectModal
+              isOpen={!!projectSelectCandidate}
+              onClose={() => setProjectSelectCandidate(null)}
+              candidate={projectSelectCandidate}
+              projects={projects}
+              onSelectProject={handleSelectProjectForCandidate}
+            />
+          </>
+        )}
 
-                        <td className="py-3.5 px-4">
-                          {user.activeProjectNames && user.activeProjectNames.length > 0 ? (
-                            <div className="flex flex-wrap gap-1">
-                              {user.activeProjectNames.map((pName, pIdx) => (
-                                <span
-                                  key={pIdx}
-                                  className="text-[10px] font-medium px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200/80"
-                                >
-                                  {pName}
-                                </span>
-                              ))}
-                            </div>
-                          ) : (
-                            <span className="text-slate-400 italic">Chưa có dự án (Đang ngồi Bench)</span>
-                          )}
-                        </td>
-
-                        <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                          {isOverloaded ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200 whitespace-nowrap">
-                              <AlertTriangle size={11} className="shrink-0" /> Quá tải
-                            </span>
-                          ) : isAvailable ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 whitespace-nowrap">
-                              <CheckCircle2 size={11} className="shrink-0" /> Có thể gán việc
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200 whitespace-nowrap">
-                              <CheckCircle2 size={11} className="shrink-0" /> Full 100%
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 3: SKILLS MATRIX */}
-      {activeTab === 'skills' && (
-        <SkillsMatrixTab
-          projects={projects}
-          isReadOnly={isReadOnly}
-          onOpenStaffingModal={
+        {/* Level 1 Modal: Project Detail (supports nested Tech Profile, Staffing, Form) */}
+        <ProjectDetailModal
+          isOpen={!!selectedDetailProject}
+          onClose={() => setSelectedDetailProject(null)}
+          project={selectedDetailProject}
+          onInspectEngineer={handleInspectEngineer}
+          onOpenStaffing={!isReadOnly ? (proj) => setStaffingProject(proj) : undefined}
+          onOpenEdit={
             !isReadOnly
-              ? (project, userId, availableCap) => {
-                  setStaffingProject(project);
-                  setStaffingInitialUserId(userId || null);
-                  setStaffingInitialAllocation(availableCap || null);
+              ? (proj) => {
+                  setEditingProject(proj);
+                  setIsFormOpen(true);
                 }
               : undefined
           }
-          onRefreshData={() => {
-            fetchProjects();
-            fetchBench();
-          }}
+          hasTopModalOpen={
+            isFormOpen ||
+            !!staffingProject ||
+            !!selectedProfile ||
+            !!projectSelectCandidate ||
+            deleteConfirm.isOpen
+          }
         />
-      )}
 
-      {/* Modals */}
-      {!isReadOnly && (
-        <>
-          <ProjectFormModal
-            isOpen={isFormOpen}
-            onClose={() => setIsFormOpen(false)}
-            initialData={editingProject}
-            onSuccess={() => {
-              fetchProjects();
-              fetchBench();
-              if (selectedDetailProject) {
-                api.get(`/api/tech/projects/${selectedDetailProject.id}`).then(res => {
-                  if (res.data?.data) setSelectedDetailProject(res.data.data);
-                }).catch(console.error);
-              }
-            }}
-          />
+        {/* Level 1/2 Modal: Engineer 6-Axis Tech Profile (with Verify Skill & Allocate actions) */}
+        <TechProfileModal
+          profile={selectedProfile}
+          onClose={() => setSelectedProfile(null)}
+          isReadOnly={isReadOnly}
+          onVerifySkill={!isReadOnly ? handleVerifySkill : undefined}
+          verifyingId={verifyingId}
+          onOpenProjectSelect={!isReadOnly ? handleOpenProjectSelect : undefined}
+          zIndexClass={selectedDetailProject ? 'z-[9990]' : 'z-[9985]'}
+          hasTopModalOpen={!!projectSelectCandidate || !!staffingProject}
+        />
 
-          <StaffingModal
-            isOpen={!!staffingProject}
-            onClose={() => {
-              setStaffingProject(null);
-              setStaffingInitialUserId(null);
-              setStaffingInitialAllocation(null);
-            }}
-            project={staffingProject}
-            initialUserId={staffingInitialUserId}
-            initialAllocation={staffingInitialAllocation}
-            onSuccess={() => {
-              fetchProjects();
-              fetchBench();
-              if (staffingProject) {
-                // refresh project data for modal
-                api.get(`/api/tech/projects/${staffingProject.id}`).then(res => {
-                  if (res.data?.data) {
-                    setStaffingProject(res.data.data);
-                    if (selectedDetailProject && selectedDetailProject.id === staffingProject.id) {
-                      setSelectedDetailProject(res.data.data);
-                    }
-                  }
-                }).catch(console.error);
-              }
-            }}
-          />
-        </>
-      )}
-
-      {/* ── Popup Xem Chi tiết Dự án ───────────────────────────────────── */}
-      <ProjectDetailModal
-        isOpen={!!selectedDetailProject}
-        onClose={() => setSelectedDetailProject(null)}
-        project={selectedDetailProject}
-        onOpenStaffing={
-          !isReadOnly
-            ? (proj) => {
-                setStaffingProject(proj);
-              }
-            : undefined
-        }
-        onOpenEdit={
-          !isReadOnly
-            ? (proj) => {
-                setEditingProject(proj);
-                setIsFormOpen(true);
-              }
-            : undefined
-        }
-      />
-
-      {/* ── Popup Hộp thoại Xác nhận Xóa Dự án ─────────────────────────── */}
-      {!isReadOnly && deleteConfirm.isOpen &&
-        createPortal(
-          <div data-tech-modal="true" className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
+        {/* Level 3 Confirm Dialog: Delete Project */}
+        {!isReadOnly &&
+          deleteConfirm.isOpen &&
+          createPortal(
             <div
-              className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"
-              onClick={() => !deleting && setDeleteConfirm({ isOpen: false, projectId: null, projectName: '' })}
-            />
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 overflow-hidden border border-slate-100 z-10 animate-in fade-in zoom-in-95 duration-150">
-              <div className="flex items-start gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 border border-rose-100 flex items-center justify-center shrink-0 shadow-xs">
-                  <Trash2 size={24} className="stroke-[2.2]" />
+              data-tech-modal="true"
+              className="fixed inset-0 z-[10000] flex items-center justify-center p-4"
+              onClick={(e) => {
+                if (e.target === e.currentTarget && !deleting) {
+                  setDeleteConfirm({ isOpen: false, projectId: null, projectName: '' });
+                }
+              }}
+            >
+              <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs" />
+              <motion.div
+                role="dialog"
+                aria-modal="true"
+                initial={{ opacity: 0, scale: 0.96, y: 8 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+                className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 overflow-hidden border border-slate-200 z-10"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 border border-rose-100 flex items-center justify-center shrink-0">
+                    <Trash2 size={22} />
+                  </div>
+                  <div className="flex-1 pt-0.5">
+                    <h3 className="text-base font-bold text-slate-900">Xác nhận xóa dự án</h3>
+                    <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                      Bạn có chắc chắn muốn xóa dự án{' '}
+                      <strong className="text-slate-800">{deleteConfirm.projectName}</strong> không? Toàn bộ danh sách thành viên phân bổ sẽ được giải phóng và hoàn trả % công suất về ghế chờ (Bench).
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={deleting}
+                    onClick={() => setDeleteConfirm({ isOpen: false, projectId: null, projectName: '' })}
+                    className="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100 transition disabled:opacity-50 cursor-pointer"
+                    aria-label="Đóng hộp thoại"
+                  >
+                    <X size={18} />
+                  </button>
                 </div>
-                <div className="flex-1 pt-0.5">
-                  <h3 className="text-base font-bold text-slate-900">Xác nhận xóa dự án</h3>
-                  <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
-                    Bạn có chắc chắn muốn xóa dự án <strong className="text-slate-800">{deleteConfirm.projectName}</strong> không? Toàn bộ danh sách thành viên phân bổ sẽ được giải phóng và hoàn trả % công suất về ghế chờ (Bench).
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  disabled={deleting}
-                  onClick={() => setDeleteConfirm({ isOpen: false, projectId: null, projectName: '' })}
-                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100 transition disabled:opacity-50"
-                >
-                  <X size={18} />
-                </button>
-              </div>
 
-              <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-slate-100">
-                <button
-                  type="button"
-                  disabled={deleting}
-                  onClick={() => setDeleteConfirm({ isOpen: false, projectId: null, projectName: '' })}
-                  className="px-4 py-2.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 rounded-xl transition disabled:opacity-50"
-                >
-                  Hủy bỏ
-                </button>
-                <button
-                  type="button"
-                  disabled={deleting}
-                  onClick={handleConfirmDeleteProject}
-                  className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 active:bg-rose-800 rounded-xl transition shadow-xs disabled:opacity-50"
-                >
-                  <Trash2 size={14} />
-                  <span>{deleting ? 'Đang xóa...' : 'Xác nhận xóa dự án'}</span>
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
-    </div>
+                <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-slate-100">
+                  <button
+                    type="button"
+                    disabled={deleting}
+                    onClick={() => setDeleteConfirm({ isOpen: false, projectId: null, projectName: '' })}
+                    className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition disabled:opacity-50 cursor-pointer"
+                  >
+                    Hủy bỏ
+                  </button>
+                  <button
+                    type="button"
+                    disabled={deleting}
+                    onClick={handleConfirmDeleteProject}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl transition shadow-xs disabled:opacity-50 cursor-pointer"
+                  >
+                    <Trash2 size={14} />
+                    <span>{deleting ? 'Đang xóa...' : 'Xác nhận xóa dự án'}</span>
+                  </button>
+                </div>
+              </motion.div>
+            </div>,
+            document.body
+          )}
+      </div>
+    </MotionConfig>
   );
 }

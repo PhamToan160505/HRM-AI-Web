@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { motion } from 'framer-motion';
 import {
   X,
-  FolderGit2,
   Calendar,
   Code2,
   Users,
@@ -10,75 +10,37 @@ import {
   Kanban,
   Palette,
   ExternalLink,
-  Sparkles,
-  ShieldCheck,
+  UserCheck,
   CheckCircle2,
   AlertTriangle,
   Edit3,
   UserPlus,
   FileText,
   Clock,
-  Briefcase,
   Layers,
-  UserCheck,
-  User,
-  Activity
+  Activity,
+  ChevronRight,
 } from 'lucide-react';
 import api from '../../../services/api';
-
-const STATUS_CONFIG = {
-  PLANNING: { label: 'Lên kế hoạch', color: 'bg-blue-100 text-blue-700 border-blue-200' },
-  IN_PROGRESS: { label: 'Đang phát triển', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
-  MAINTENANCE: { label: 'Bảo trì & Vận hành', color: 'bg-amber-100 text-amber-700 border-amber-200' },
-  COMPLETED: { label: 'Đã hoàn thành', color: 'bg-slate-100 text-slate-700 border-slate-200' },
-  PAUSED: { label: 'Tạm dừng', color: 'bg-red-100 text-red-700 border-red-200' },
-};
-
-const PROJECT_ROLE_LABELS = {
-  TECH_LEAD: { label: 'Tech Lead (Trưởng nhóm kỹ thuật)', color: 'bg-purple-100 text-purple-700 border-purple-200' },
-  BACKEND_DEV: { label: 'Backend Developer', color: 'bg-blue-100 text-blue-700 border-blue-200' },
-  FRONTEND_DEV: { label: 'Frontend Developer', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
-  FULLSTACK_DEV: { label: 'Fullstack Developer', color: 'bg-indigo-100 text-indigo-700 border-indigo-200' },
-  MOBILE_DEV: { label: 'Mobile Developer', color: 'bg-amber-100 text-amber-700 border-amber-200' },
-  QA_TESTER: { label: 'QA / Automation Tester', color: 'bg-pink-100 text-pink-700 border-pink-200' },
-  DEVOPS: { label: 'DevOps / Cloud Engineer', color: 'bg-teal-100 text-teal-700 border-teal-200' },
-  UI_UX_DESIGNER: { label: 'UI/UX Designer', color: 'bg-rose-100 text-rose-700 border-rose-200' },
-};
-
-// Định dạng ngày dd/MM/yyyy
-const formatDateVN = (dateStr) => {
-  if (!dateStr) return 'Chưa định';
-  const parts = dateStr.split('-');
-  if (parts.length !== 3) return dateStr;
-  return `${parts[2]}/${parts[1]}/${parts[0]}`;
-};
-
-// Định dạng thời gian đầy đủ dd/MM/yyyy HH:mm
-const formatDateTimeVN = (isoStr) => {
-  if (!isoStr) return 'N/A';
-  try {
-    const d = new Date(isoStr);
-    if (isNaN(d.getTime())) return isoStr;
-    const day = String(d.getDate()).padStart(2, '0');
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const year = d.getFullYear();
-    const hours = String(d.getHours()).padStart(2, '0');
-    const mins = String(d.getMinutes()).padStart(2, '0');
-    return `${day}/${month}/${year} ${hours}:${mins}`;
-  } catch {
-    return isoStr;
-  }
-};
+import {
+  PROJECT_STATUS_CONFIG,
+  PROJECT_ROLE_LABELS,
+  formatDateVN,
+  formatDateTimeVN,
+  computeTimelineHealth,
+} from '../techHelpers';
 
 export default function ProjectDetailModal({
   isOpen,
   onClose,
   project,
   onOpenStaffing,
-  onOpenEdit
+  onOpenEdit,
+  onInspectEngineer,
+  hasTopModalOpen = false,
 }) {
   const [projectData, setProjectData] = useState(project);
-  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     if (isOpen && project?.id) {
@@ -97,9 +59,20 @@ export default function ProjectDetailModal({
     };
   }, [isOpen, project]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && !hasTopModalOpen) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, hasTopModalOpen, onClose]);
+
   const fetchFreshDetail = async (projectId) => {
     try {
-      setLoading(true);
+      setRefreshing(true);
       const res = await api.get(`/api/tech/projects/${projectId}`);
       if (res.data?.data) {
         setProjectData(res.data.data);
@@ -107,67 +80,66 @@ export default function ProjectDetailModal({
     } catch (err) {
       console.error('Không thể tải chi tiết dự án mới nhất:', err);
     } finally {
-      setLoading(false);
+      setRefreshing(false);
     }
   };
 
   if (!isOpen || !projectData) return null;
 
-  const statusInfo = STATUS_CONFIG[projectData.status] || {
+  const statusInfo = PROJECT_STATUS_CONFIG[projectData.status] || {
     label: projectData.status,
-    color: 'bg-slate-100 text-slate-700 border-slate-200'
+    badgeClass: 'bg-slate-100 text-slate-700 border-slate-200',
   };
 
   const members = projectData.members || [];
-  const activeMembers = members.filter(m => m.isActive);
-  const formerMembers = members.filter(m => !m.isActive);
-  const overloadedMembers = activeMembers.filter(m => m.isOverloaded || (m.totalCurrentAllocation && m.totalCurrentAllocation > 100));
+  const activeMembers = members.filter((m) => m.isActive);
+  const formerMembers = members.filter((m) => !m.isActive);
+  const overloadedMembers = activeMembers.filter(
+    (m) => m.isOverloaded || (m.totalCurrentAllocation && m.totalCurrentAllocation > 100)
+  );
   const hasOverload = overloadedMembers.length > 0;
   const fteEquivalent = ((projectData.totalAllocationSum || 0) / 100).toFixed(1);
-
-  // Tính số ngày còn lại hoặc quá hạn
-  const computeDaysRemaining = () => {
-    if (!projectData.endDate) return null;
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    const end = new Date(projectData.endDate);
-    end.setHours(0, 0, 0, 0);
-    const diffTime = end.getTime() - now.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays;
-  };
-
-  const daysRemaining = computeDaysRemaining();
+  const timeline = computeTimelineHealth(projectData);
 
   return createPortal(
     <div
       data-tech-modal="true"
-      className="fixed inset-0 z-[9980] bg-slate-900/60 backdrop-blur-sm p-4 sm:p-6 flex items-center justify-center animate-fadeIn overflow-y-auto"
+      className="fixed inset-0 z-[9980] bg-slate-900/55 backdrop-blur-xs p-4 sm:p-6 flex items-center justify-center overflow-y-auto"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-150">
-        {/* ── 1. Modal Header ──────────────────────────────────────────────── */}
-        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 px-6 py-5 text-white flex items-start justify-between gap-4 shrink-0 border-b border-slate-800">
+      <motion.div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="tech-project-detail-title"
+        initial={{ opacity: 0, scale: 0.98, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+        className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]"
+      >
+        {/* Header — Corporate Deep Sapphire */}
+        <div className="bg-[#0F2557] px-6 py-5 text-white flex items-start justify-between gap-4 shrink-0 border-b border-blue-900/60">
           <div className="space-y-2 flex-1 min-w-0">
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <span className="font-mono text-xs font-bold px-2.5 py-0.5 rounded-md bg-white/10 text-white border border-white/20">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-mono text-[11px] font-bold px-2.5 py-0.5 rounded-md bg-white/10 text-blue-100 border border-white/20 tabular">
                 {projectData.projectCode}
               </span>
-              <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
-                projectData.projectType === 'INTERNAL'
-                  ? 'bg-indigo-500/20 text-indigo-200 border-indigo-400/30'
-                  : 'bg-emerald-500/20 text-emerald-200 border-emerald-400/30'
-              }`}>
+              <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-100 border border-blue-400/30">
                 {projectData.projectType === 'INTERNAL' ? 'Sản phẩm Nội bộ' : 'Dự án Khách hàng'}
               </span>
-              <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${statusInfo.color}`}>
+              <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border whitespace-nowrap ${statusInfo.badgeClass}`}>
                 {statusInfo.label}
               </span>
+              {refreshing && (
+                <span className="text-[10px] text-blue-200/80 ml-1">Đang đồng bộ...</span>
+              )}
             </div>
 
-            <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white leading-tight">
+            <h2
+              id="tech-project-detail-title"
+              className="text-xl sm:text-2xl font-bold tracking-tight text-white leading-snug text-balance"
+            >
               {projectData.projectName}
             </h2>
           </div>
@@ -175,72 +147,76 @@ export default function ProjectDetailModal({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-xl text-white/70 hover:text-white hover:bg-white/10 transition shrink-0"
-            title="Đóng cửa sổ"
+            className="p-2 rounded-xl text-blue-100/75 hover:text-white hover:bg-white/10 transition shrink-0 cursor-pointer"
+            title="Đóng cửa sổ (Esc)"
+            aria-label="Đóng cửa sổ"
           >
             <X size={20} />
           </button>
         </div>
 
-        {/* ── 2. Modal Body (Scrollable) ──────────────────────────────────── */}
+        {/* Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Quick Metrics Bar */}
+          {/* 4 Metric Tiles */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
-            {/* Tech Lead */}
-            <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl space-y-1">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                <Sparkles size={12} className="text-purple-600" />
-                Tech Lead
+            <div className="p-3.5 bg-slate-50/90 border border-slate-200/80 rounded-xl space-y-1">
+              <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1.5">
+                <UserCheck size={13} className="text-blue-600 shrink-0" />
+                <span>Tech Lead</span>
               </span>
-              <p className="text-xs font-bold text-slate-900 truncate">
+              <p className="text-xs font-bold text-slate-900 truncate" title={projectData.techLeadName || 'Chưa chỉ định'}>
                 {projectData.techLeadName || 'Chưa chỉ định'}
               </p>
+              {!projectData.techLeadName && (
+                <span className="text-[10px] font-semibold text-orange-600 block">Cần bổ nhiệm Lead</span>
+              )}
             </div>
 
-            {/* Timeline */}
-            <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl space-y-1">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                <Calendar size={12} className="text-blue-600" />
-                Thời gian
+            <div className="p-3.5 bg-slate-50/90 border border-slate-200/80 rounded-xl space-y-1">
+              <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1.5">
+                <Calendar size={13} className="text-blue-600 shrink-0" />
+                <span>Mốc thời gian</span>
               </span>
-              <p className="text-xs font-bold text-slate-900">
+              <p className="text-xs font-bold text-slate-900 tabular">
                 {formatDateVN(projectData.startDate)} → {formatDateVN(projectData.endDate)}
               </p>
-              {daysRemaining !== null && (
-                <span className={`text-[10px] font-medium block ${
-                  daysRemaining < 0
-                    ? 'text-rose-600 font-semibold'
-                    : daysRemaining <= 7
-                    ? 'text-amber-600 font-semibold'
-                    : 'text-emerald-600'
-                }`}>
-                  {daysRemaining < 0
-                    ? `Đã quá hạn ${Math.abs(daysRemaining)} ngày`
-                    : daysRemaining === 0
-                    ? 'Hôm nay đến hạn'
-                    : `Còn ${daysRemaining} ngày`}
+              <span
+                className={`text-[10px] font-semibold block tabular ${
+                  timeline.tone === 'overdue'
+                    ? 'text-rose-600'
+                    : timeline.tone === 'dueSoon'
+                    ? 'text-orange-600'
+                    : timeline.tone === 'completed'
+                    ? 'text-blue-700'
+                    : 'text-emerald-700'
+                }`}
+              >
+                {timeline.text}
+              </span>
+            </div>
+
+            <div className="p-3.5 bg-slate-50/90 border border-slate-200/80 rounded-xl space-y-1">
+              <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1.5">
+                <Users size={13} className="text-blue-600 shrink-0" />
+                <span>Quy mô nhân sự</span>
+              </span>
+              <p className="text-xs font-bold text-slate-900 tabular">
+                {activeMembers.length} kỹ sư{' '}
+                <span className="text-[11px] text-slate-500 font-normal">đang tham gia</span>
+              </p>
+              {formerMembers.length > 0 && (
+                <span className="text-[10px] text-slate-400 tabular block">
+                  {formerMembers.length} lượt đã luân chuyển
                 </span>
               )}
             </div>
 
-            {/* Đội ngũ */}
-            <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl space-y-1">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                <Users size={12} className="text-indigo-600" />
-                Đội ngũ kỹ thuật
+            <div className="p-3.5 bg-slate-50/90 border border-slate-200/80 rounded-xl space-y-1">
+              <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1.5">
+                <Activity size={13} className="text-blue-600 shrink-0" />
+                <span>Công suất huy động</span>
               </span>
-              <p className="text-xs font-bold text-slate-900">
-                {activeMembers.length} thành viên <span className="text-[11px] text-slate-400 font-normal">đang hoạt động</span>
-              </p>
-            </div>
-
-            {/* Tổng công suất huy động */}
-            <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl space-y-1">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                <Activity size={12} className="text-blue-600" />
-                Tổng công suất huy động
-              </span>
-              <div className="flex items-baseline gap-1.5">
+              <div className="flex items-baseline gap-1.5 tabular">
                 <span className="text-sm font-extrabold text-blue-700">
                   {projectData.totalAllocationSum || 0}%
                 </span>
@@ -251,42 +227,66 @@ export default function ProjectDetailModal({
               {hasOverload ? (
                 <span className="text-[10px] text-rose-600 font-semibold flex items-center gap-1 pt-0.5">
                   <AlertTriangle size={11} className="shrink-0" />
-                  Có {overloadedMembers.length} kỹ sư quá tải cá nhân
+                  <span>{overloadedMembers.length} kỹ sư vượt 100% tải</span>
                 </span>
               ) : (
-                <span className="text-[10px] text-emerald-600 font-medium flex items-center gap-1 pt-0.5">
+                <span className="text-[10px] text-emerald-700 font-medium flex items-center gap-1 pt-0.5">
                   <CheckCircle2 size={11} className="shrink-0" />
-                  Tải các kỹ sư cân đối
+                  <span>Tải các kỹ sư cân đối</span>
                 </span>
               )}
             </div>
           </div>
 
-          {/* Mô tả & Mục tiêu dự án */}
+          {/* Tiến độ thời gian trực quan */}
+          {projectData.startDate && projectData.endDate && (
+            <div className="p-4 rounded-xl bg-blue-50/50 border border-blue-100 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-slate-700">Độ phủ lịch trình thực hiện</span>
+                <span className="font-bold text-blue-700 tabular">{timeline.elapsedPercent}% chu kỳ thời gian</span>
+              </div>
+              <div className="w-full h-2 rounded-full bg-white border border-blue-100 overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${
+                    timeline.tone === 'overdue'
+                      ? 'bg-rose-500'
+                      : timeline.tone === 'dueSoon'
+                      ? 'bg-orange-500'
+                      : timeline.tone === 'completed'
+                      ? 'bg-emerald-600'
+                      : 'bg-blue-600'
+                  }`}
+                  style={{ width: `${timeline.elapsedPercent}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Mô tả & Mục tiêu */}
           <div className="space-y-2">
-            <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+            <h4 className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
               <FileText size={14} className="text-blue-600" />
-              Mô tả &amp; Mục tiêu Dự án
+              <span>Mô tả &amp; Mục tiêu Dự án</span>
             </h4>
-            <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-200/70 text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">
+            <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-200/80 text-xs text-slate-700 leading-relaxed whitespace-pre-wrap text-pretty">
               {projectData.description || 'Chưa có mô tả chi tiết cho dự án này.'}
             </div>
           </div>
 
           {/* Tech Stack */}
           <div className="space-y-2">
-            <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-              <Code2 size={14} className="text-indigo-600" />
-              Hệ thống Công nghệ (Tech Stack)
+            <h4 className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+              <Code2 size={14} className="text-blue-600" />
+              <span>Hệ thống Công nghệ (Tech Stack)</span>
             </h4>
             {projectData.techStack && projectData.techStack.length > 0 ? (
               <div className="flex flex-wrap gap-2">
                 {projectData.techStack.map((tech, idx) => (
                   <span
                     key={idx}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-blue-50 text-blue-800 border border-blue-200/80 text-xs font-bold shadow-2xs"
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-blue-50 text-blue-800 border border-blue-200/80 text-xs font-semibold"
                   >
-                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
                     {tech}
                   </span>
                 ))}
@@ -298,103 +298,89 @@ export default function ProjectDetailModal({
 
           {/* Tài nguyên & Liên kết Kỹ thuật */}
           <div className="space-y-2">
-            <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-              <Layers size={14} className="text-slate-600" />
-              Tài nguyên &amp; Liên kết Kỹ thuật
+            <h4 className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+              <Layers size={14} className="text-blue-600" />
+              <span>Tài nguyên &amp; Liên kết Kỹ thuật</span>
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {/* Git Repo */}
-              <div className="p-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between gap-2 shadow-2xs hover:border-slate-300 transition">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
-                    <GitBranch size={16} />
-                  </div>
-                  <div className="min-w-0">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Source Code</span>
-                    <span className="text-xs font-semibold text-slate-800 truncate block">Git Repository</span>
-                  </div>
-                </div>
-                {projectData.gitRepoUrl ? (
-                  <a
-                    href={projectData.gitRepoUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                    title="Mở Git Repository"
+              {[
+                {
+                  title: 'Source Code',
+                  subtitle: 'Git Repository',
+                  url: projectData.gitRepoUrl,
+                  icon: GitBranch,
+                  iconBg: 'bg-slate-100 text-slate-700',
+                },
+                {
+                  title: 'Tasks & Sprints',
+                  subtitle: 'Jira Board',
+                  url: projectData.jiraUrl,
+                  icon: Kanban,
+                  iconBg: 'bg-blue-50 text-blue-600',
+                },
+                {
+                  title: 'UI/UX Design',
+                  subtitle: 'Figma Prototype',
+                  url: projectData.figmaUrl,
+                  icon: Palette,
+                  iconBg: 'bg-sky-50 text-sky-700',
+                },
+              ].map((resItem, idx) => {
+                const IconComp = resItem.icon;
+                return (
+                  <div
+                    key={idx}
+                    className="p-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between gap-2 hover:border-blue-300 transition"
                   >
-                    <ExternalLink size={15} />
-                  </a>
-                ) : (
-                  <span className="text-[10px] text-slate-400 italic">Chưa có</span>
-                )}
-              </div>
-
-              {/* Jira Board */}
-              <div className="p-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between gap-2 shadow-2xs hover:border-slate-300 transition">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                    <Kanban size={16} />
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${resItem.iconBg}`}>
+                        <IconComp size={15} />
+                      </div>
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-semibold text-slate-400 block">{resItem.title}</span>
+                        <span className="text-xs font-semibold text-slate-800 truncate block">{resItem.subtitle}</span>
+                      </div>
+                    </div>
+                    {resItem.url ? (
+                      <a
+                        href={resItem.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-blue-600 hover:bg-blue-50 rounded-lg transition shrink-0"
+                        title={`Mở ${resItem.subtitle}`}
+                      >
+                        <span>Mở</span>
+                        <ExternalLink size={12} />
+                      </a>
+                    ) : (
+                      <span className="text-[11px] text-slate-400 italic shrink-0">Chưa có</span>
+                    )}
                   </div>
-                  <div className="min-w-0">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Tasks &amp; Sprints</span>
-                    <span className="text-xs font-semibold text-slate-800 truncate block">Jira Board</span>
-                  </div>
-                </div>
-                {projectData.jiraUrl ? (
-                  <a
-                    href={projectData.jiraUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                    title="Mở Jira Board"
-                  >
-                    <ExternalLink size={15} />
-                  </a>
-                ) : (
-                  <span className="text-[10px] text-slate-400 italic">Chưa có</span>
-                )}
-              </div>
-
-              {/* Figma UI/UX */}
-              <div className="p-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between gap-2 shadow-2xs hover:border-slate-300 transition">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
-                    <Palette size={16} />
-                  </div>
-                  <div className="min-w-0">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase block">UI/UX Design</span>
-                    <span className="text-xs font-semibold text-slate-800 truncate block">Figma Prototype</span>
-                  </div>
-                </div>
-                {projectData.figmaUrl ? (
-                  <a
-                    href={projectData.figmaUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="p-1.5 text-purple-600 hover:bg-purple-50 rounded-lg transition"
-                    title="Mở Figma"
-                  >
-                    <ExternalLink size={15} />
-                  </a>
-                ) : (
-                  <span className="text-[10px] text-slate-400 italic">Chưa có</span>
-                )}
-              </div>
+                );
+              })}
             </div>
           </div>
 
           {/* Đội ngũ Kỹ thuật tham gia */}
-          <div className="space-y-3 pt-2">
-            <div className="flex items-center justify-between">
-              <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                <Users size={14} className="text-blue-600" />
-                Đội ngũ Kỹ thuật tham gia ({activeMembers.length} thành viên)
-              </h4>
+          <div className="space-y-3 pt-1">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h4 className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <Users size={14} className="text-blue-600" />
+                  <span>Đội ngũ Kỹ thuật tham gia ({activeMembers.length} thành viên)</span>
+                </h4>
+                {onInspectEngineer && activeMembers.length > 0 && (
+                  <span className="text-[11px] text-slate-400 hidden sm:inline">
+                    • Bấm vào thành viên để xem Tech Profile
+                  </span>
+                )}
+              </div>
+
               {onOpenStaffing && (
                 <button
                   type="button"
                   onClick={() => onOpenStaffing(projectData)}
-                  className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline"
+                  className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
                 >
                   <UserPlus size={13} />
                   <span>Quản lý phân bổ</span>
@@ -403,13 +389,13 @@ export default function ProjectDetailModal({
             </div>
 
             {activeMembers.length === 0 ? (
-              <div className="py-8 px-4 text-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 space-y-2">
+              <div className="py-8 px-4 text-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 space-y-2.5">
                 <p className="text-xs text-slate-500">Chưa có kỹ sư nào đang tham gia dự án này.</p>
                 {onOpenStaffing && (
                   <button
                     type="button"
                     onClick={() => onOpenStaffing(projectData)}
-                    className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs transition inline-flex items-center gap-1.5"
+                    className="px-3.5 py-2 bg-[#1E3A8A] hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs transition inline-flex items-center gap-1.5 cursor-pointer"
                   >
                     <UserPlus size={13} />
                     <span>Phân bổ nhân sự ngay</span>
@@ -421,115 +407,126 @@ export default function ProjectDetailModal({
                 {activeMembers.map((member) => {
                   const roleCfg = PROJECT_ROLE_LABELS[member.projectRole] || {
                     label: member.projectRole,
-                    color: 'bg-slate-100 text-slate-700 border-slate-200'
+                    badgeClass: 'bg-slate-100 text-slate-700 border-slate-200',
                   };
                   const isLead = member.projectRole === 'TECH_LEAD';
+                  const Wrapper = onInspectEngineer ? 'button' : 'div';
 
                   return (
-                    <div
+                    <Wrapper
                       key={member.id}
-                      className="p-3 rounded-xl border transition flex items-center justify-between gap-3 bg-white border-slate-200/90 shadow-2xs hover:border-blue-200"
+                      {...(onInspectEngineer
+                        ? { type: 'button', onClick: () => onInspectEngineer(member.userId) }
+                        : {})}
+                      className={`p-3 rounded-xl border text-left transition flex items-center justify-between gap-3 bg-white border-slate-200/90 ${
+                        onInspectEngineer ? 'hover:border-blue-400 hover:bg-blue-50/30 cursor-pointer group' : ''
+                      }`}
                     >
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 shadow-xs ${
-                          isLead
-                            ? 'bg-gradient-to-br from-purple-600 to-indigo-700 text-white ring-2 ring-purple-200'
-                            : 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white'
-                        }`}>
-                          {member.userName ? member.userName.charAt(0) : 'U'}
+                        <div
+                          className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
+                            isLead
+                              ? 'bg-[#1E3A8A] text-white ring-2 ring-blue-200'
+                              : 'bg-blue-600 text-white'
+                          }`}
+                        >
+                          {member.userName ? member.userName.charAt(0).toUpperCase() : 'U'}
                         </div>
 
                         <div className="min-w-0 space-y-0.5">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-bold text-xs text-slate-900 truncate">
+                            <span
+                              className={`font-bold text-xs text-slate-900 truncate ${
+                                onInspectEngineer ? 'group-hover:text-blue-700 transition-colors' : ''
+                              }`}
+                            >
                               {member.userName}
                             </span>
                             {member.userMaNhanVien && (
-                              <span className="text-[10px] text-slate-400">({member.userMaNhanVien})</span>
+                              <span className="text-[10px] text-slate-400 tabular">({member.userMaNhanVien})</span>
                             )}
                           </div>
 
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className={`text-[10px] font-bold px-2 py-0.2 rounded-md border ${roleCfg.color}`}>
-                              {isLead ? '★ ' : ''}{roleCfg.label}
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border whitespace-nowrap ${roleCfg.badgeClass}`}>
+                              {isLead ? 'Lead • ' : ''}
+                              {roleCfg.shortLabel || roleCfg.label}
                             </span>
                           </div>
 
-                          <p className="text-[10px] text-slate-400">
+                          <p className="text-[10px] text-slate-400 truncate">
                             {member.userEmail}
                             {member.joinedAt && ` • Tham gia: ${formatDateVN(member.joinedAt)}`}
                           </p>
                         </div>
                       </div>
 
-                      <div className="text-right shrink-0">
-                        <span className="text-xs font-extrabold text-blue-700 block">
+                      <div className="text-right shrink-0 flex flex-col items-end gap-1">
+                        <span className="text-xs font-extrabold text-blue-700 tabular whitespace-nowrap">
                           {member.allocationPercent}% tải
                         </span>
-                        <div className="flex flex-col items-end gap-0.5 mt-0.5">
-                          <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200">
-                            Đang tham gia
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200 whitespace-nowrap shrink-0">
+                          Đang tham gia
+                        </span>
+                        {member.isOverloaded && (
+                          <span
+                            className="text-[10px] font-semibold text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded inline-flex items-center gap-1 whitespace-nowrap shrink-0"
+                            title={`Tổng tải cá nhân qua tất cả các dự án: ${member.totalCurrentAllocation}%`}
+                          >
+                            <AlertTriangle size={10} className="shrink-0" /> Quá tải ({member.totalCurrentAllocation}%)
                           </span>
-                          {member.isOverloaded && (
-                            <span
-                              className="text-[9px] font-semibold text-rose-600 bg-rose-50 border border-rose-200 px-1.5 py-0.2 rounded flex items-center gap-0.5"
-                              title={`Tổng tải cá nhân qua tất cả các dự án: ${member.totalCurrentAllocation}%`}
-                            >
-                              <AlertTriangle size={9} /> Quá tải cá nhân ({member.totalCurrentAllocation}%)
-                            </span>
-                          )}
-                        </div>
+                        )}
                       </div>
-                    </div>
+                    </Wrapper>
                   );
                 })}
               </div>
             )}
 
-            {/* Lịch sử thành viên đã rời dự án (nếu có) */}
+            {/* Lịch sử thành viên đã rời dự án */}
             {formerMembers.length > 0 && (
               <div className="pt-2 border-t border-slate-100">
                 <details className="group text-xs">
-                  <summary className="cursor-pointer font-semibold text-slate-500 hover:text-slate-700 flex items-center justify-between list-none select-none py-1.5 px-3 rounded-xl bg-slate-50 border border-slate-200/80 hover:bg-slate-100 transition">
+                  <summary className="cursor-pointer font-semibold text-slate-500 hover:text-slate-700 flex items-center justify-between list-none select-none py-2 px-3 rounded-xl bg-slate-50 border border-slate-200/80 hover:bg-slate-100 transition">
                     <span className="flex items-center gap-2">
                       <Clock size={13} className="text-slate-400 group-open:text-blue-600" />
-                      <span>Lịch sử thành viên đã rời dự án ({formerMembers.length} lượt)</span>
+                      <span>Lịch sử nhân sự đã rời dự án ({formerMembers.length} lượt)</span>
                     </span>
-                    <span className="text-[11px] text-blue-600 font-medium group-open:hidden">Xem chi tiết</span>
+                    <span className="text-[11px] text-blue-600 font-semibold flex items-center gap-0.5 group-open:hidden">
+                      Xem chi tiết <ChevronRight size={13} />
+                    </span>
                   </summary>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 pt-1">
                     {formerMembers.map((member) => {
                       const roleCfg = PROJECT_ROLE_LABELS[member.projectRole] || {
                         label: member.projectRole,
-                        color: 'bg-slate-100 text-slate-700 border-slate-200'
+                        badgeClass: 'bg-slate-100 text-slate-700 border-slate-200',
                       };
                       return (
                         <div
                           key={member.id}
-                          className="p-2.5 rounded-xl border bg-slate-50/70 border-slate-200/70 flex items-center justify-between gap-2.5 opacity-80"
+                          className="p-2.5 rounded-xl border bg-slate-50/70 border-slate-200/70 flex items-center justify-between gap-2.5"
                         >
                           <div className="flex items-center gap-2.5 min-w-0">
                             <div className="w-8 h-8 rounded-lg bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-xs shrink-0">
-                              {member.userName ? member.userName.charAt(0) : 'U'}
+                              {member.userName ? member.userName.charAt(0).toUpperCase() : 'U'}
                             </div>
                             <div className="min-w-0 space-y-0.5">
                               <p className="font-semibold text-xs text-slate-700 truncate">{member.userName}</p>
-                              <span className={`text-[9px] font-medium px-1.5 py-0.2 rounded border ${roleCfg.color}`}>
-                                {roleCfg.label}
+                              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded border inline-block ${roleCfg.badgeClass}`}>
+                                {roleCfg.shortLabel || roleCfg.label}
                               </span>
-                              <p className="text-[10px] text-slate-400">
+                              <p className="text-[10px] text-slate-400 tabular">
                                 {member.joinedAt && `Vào: ${formatDateVN(member.joinedAt)}`}
                                 {member.leftAt && ` • Rời: ${formatDateVN(member.leftAt)}`}
                               </p>
                             </div>
                           </div>
 
-                          <div className="text-right shrink-0">
-                            <span className="text-[10px] font-semibold text-slate-500 bg-slate-200/70 px-2 py-0.5 rounded-full border border-slate-300 block">
-                              Đã rời ({member.allocationPercent}%)
-                            </span>
-                          </div>
+                          <span className="text-[10px] font-semibold text-slate-600 bg-slate-200/70 px-2 py-0.5 rounded-full border border-slate-300 whitespace-nowrap shrink-0 tabular">
+                            Đã rời ({member.allocationPercent}%)
+                          </span>
                         </div>
                       );
                     })}
@@ -541,27 +538,25 @@ export default function ProjectDetailModal({
 
           {/* Audit trail */}
           <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400 flex-wrap gap-2">
-            <span>Khởi tạo bởi: <strong className="text-slate-600">{projectData.createdByName || 'Hệ thống'}</strong></span>
-            {projectData.createdAt && (
-              <span>Thời gian tạo: {formatDateTimeVN(projectData.createdAt)}</span>
-            )}
-            {projectData.updatedAt && (
-              <span>Cập nhật: {formatDateTimeVN(projectData.updatedAt)}</span>
-            )}
+            <span>
+              Khởi tạo bởi: <strong className="text-slate-600">{projectData.createdByName || 'Hệ thống'}</strong>
+            </span>
+            {projectData.createdAt && <span className="tabular">Tạo lúc: {formatDateTimeVN(projectData.createdAt)}</span>}
+            {projectData.updatedAt && <span className="tabular">Cập nhật: {formatDateTimeVN(projectData.updatedAt)}</span>}
           </div>
         </div>
 
-        {/* ── 3. Modal Footer ──────────────────────────────────────────────── */}
-        <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0">
+        {/* Footer */}
+        <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0 gap-3 flex-wrap">
           <div className="text-xs text-slate-500">
-            Mã định danh: <span className="font-mono font-bold text-slate-700">#{projectData.id}</span>
+            Mã định danh: <span className="font-mono font-bold text-slate-700 tabular">#{projectData.id}</span>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 hover:bg-slate-200/60 rounded-xl transition"
+              className="px-4 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 hover:bg-slate-200/70 rounded-xl transition cursor-pointer"
             >
               Đóng
             </button>
@@ -570,7 +565,7 @@ export default function ProjectDetailModal({
               <button
                 type="button"
                 onClick={() => onOpenEdit(projectData)}
-                className="px-3.5 py-2 text-xs font-semibold bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl shadow-2xs transition flex items-center gap-1.5"
+                className="px-3.5 py-2 text-xs font-semibold bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl shadow-2xs transition flex items-center gap-1.5 cursor-pointer"
               >
                 <Edit3 size={13} />
                 <span>Chỉnh sửa</span>
@@ -581,7 +576,7 @@ export default function ProjectDetailModal({
               <button
                 type="button"
                 onClick={() => onOpenStaffing(projectData)}
-                className="px-4 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-xs transition flex items-center gap-1.5"
+                className="px-4 py-2 text-xs font-bold bg-[#1E3A8A] hover:bg-blue-700 text-white rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
               >
                 <UserPlus size={13} />
                 <span>Phân bổ Đội ngũ</span>
@@ -589,9 +584,8 @@ export default function ProjectDetailModal({
             )}
           </div>
         </div>
-      </div>
+      </motion.div>
     </div>,
     document.body
   );
 }
-
