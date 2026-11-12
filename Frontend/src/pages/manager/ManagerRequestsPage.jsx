@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { requestService } from '../../services/request.service';
-import Button from '../../components/common/Button';
-import { Clock, CheckCircle2, XCircle, FileText, Check, X, Eye, Search, Filter } from 'lucide-react';
+import { Clock, CheckCircle2, XCircle, FileText, X, Eye, Search, Filter } from 'lucide-react';
 import { useToast } from '../../components/common/Toast';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
@@ -28,8 +27,10 @@ export default function ManagerRequestsPage() {
   const [filterType, setFilterType] = useState('ALL');
 
   const toast = useToast();
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
 
-  const loadRequestsAndConfig = async () => {
+  const loadRequestsAndConfig = useCallback(async () => {
     try {
       setLoading(true);
       const [requestsData, rolesRes, reqTypesRes] = await Promise.all([
@@ -41,15 +42,15 @@ export default function ManagerRequestsPage() {
       if (rolesRes.data?.success) setConfigRoles(rolesRes.data.data);
       if (reqTypesRes.data?.success) setConfigRequestTypes(reqTypesRes.data.data);
     } catch (error) {
-      toast.show('Lỗi', 'Lỗi khi tải dữ liệu', 'error');
+      toastRef.current?.show('Lỗi', error.response?.data?.message || 'Lỗi khi tải dữ liệu', 'error');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadRequestsAndConfig();
-  }, []);
+  }, [loadRequestsAndConfig]);
 
   const handleApprove = async (id) => {
     try {
@@ -57,29 +58,46 @@ export default function ManagerRequestsPage() {
       await requestService.approveRequest(id, 'Đồng ý duyệt');
       toast.show('Thành công', 'Đã duyệt đơn thành công', 'success');
       setSelectedRequest(null);
-      loadRequests();
+      await loadRequestsAndConfig();
     } catch (error) {
+      const status = error.response?.status;
       toast.show('Lỗi', error.response?.data?.message || 'Có lỗi khi duyệt đơn', 'error');
+      if (status === 400 || status === 404 || status === 409) {
+        setShowRejectInput(false);
+        setShowForwardInput(false);
+        setRejectNote('');
+        setSelectedRequest(null);
+        await loadRequestsAndConfig();
+      }
     } finally {
       setProcessingId(null);
     }
   };
 
   const handleReject = async (id) => {
-    if (!rejectNote) {
+    const trimmedNote = rejectNote.trim();
+    if (!trimmedNote) {
       toast.show('Lỗi', 'Vui lòng nhập lý do từ chối', 'error');
       return;
     }
     try {
       setProcessingId(id);
-      await requestService.rejectRequest(id, rejectNote);
+      await requestService.rejectRequest(id, trimmedNote);
       toast.show('Thành công', 'Đã từ chối đơn', 'success');
       setRejectNote('');
       setShowRejectInput(false);
       setSelectedRequest(null);
-      loadRequests();
+      await loadRequestsAndConfig();
     } catch (error) {
+      const status = error.response?.status;
       toast.show('Lỗi', error.response?.data?.message || 'Có lỗi khi từ chối đơn', 'error');
+      if (status === 400 || status === 404 || status === 409) {
+        setShowRejectInput(false);
+        setShowForwardInput(false);
+        setRejectNote('');
+        setSelectedRequest(null);
+        await loadRequestsAndConfig();
+      }
     } finally {
       setProcessingId(null);
     }
@@ -88,14 +106,22 @@ export default function ManagerRequestsPage() {
   const handleForward = async (id) => {
     try {
       setProcessingId(id);
-      await requestService.forwardRequest(id, rejectNote); // reuse rejectNote state for note if needed
+      await requestService.forwardRequest(id, rejectNote.trim()); // reuse rejectNote state for note if needed
       toast.show('Thành công', 'Đã chuyển tiếp đơn lên Giám đốc', 'success');
       setRejectNote('');
       setShowForwardInput(false);
       setSelectedRequest(null);
-      loadRequests();
+      await loadRequestsAndConfig();
     } catch (error) {
+      const status = error.response?.status;
       toast.show('Lỗi', error.response?.data?.message || 'Có lỗi khi chuyển tiếp đơn', 'error');
+      if (status === 400 || status === 404 || status === 409) {
+        setShowRejectInput(false);
+        setShowForwardInput(false);
+        setRejectNote('');
+        setSelectedRequest(null);
+        await loadRequestsAndConfig();
+      }
     } finally {
       setProcessingId(null);
     }
@@ -140,6 +166,14 @@ export default function ManagerRequestsPage() {
       case 'OVERTIME': return 'Làm thêm giờ';
       default: return type;
     }
+  };
+
+  const formatDateVi = (dateStr) => {
+    if (!dateStr) return '--';
+    const match = String(dateStr).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) return `${match[3]}/${match[2]}/${match[1]}`;
+    const parsed = new Date(dateStr);
+    return Number.isNaN(parsed.getTime()) ? String(dateStr) : parsed.toLocaleDateString('vi-VN');
   };
 
   return (
@@ -247,7 +281,7 @@ export default function ManagerRequestsPage() {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs shrink-0">
-                          {req.hoTen.charAt(0)}
+                          {(req.hoTen || '?').charAt(0)}
                         </div>
                         <div>
                           <p className="font-medium text-slate-800">{req.hoTen}</p>
@@ -259,8 +293,8 @@ export default function ManagerRequestsPage() {
                       {getTypeLabel(req.requestType)}
                     </td>
                     <td className="px-6 py-4 text-slate-600">
-                      <p>{new Date(req.startDate).toLocaleDateString('vi-VN')}</p>
-                      {req.startDate !== req.endDate && <p className="text-xs text-slate-400">đến {new Date(req.endDate).toLocaleDateString('vi-VN')}</p>}
+                      <p>{formatDateVi(req.startDate)}</p>
+                      {req.startDate !== req.endDate && <p className="text-xs text-slate-400">đến {formatDateVi(req.endDate)}</p>}
                     </td>
                     <td className="px-6 py-4 text-slate-600 max-w-xs truncate" title={req.reason}>
                       {req.reason}
@@ -310,7 +344,7 @@ export default function ManagerRequestsPage() {
             <div className="p-6 space-y-4 text-sm">
               <div className="flex items-center gap-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
                 <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-lg shrink-0">
-                  {selectedRequest.hoTen.charAt(0)}
+                  {(selectedRequest.hoTen || '?').charAt(0)}
                 </div>
                 <div>
                   <p className="font-bold text-slate-800 text-base">{selectedRequest.hoTen}</p>
@@ -327,9 +361,9 @@ export default function ManagerRequestsPage() {
 
                 <div className="col-span-1 text-slate-500 font-medium">Thời gian:</div>
                 <div className="col-span-2 text-slate-800">
-                  {new Date(selectedRequest.startDate).toLocaleDateString('vi-VN')}
+                  {formatDateVi(selectedRequest.startDate)}
                   {selectedRequest.startDate !== selectedRequest.endDate &&
-                    ` - ${new Date(selectedRequest.endDate).toLocaleDateString('vi-VN')}`
+                    ` - ${formatDateVi(selectedRequest.endDate)}`
                   }
                 </div>
               </div>
@@ -344,14 +378,21 @@ export default function ManagerRequestsPage() {
               {selectedRequest.status !== 'PENDING' && selectedRequest.note && (
                 <div>
                   <div className="text-slate-500 font-medium mb-1">Ghi chú duyệt:</div>
-                  <div className={`p-3 rounded-lg border ${selectedRequest.status === 'REJECTED' ? 'bg-rose-50 border-rose-100 text-rose-700' : 'bg-emerald-50 border-emerald-100 text-emerald-700'} whitespace-pre-wrap`}>
+                  <div className={`p-3 rounded-lg border ${
+                    selectedRequest.status === 'REJECTED'
+                      ? 'bg-rose-50 border-rose-100 text-rose-700'
+                      : selectedRequest.status === 'FORWARDED'
+                        ? 'bg-blue-50 border-blue-100 text-blue-700'
+                        : 'bg-emerald-50 border-emerald-100 text-emerald-700'
+                  } whitespace-pre-wrap`}>
                     {selectedRequest.note}
                   </div>
                 </div>
               )}
 
               {/* Input ghi chú khi từ chối / chuyển tiếp */}
-              {(showRejectInput || showForwardInput) && selectedRequest.status === 'PENDING' && (
+              {((showRejectInput && (selectedRequest.status === 'PENDING' || (selectedRequest.status === 'FORWARDED' && role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN')))
+                || (showForwardInput && selectedRequest.status === 'PENDING')) && (
                 <div className="pt-2 animate-fade-in">
                   <label className="block text-sm font-medium text-slate-700 mb-1">
                     {showRejectInput ? 'Lý do từ chối' : 'Ghi chú chuyển tiếp'} {showRejectInput && <span className="text-rose-500">*</span>}
@@ -375,7 +416,8 @@ export default function ManagerRequestsPage() {
                   <>
                     <button
                       onClick={() => setShowRejectInput(false)}
-                      className="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition-colors"
+                      disabled={processingId === selectedRequest.id}
+                      className="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition-colors disabled:opacity-50"
                     >
                       Hủy
                     </button>
@@ -392,7 +434,8 @@ export default function ManagerRequestsPage() {
                   <>
                     <button
                       onClick={() => setShowForwardInput(false)}
-                      className="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition-colors"
+                      disabled={processingId === selectedRequest.id}
+                      className="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition-colors disabled:opacity-50"
                     >
                       Hủy
                     </button>
@@ -409,14 +452,16 @@ export default function ManagerRequestsPage() {
                   <>
                     <button
                       onClick={() => setShowRejectInput(true)}
-                      className="px-4 py-2 text-sm font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors"
+                      disabled={processingId === selectedRequest.id}
+                      className="px-4 py-2 text-sm font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors disabled:opacity-50"
                     >
                       Từ chối
                     </button>
                     {role?.toUpperCase() === 'TRUONG_PHONG' && selectedRequest.status === 'PENDING' && (
                       <button
                         onClick={() => setShowForwardInput(true)}
-                        className="px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors"
+                        disabled={processingId === selectedRequest.id}
+                        className="px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors disabled:opacity-50"
                       >
                         Chuyển tiếp
                       </button>

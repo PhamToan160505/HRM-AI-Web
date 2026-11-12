@@ -2,28 +2,34 @@ package com.hrm.request.service;
 
 import com.hrm.attendance.entity.Attendance;
 import com.hrm.attendance.repository.AttendanceRepository;
+import com.hrm.common.entity.Role;
 import com.hrm.common.entity.User;
 import com.hrm.common.repository.UserRepository;
+import com.hrm.exception.AppException;
 import com.hrm.notification.service.NotificationService;
 import com.hrm.request.dto.ApproveRequestDto;
 import com.hrm.request.dto.CreateRequestDto;
 import com.hrm.request.dto.EmployeeRequestDto;
 import com.hrm.request.entity.EmployeeRequest;
 import com.hrm.request.entity.RequestStatus;
+import com.hrm.request.entity.RequestType;
 import com.hrm.request.repository.EmployeeRequestRepository;
 import com.hrm.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import com.hrm.request.event.RequestCreatedEvent;
 import org.springframework.context.ApplicationEventPublisher;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class EmployeeRequestService {
@@ -103,13 +109,26 @@ public class EmployeeRequestService {
     }
 
     public EmployeeRequestDto createRequest(Long userId, CreateRequestDto dto) {
+        if (dto == null || dto.getRequestType() == null) {
+            throw AppException.badRequest("Vui lòng chọn loại đơn yêu cầu");
+        }
+        if (dto.getStartDate() == null || dto.getEndDate() == null) {
+            throw AppException.badRequest("Vui lòng chọn đầy đủ ngày bắt đầu và ngày kết thúc");
+        }
+        if (dto.getEndDate().isBefore(dto.getStartDate())) {
+            throw AppException.badRequest("Ngày kết thúc không được nhỏ hơn ngày bắt đầu");
+        }
+        if (dto.getReason() == null || dto.getReason().trim().isEmpty()) {
+            throw AppException.badRequest("Vui lòng nhập lý do chi tiết");
+        }
+
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> AppException.notFound("Không tìm thấy tài khoản người dùng"));
 
         EmployeeRequest request = EmployeeRequest.builder()
                 .user(user)
                 .requestType(dto.getRequestType())
-                .reason(dto.getReason())
+                .reason(dto.getReason().trim())
                 .startDate(dto.getStartDate())
                 .endDate(dto.getEndDate())
                 .status(RequestStatus.PENDING)
@@ -119,12 +138,12 @@ public class EmployeeRequestService {
 
         // Tìm cấp trên để gửi thông báo
         List<User> approvers = new java.util.ArrayList<>();
-        if (user.getRole() == com.hrm.common.entity.Role.NHAN_VIEN) {
-            approvers = userRepository.findByDepartmentIdAndRole(user.getDepartmentId(), com.hrm.common.entity.Role.TRUONG_PHONG);
-        } else if (user.getRole() == com.hrm.common.entity.Role.TRUONG_PHONG) {
-            approvers = userRepository.findByDepartmentIdAndRole(user.getDepartmentId(), com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN);
-        } else if (user.getRole() == com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN) {
-            approvers = userRepository.findByRole(com.hrm.common.entity.Role.CEO);
+        if (user.getRole() == Role.NHAN_VIEN) {
+            approvers = userRepository.findByDepartmentIdAndRole(user.getDepartmentId(), Role.TRUONG_PHONG);
+        } else if (user.getRole() == Role.TRUONG_PHONG) {
+            approvers = userRepository.findByDepartmentIdAndRole(user.getDepartmentId(), Role.GIAM_DOC_PHONG_BAN);
+        } else if (user.getRole() == Role.GIAM_DOC_PHONG_BAN) {
+            approvers = userRepository.findByRole(Role.CEO);
         }
 
         for (User approver : approvers) {
@@ -132,9 +151,9 @@ public class EmployeeRequestService {
                 case CEO -> "/ceo/requests";
                 case GIAM_DOC_PHONG_BAN -> "/director/requests";
                 case TRUONG_PHONG -> "/manager/requests";
-                default -> "/employee/my-requests";
+                default -> "/employee/requests";
             };
-            notificationService.createNotification(
+            safeNotify(
                     approver.getId(),
                     "REQUEST",
                     "Có đơn yêu cầu mới",
@@ -162,12 +181,12 @@ public class EmployeeRequestService {
     public List<EmployeeRequestDto> getRequestsForManager(CustomUserDetails manager) {
         List<User> subordinates = new java.util.ArrayList<>();
         
-        if (manager.getRole() == com.hrm.common.entity.Role.TRUONG_PHONG) {
-            subordinates = userRepository.findByDepartmentIdAndRole(manager.getDepartmentId(), com.hrm.common.entity.Role.NHAN_VIEN);
-        } else if (manager.getRole() == com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN) {
-            subordinates = userRepository.findByDepartmentIdAndRole(manager.getDepartmentId(), com.hrm.common.entity.Role.TRUONG_PHONG);
+        if (manager.getRole() == Role.TRUONG_PHONG) {
+            subordinates = userRepository.findByDepartmentIdAndRole(manager.getDepartmentId(), Role.NHAN_VIEN);
+        } else if (manager.getRole() == Role.GIAM_DOC_PHONG_BAN) {
+            subordinates = userRepository.findByDepartmentIdAndRole(manager.getDepartmentId(), Role.TRUONG_PHONG);
             // Also include NHAN_VIEN requests that are forwarded
-            List<User> nhanViens = userRepository.findByDepartmentIdAndRole(manager.getDepartmentId(), com.hrm.common.entity.Role.NHAN_VIEN);
+            List<User> nhanViens = userRepository.findByDepartmentIdAndRole(manager.getDepartmentId(), Role.NHAN_VIEN);
             List<Long> nvIds = nhanViens.stream().map(User::getId).collect(Collectors.toList());
             List<EmployeeRequest> forwardedReqs = nvIds.isEmpty() ? new java.util.ArrayList<>() : requestRepository.findByUserIdInOrderByCreatedAtDesc(nvIds)
                 .stream().filter(r -> r.getStatus() == RequestStatus.FORWARDED).collect(Collectors.toList());
@@ -177,10 +196,10 @@ public class EmployeeRequestService {
             if (!trPhongIds.isEmpty()) {
                 allReqs.addAll(requestRepository.findByUserIdInOrderByCreatedAtDesc(trPhongIds));
             }
-            allReqs.sort((r1, r2) -> r2.getCreatedAt().compareTo(r1.getCreatedAt()));
+            allReqs.sort(Comparator.comparing(EmployeeRequest::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())));
             return allReqs.stream().map(this::mapToDto).collect(Collectors.toList());
-        } else if (manager.getRole() == com.hrm.common.entity.Role.CEO) {
-            subordinates = userRepository.findByRole(com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN);
+        } else if (manager.getRole() == Role.CEO) {
+            subordinates = userRepository.findByRole(Role.GIAM_DOC_PHONG_BAN);
         } else {
             // Admin hoặc các role khác
             subordinates = userRepository.findAll();
@@ -198,25 +217,36 @@ public class EmployeeRequestService {
     @Transactional
     public EmployeeRequestDto approveRequest(Long managerId, Long requestId, ApproveRequestDto dto) {
         EmployeeRequest request = requestRepository.findById(requestId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn yêu cầu"));
+                .orElseThrow(() -> AppException.notFound("Không tìm thấy đơn yêu cầu"));
 
         User manager = userRepository.findById(managerId)
-                .orElseThrow(() -> new RuntimeException("User không tồn tại"));
+                .orElseThrow(() -> AppException.notFound("Tài khoản người duyệt không tồn tại"));
+
+        validateApproverScope(manager, request);
 
         if (request.getStatus() != RequestStatus.PENDING && request.getStatus() != RequestStatus.FORWARDED) {
-            throw new RuntimeException("Chỉ có thể duyệt đơn ở trạng thái chờ duyệt hoặc chuyển tiếp (PENDING, FORWARDED)");
+            throw AppException.badRequest(buildAlreadyProcessedMessage(request.getStatus()));
+        }
+
+        if (manager.getRole() == Role.TRUONG_PHONG && request.getStatus() == RequestStatus.FORWARDED) {
+            throw AppException.badRequest("Đơn yêu cầu này đã được chuyển tiếp lên Giám đốc phòng ban");
+        }
+
+        if (request.getStartDate() == null || request.getEndDate() == null
+                || request.getEndDate().isBefore(request.getStartDate())) {
+            throw AppException.badRequest("Khoảng thời gian của đơn yêu cầu không hợp lệ");
         }
 
         request.setStatus(RequestStatus.APPROVED);
         request.setApprover(manager);
         if (dto != null && dto.getNote() != null) {
-            request.setNote(dto.getNote());
+            request.setNote(dto.getNote().trim());
         }
 
         EmployeeRequest saved = requestRepository.save(request);
 
         // Ghi vào bảng Attendance (chấm công) cho các ngày nghỉ
-        if (request.getRequestType() != com.hrm.request.entity.RequestType.OVERTIME) {
+        if (request.getRequestType() != RequestType.OVERTIME) {
             LocalDate current = request.getStartDate();
             while (!current.isAfter(request.getEndDate())) {
                 LocalDate dateToProcess = current;
@@ -228,6 +258,9 @@ public class EmployeeRequestService {
                     Optional<Attendance> existing = attendanceRepository.findFirstByEmployeeIdAndDateOrderByIdDesc(request.getUser().getId(), dateToProcess);
                     if (existing.isPresent()) {
                         Attendance att = existing.get();
+                        if (att.getTimeIn() == null) {
+                            att.setTimeIn(LocalTime.of(0, 0));
+                        }
                         att.setStatus("ABSENT");
                         att.setIsException(true);
                         att.setExceptionReason(request.getReason());
@@ -253,13 +286,13 @@ public class EmployeeRequestService {
         }
 
         // Notify user
-        notificationService.createNotification(
+        safeNotify(
                 request.getUser().getId(),
                 "REQUEST",
                 "Đơn yêu cầu đã được duyệt",
                 "Cấp trên đã duyệt đơn yêu cầu của bạn.",
                 "quan_trong",
-                "/employee/requests"
+                resolvePersonalRequestPath(request.getUser().getRole())
         );
 
         return mapToDto(saved);
@@ -268,31 +301,41 @@ public class EmployeeRequestService {
     @Transactional
     public EmployeeRequestDto rejectRequest(Long managerId, Long requestId, ApproveRequestDto dto) {
         EmployeeRequest request = requestRepository.findById(requestId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn yêu cầu"));
+                .orElseThrow(() -> AppException.notFound("Không tìm thấy đơn yêu cầu"));
 
         User manager = userRepository.findById(managerId)
-                .orElseThrow(() -> new RuntimeException("User không tồn tại"));
+                .orElseThrow(() -> AppException.notFound("Tài khoản người duyệt không tồn tại"));
+
+        validateApproverScope(manager, request);
 
         if (request.getStatus() != RequestStatus.PENDING && request.getStatus() != RequestStatus.FORWARDED) {
-            throw new RuntimeException("Chỉ có thể từ chối đơn ở trạng thái chờ duyệt hoặc chuyển tiếp (PENDING, FORWARDED)");
+            throw AppException.badRequest(buildAlreadyProcessedMessage(request.getStatus()));
         }
+
+        if (manager.getRole() == Role.TRUONG_PHONG && request.getStatus() == RequestStatus.FORWARDED) {
+            throw AppException.badRequest("Đơn yêu cầu này đã được chuyển tiếp lên Giám đốc phòng ban");
+        }
+
+        String note = (dto != null && dto.getNote() != null && !dto.getNote().trim().isEmpty())
+                ? dto.getNote().trim()
+                : null;
 
         request.setStatus(RequestStatus.REJECTED);
         request.setApprover(manager);
         if (dto != null && dto.getNote() != null) {
-            request.setNote(dto.getNote());
+            request.setNote(dto.getNote().trim());
         }
 
         EmployeeRequest saved = requestRepository.save(request);
 
         // Notify user
-        notificationService.createNotification(
+        safeNotify(
                 request.getUser().getId(),
                 "REQUEST",
                 "Đơn yêu cầu bị từ chối",
-                "Cấp trên đã từ chối đơn yêu cầu của bạn. Lý do: " + (dto != null ? dto.getNote() : "Không có"),
+                "Cấp trên đã từ chối đơn yêu cầu của bạn. Lý do: " + (note != null ? note : "Không có"),
                 "quan_trong",
-                "/employee/requests"
+                resolvePersonalRequestPath(request.getUser().getRole())
         );
 
         return mapToDto(saved);
@@ -301,40 +344,116 @@ public class EmployeeRequestService {
     @Transactional
     public EmployeeRequestDto forwardRequest(Long managerId, Long requestId, ApproveRequestDto dto) {
         EmployeeRequest request = requestRepository.findById(requestId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn yêu cầu"));
+                .orElseThrow(() -> AppException.notFound("Không tìm thấy đơn yêu cầu"));
 
         User manager = userRepository.findById(managerId)
-                .orElseThrow(() -> new RuntimeException("User không tồn tại"));
+                .orElseThrow(() -> AppException.notFound("Tài khoản người duyệt không tồn tại"));
 
-        if (manager.getRole() != com.hrm.common.entity.Role.TRUONG_PHONG) {
-            throw new RuntimeException("Chỉ Trưởng phòng mới có quyền chuyển tiếp đơn");
+        if (manager.getRole() != Role.TRUONG_PHONG) {
+            throw AppException.forbidden("Chỉ Trưởng phòng mới có quyền chuyển tiếp đơn");
         }
 
+        validateApproverScope(manager, request);
+
         if (request.getStatus() != RequestStatus.PENDING) {
-            throw new RuntimeException("Chỉ có thể chuyển tiếp đơn ở trạng thái chờ (PENDING)");
+            throw AppException.badRequest("Chỉ có thể chuyển tiếp đơn ở trạng thái Chờ duyệt (" + statusDisplayName(request.getStatus()) + ")");
         }
 
         request.setStatus(RequestStatus.FORWARDED);
         if (dto != null && dto.getNote() != null) {
-            request.setNote(dto.getNote());
+            request.setNote(dto.getNote().trim());
         }
 
         EmployeeRequest saved = requestRepository.save(request);
 
         // Notify GIAM_DOC_PHONG_BAN
-        List<User> directors = userRepository.findByDepartmentIdAndRole(manager.getDepartmentId(), com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN);
-        for (User director : directors) {
-            notificationService.createNotification(
-                    director.getId(),
-                    "REQUEST",
-                    "Đơn từ được chuyển tiếp",
-                    "Trưởng phòng " + manager.getHoTen() + " vừa chuyển tiếp một đơn từ.",
-                    "quan_trong",
-                    "/director/requests"
-            );
+        if (manager.getDepartmentId() != null) {
+            List<User> directors = userRepository.findByDepartmentIdAndRole(manager.getDepartmentId(), Role.GIAM_DOC_PHONG_BAN);
+            for (User director : directors) {
+                safeNotify(
+                        director.getId(),
+                        "REQUEST",
+                        "Đơn từ được chuyển tiếp",
+                        "Trưởng phòng " + manager.getHoTen() + " vừa chuyển tiếp một đơn từ.",
+                        "quan_trong",
+                        "/director/requests"
+                );
+            }
         }
 
         return mapToDto(saved);
+    }
+
+    private void validateApproverScope(User manager, EmployeeRequest request) {
+        User owner = request.getUser();
+        if (owner == null || owner.getId() == null) {
+            throw AppException.badRequest("Đơn yêu cầu thiếu thông tin người tạo");
+        }
+        if (owner.getId().equals(manager.getId())) {
+            throw AppException.forbidden("Bạn không thể tự xử lý đơn yêu cầu của chính mình");
+        }
+
+        Role managerRole = manager.getRole();
+        if (managerRole == Role.CEO || managerRole == Role.ADMIN) {
+            return;
+        }
+
+        if (managerRole == Role.TRUONG_PHONG) {
+            if (owner.getRole() != Role.NHAN_VIEN) {
+                throw AppException.forbidden("Trưởng phòng chỉ có quyền xử lý đơn của nhân viên cấp dưới");
+            }
+            if (manager.getDepartmentId() == null || !manager.getDepartmentId().equals(owner.getDepartmentId())) {
+                throw AppException.forbidden("Bạn chỉ có quyền xử lý đơn của nhân viên thuộc phòng ban mình");
+            }
+            return;
+        }
+
+        if (managerRole == Role.GIAM_DOC_PHONG_BAN) {
+            if (owner.getRole() == Role.CEO || owner.getRole() == Role.ADMIN) {
+                throw AppException.forbidden("Bạn không có quyền xử lý đơn của cấp này");
+            }
+            if (manager.getDepartmentId() == null || !manager.getDepartmentId().equals(owner.getDepartmentId())) {
+                throw AppException.forbidden("Bạn chỉ có quyền xử lý đơn của nhân sự thuộc phòng ban mình");
+            }
+            return;
+        }
+
+        throw AppException.forbidden("Bạn không có quyền xử lý đơn yêu cầu");
+    }
+
+    private String buildAlreadyProcessedMessage(RequestStatus currentStatus) {
+        return "Đơn yêu cầu này đã ở trạng thái \"" + statusDisplayName(currentStatus)
+                + "\", không thể thao tác lại. Vui lòng tải lại danh sách.";
+    }
+
+    private String statusDisplayName(RequestStatus status) {
+        if (status == null) return "Không xác định";
+        return switch (status) {
+            case PENDING -> "Chờ duyệt";
+            case FORWARDED -> "Đã chuyển tiếp";
+            case APPROVED -> "Đã duyệt";
+            case REJECTED -> "Từ chối";
+            case CANCELLED -> "Đã hủy";
+        };
+    }
+
+    private String resolvePersonalRequestPath(Role ownerRole) {
+        if (ownerRole == null) return "/employee/requests";
+        return switch (ownerRole) {
+            case CEO -> "/ceo/my-requests";
+            case GIAM_DOC_PHONG_BAN -> "/director/my-requests";
+            case TRUONG_PHONG -> "/manager/my-requests";
+            default -> "/employee/requests";
+        };
+    }
+
+    private void safeNotify(Long userId, String loai, String tieuDe, String noiDung, String mucDo, String lienKet) {
+        if (notificationService == null || userId == null) return;
+        try {
+            notificationService.createNotification(userId, loai, tieuDe, noiDung, mucDo, lienKet);
+        } catch (Exception e) {
+            log.warn("Không thể gửi thông báo đơn từ tới userId={}: {}", userId, e.getMessage());
+        }
     }
 
     private EmployeeRequestDto mapToDto(EmployeeRequest req) {
