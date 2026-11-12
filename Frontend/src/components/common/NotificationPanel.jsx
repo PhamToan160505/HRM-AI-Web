@@ -26,6 +26,7 @@ const NotificationPanel = ({ onClose }) => {
                 className={`p-4 hover:bg-gray-50 cursor-pointer transition-colors ${!notif.daDoc ? 'bg-blue-50/50' : ''}`}
                 onClick={() => {
                   openNotification(notif);
+                  onClose?.();
                 }}
               >
                 <div className="flex gap-3">

@@ -35,14 +35,25 @@ export const NotificationProvider = ({ children }) => {
       fetchNotifications();
 
       // 2. Mở kết nối WebSocket
-      connectSocket(token, (newNotif) => {
-        setNotifications((prev) => [newNotif, ...prev]);
-        setUnreadCount((prev) => prev + 1);
-        
-        if (newNotif.mucDo === 'khan') {
-          setUrgentNotification(newNotif);
+      connectSocket(
+        token,
+        (newNotif) => {
+          setNotifications((prev) => {
+            if (newNotif?.id && prev.some((n) => n.id === newNotif.id)) return prev;
+            return [newNotif, ...prev];
+          });
+          setUnreadCount((prev) => prev + 1);
+
+          if (newNotif.mucDo === 'khan') {
+            setUrgentNotification(newNotif);
+          }
+
+          window.dispatchEvent(new CustomEvent('hrm:notification', { detail: newNotif }));
+        },
+        (techSync) => {
+          window.dispatchEvent(new CustomEvent('hrm:tech-sync', { detail: techSync }));
         }
-      });
+      );
     }
 
     return () => {

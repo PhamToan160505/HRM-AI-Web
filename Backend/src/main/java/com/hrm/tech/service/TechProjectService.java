@@ -8,18 +8,24 @@ import com.hrm.common.entity.User;
 import com.hrm.common.repository.DepartmentRepository;
 import com.hrm.common.repository.UserRepository;
 import com.hrm.exception.AppException;
+import com.hrm.notification.service.NotificationService;
 import com.hrm.tech.dto.*;
 import com.hrm.tech.entity.ProjectRole;
 import com.hrm.tech.entity.ProjectStatus;
 import com.hrm.tech.entity.TechProject;
 import com.hrm.tech.entity.TechProjectMember;
+import com.hrm.tech.entity.TechProjectMilestone;
+import com.hrm.tech.entity.WorklogApprovalStatus;
 import com.hrm.tech.repository.TechProjectMemberRepository;
+import com.hrm.tech.repository.TechProjectMilestoneRepository;
 import com.hrm.tech.repository.TechProjectRepository;
+import com.hrm.tech.repository.TechWorklogRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -32,9 +38,12 @@ public class TechProjectService {
 
     private final TechProjectRepository projectRepository;
     private final TechProjectMemberRepository memberRepository;
+    private final TechProjectMilestoneRepository milestoneRepository;
+    private final TechWorklogRepository worklogRepository;
     private final UserRepository userRepository;
     private final DepartmentRepository departmentRepository;
     private final ObjectMapper objectMapper;
+    private final NotificationService notificationService;
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
@@ -101,6 +110,7 @@ public class TechProjectService {
                 .build();
 
         TechProject saved = projectRepository.save(project);
+        broadcastProjectSync("CREATED", saved.getId());
         log.info("[Tech] Tạo dự án mới thành công: {} ({}) bởi user {}", saved.getProjectName(), saved.getProjectCode(), currentUserId);
         return mapToProjectResponse(saved);
     }
@@ -163,6 +173,7 @@ public class TechProjectService {
         project.setDescription(req.getDescription());
 
         TechProject updated = projectRepository.save(project);
+        broadcastProjectSync("UPDATED", updated.getId());
         return mapToProjectResponse(updated);
     }
 
@@ -171,6 +182,7 @@ public class TechProjectService {
         TechProject project = projectRepository.findById(id)
                 .orElseThrow(() -> AppException.notFound("Không tìm thấy dự án với ID: " + id));
         projectRepository.delete(project);
+        broadcastProjectSync("DELETED", id);
         log.info("[Tech] Đã xóa dự án ID: {}", id);
     }
 
@@ -204,6 +216,15 @@ public class TechProjectService {
                 .build();
 
         TechProjectMember saved = memberRepository.save(member);
+        sendTechNotification(
+                req.getUserId(),
+                "TECH_PROJECT_ASSIGNED",
+                "Bạn vừa được phân bổ vào dự án mới",
+                "Bạn được gán vào dự án [" + project.getProjectCode() + "] " + project.getProjectName()
+                        + " với vai trò " + req.getProjectRole() + " (" + req.getAllocationPercent() + "% tải).",
+                "/employee/my-projects?tab=projects&projectId=" + project.getId()
+        );
+        broadcastProjectSync("MEMBER_ADDED", project.getId());
         return mapToMemberResponse(saved, user, newTotal);
     }
 
@@ -215,6 +236,10 @@ public class TechProjectService {
         if (!member.getProject().getId().equals(projectId)) {
             throw AppException.badRequest("Thành viên không thuộc dự án này");
         }
+
+        Boolean wasActive = member.getIsActive();
+        Integer oldPercent = member.getAllocationPercent();
+        ProjectRole oldRole = member.getProjectRole();
 
         if (req.getProjectRole() != null) {
             member.setProjectRole(req.getProjectRole());
@@ -230,6 +255,28 @@ public class TechProjectService {
         }
 
         TechProjectMember updated = memberRepository.save(member);
+        TechProject project = updated.getProject();
+        if (Boolean.TRUE.equals(wasActive) && Boolean.FALSE.equals(updated.getIsActive())) {
+            sendTechNotification(
+                    updated.getUserId(),
+                    "TECH_PROJECT_REMOVED",
+                    "Điều chuyển nhân sự khỏi dự án",
+                    "Bạn đã kết thúc tham gia dự án [" + project.getProjectCode() + "] " + project.getProjectName()
+                            + ". Công suất cá nhân đã được hoàn trả về ghế chờ.",
+                    "/employee/my-projects?tab=projects"
+            );
+        } else if (!Objects.equals(oldPercent, updated.getAllocationPercent()) || !Objects.equals(oldRole, updated.getProjectRole())) {
+            sendTechNotification(
+                    updated.getUserId(),
+                    "TECH_PROJECT_UPDATED",
+                    "Cập nhật phân bổ công suất dự án",
+                    "Phân bổ của bạn tại dự án [" + project.getProjectCode() + "] " + project.getProjectName()
+                            + " đã điều chỉnh thành " + updated.getProjectRole() + " (" + updated.getAllocationPercent() + "% tải).",
+                    "/employee/my-projects?tab=projects&projectId=" + project.getId()
+            );
+        }
+        broadcastProjectSync("MEMBER_UPDATED", project.getId());
+
         User user = userRepository.findById(updated.getUserId()).orElse(null);
         Integer totalAllocation = memberRepository.getTotalActiveAllocationByUserId(updated.getUserId());
         return mapToMemberResponse(updated, user, totalAllocation);
@@ -247,6 +294,16 @@ public class TechProjectService {
         member.setIsActive(false);
         member.setLeftAt(LocalDate.now());
         memberRepository.save(member);
+        TechProject project = member.getProject();
+        sendTechNotification(
+                member.getUserId(),
+                "TECH_PROJECT_REMOVED",
+                "Kết thúc phân bổ dự án công nghệ",
+                "Bạn đã được rút khỏi dự án [" + project.getProjectCode() + "] " + project.getProjectName()
+                        + ". Tải công việc đã được cập nhật.",
+                "/employee/my-projects?tab=projects"
+        );
+        broadcastProjectSync("MEMBER_REMOVED", project.getId());
         log.info("[Tech] Đã cho nhân sự ID {} rời khỏi dự án {}", member.getUserId(), projectId);
     }
 
@@ -343,6 +400,31 @@ public class TechProjectService {
 
         List<String> stackList = deserializeTechStack(project.getTechStack());
 
+        List<TechProjectMilestone> milestones = milestoneRepository != null
+                ? milestoneRepository.findByProjectIdOrderByDueDateAscIdAsc(project.getId())
+                : Collections.emptyList();
+        LocalDate today = LocalDate.now();
+        Integer actualProgressPercent = TechMilestoneService.calculateActualProgressPercent(milestones);
+        int milestonesCount = milestones.size();
+        int completedMilestonesCount = (int) milestones.stream()
+                .filter(m -> m.getStatus() == com.hrm.tech.entity.MilestoneStatus.COMPLETED)
+                .count();
+        int overdueMilestonesCount = (int) milestones.stream()
+                .filter(m -> TechMilestoneService.isMilestoneOverdue(m, today))
+                .count();
+        int dueSoonMilestonesCount = (int) milestones.stream()
+                .filter(m -> TechMilestoneService.isMilestoneDueSoon(m, today))
+                .count();
+
+        double approvedHours = 0.0;
+        double pendingHours = 0.0;
+        if (worklogRepository != null) {
+            BigDecimal appBd = worklogRepository.sumHoursByProjectIdAndStatus(project.getId(), WorklogApprovalStatus.APPROVED);
+            BigDecimal penBd = worklogRepository.sumHoursByProjectIdAndStatus(project.getId(), WorklogApprovalStatus.PENDING);
+            approvedHours = appBd != null ? Math.round(appBd.doubleValue() * 100.0) / 100.0 : 0.0;
+            pendingHours = penBd != null ? Math.round(penBd.doubleValue() * 100.0) / 100.0 : 0.0;
+        }
+
         return TechProjectResponse.builder()
                 .id(project.getId())
                 .projectCode(project.getProjectCode())
@@ -364,7 +446,36 @@ public class TechProjectService {
                 .techLeadName(techLeadName != null ? techLeadName : "Chưa chỉ định")
                 .totalMembersCount((int) memberResponses.stream().filter(m -> Boolean.TRUE.equals(m.getIsActive())).count())
                 .totalAllocationSum(totalAlloc)
+                .actualProgressPercent(actualProgressPercent)
+                .milestonesCount(milestonesCount)
+                .completedMilestonesCount(completedMilestonesCount)
+                .overdueMilestonesCount(overdueMilestonesCount)
+                .dueSoonMilestonesCount(dueSoonMilestonesCount)
+                .totalApprovedHours(approvedHours)
+                .totalPendingHours(pendingHours)
                 .build();
+    }
+
+    private void sendTechNotification(Long userId, String type, String title, String content, String link) {
+        if (notificationService == null || userId == null) return;
+        try {
+            notificationService.createNotification(userId, type, title, content, "binh_thuong", link);
+        } catch (Exception e) {
+            log.warn("[Tech] Không thể gửi thông báo tới user {}: {}", userId, e.getMessage());
+        }
+    }
+
+    private void broadcastProjectSync(String action, Long projectId) {
+        if (notificationService == null) return;
+        try {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("domain", "TECH_PROJECT");
+            payload.put("action", action);
+            payload.put("projectId", projectId != null ? projectId : 0L);
+            notificationService.broadcastTopic("/topic/tech-updates", payload);
+        } catch (Exception e) {
+            log.warn("[Tech] Không thể broadcast sync project: {}", e.getMessage());
+        }
     }
 
     private TechProjectMemberResponse mapToMemberResponse(TechProjectMember member, User user, Integer totalAllocation) {

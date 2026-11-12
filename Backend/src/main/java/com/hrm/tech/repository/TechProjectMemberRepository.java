@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -21,6 +22,10 @@ public interface TechProjectMemberRepository extends JpaRepository<TechProjectMe
     Optional<TechProjectMember> findByProjectIdAndUserIdAndIsActiveTrue(Long projectId, Long userId);
 
     boolean existsByProjectIdAndUserIdAndIsActiveTrue(Long projectId, Long userId);
+
+    @Query("SELECT m FROM TechProjectMember m JOIN FETCH m.project p " +
+           "WHERE m.userId IN :userIds ORDER BY m.isActive DESC, m.id DESC")
+    List<TechProjectMember> findAllByUserIdInWithProjectOrderByActiveDesc(@Param("userIds") Collection<Long> userIds);
 
     @Query("SELECT COALESCE(SUM(m.allocationPercent), 0) FROM TechProjectMember m " +
            "JOIN m.project p " +

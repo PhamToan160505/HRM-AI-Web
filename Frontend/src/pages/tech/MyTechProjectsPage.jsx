@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import {
   FolderGit2,
   GitBranch,
@@ -16,6 +18,13 @@ import {
   X,
   Activity,
   ShieldCheck,
+  Clock,
+  Plus,
+  Edit3,
+  Trash2,
+  Flag,
+  ExternalLink,
+  Lock,
 } from 'lucide-react';
 import { MotionConfig, motion, AnimatePresence } from 'framer-motion';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
@@ -24,12 +33,25 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/common/Toast';
 import MyTechProfileTab from './components/MyTechProfileTab';
 import ProjectDetailModal from './components/ProjectDetailModal';
+import WorklogModal from './components/WorklogModal';
+import TechMonthPicker from './components/TechMonthPicker';
 import {
   PROJECT_STATUS_CONFIG,
   PROJECT_ROLE_LABELS,
+  WORKLOG_TYPE_CONFIG,
+  WORKLOG_STATUS_CONFIG,
   formatDateVN,
+  formatHours,
+  getCurrentMonthStr,
+  formatMonthShortVN,
   computeTimelineHealth,
+  scrollElementIntoViewCleanly,
+  matchWorklogFromFocusRequest,
 } from './techHelpers';
+import {
+  isMatchingLiveNotificationNavToken,
+  clearLiveNotificationNavToken,
+} from '../../utils/notificationUtils';
 
 const SLICE_PALETTE = ['#1E3A8A', '#2563EB', '#0284C7', '#0D9488', '#EA580C'];
 
@@ -46,22 +68,57 @@ function WorkloadDonutTooltip({ active, payload }) {
   );
 }
 
+const VALID_TABS = ['projects', 'timesheet', 'profile'];
+
 export default function MyTechProjectsPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
   const toast = useToast();
   const toastRef = useRef(toast);
   toastRef.current = toast;
 
-  const [activeTab, setActiveTab] = useState('projects'); // 'projects' | 'profile'
+  const initialTabFromQuery = VALID_TABS.includes(searchParams.get('tab'))
+    ? searchParams.get('tab')
+    : 'projects';
+  const queryMonthInit = searchParams.get('month');
+  const initialMonthFromQuery =
+    queryMonthInit && /^\d{4}-\d{2}$/.test(queryMonthInit)
+      ? queryMonthInit
+      : getCurrentMonthStr();
+
+  const [activeTab, setActiveTab] = useState(initialTabFromQuery); // 'projects' | 'timesheet' | 'profile'
   const [projects, setProjects] = useState([]);
   const [myProfile, setMyProfile] = useState(null);
+  const [selectedMonth, setSelectedMonth] = useState(initialMonthFromQuery);
+  const selectedMonthRef = useRef(selectedMonth);
+  selectedMonthRef.current = selectedMonth;
+  const [worklogSummary, setWorklogSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
+  const lastFetchTimeRef = useRef(0);
 
   const [keyword, setKeyword] = useState('');
   const [selectedDetailProject, setSelectedDetailProject] = useState(null);
+  const [focusWorklogRequest, setFocusWorklogRequest] = useState(null);
+  const [highlightState, setHighlightState] = useState(null);
+  const highlightedWorklogId = highlightState?.id || null;
+  const myWorklogTableRef = useRef(null);
+  const lastAppliedFocusRef = useRef(0);
+  const lastScrolledFocusRef = useRef(0);
+
+  // Worklog Modal & Filters state
+  const [isWorklogModalOpen, setIsWorklogModalOpen] = useState(false);
+  const [worklogInitialProjectId, setWorklogInitialProjectId] = useState(null);
+  const [editingWorklog, setEditingWorklog] = useState(null);
+  const [wlProjectFilter, setWlProjectFilter] = useState('');
+  const [wlStatusFilter, setWlStatusFilter] = useState('');
+  const [wlMonthOnly, setWlMonthOnly] = useState(true);
+  const [deleteWorklogTarget, setDeleteWorklogTarget] = useState(null);
+  const [deletingWorklog, setDeletingWorklog] = useState(false);
 
   const loadAllData = useCallback(async ({ manual = false, quiet = false } = {}) => {
     try {
@@ -69,14 +126,22 @@ export default function MyTechProjectsPage() {
       else if (!quiet) setLoading(true);
       if (!quiet) setErrorMsg('');
 
-      const [projRes, profRes] = await Promise.all([
+      const activeMonth = selectedMonthRef.current || getCurrentMonthStr();
+      const [projRes, profRes, wlRes] = await Promise.all([
         api.get('/api/tech/projects/my-projects'),
         api.get('/api/tech/skills/my-profile'),
+        api.get('/api/tech/worklogs/my', { params: { month: activeMonth } }),
       ]);
 
-      setProjects(projRes.data?.data || []);
+      const freshProjects = projRes.data?.data || [];
+      setProjects(freshProjects);
+      setSelectedDetailProject((prev) =>
+        prev ? freshProjects.find((p) => String(p.id) === String(prev.id)) || prev : prev
+      );
       setMyProfile(profRes.data?.data || null);
+      setWorklogSummary(wlRes.data?.data || null);
       setLastUpdated(new Date());
+      lastFetchTimeRef.current = Date.now();
     } catch (err) {
       console.error('Lỗi tải dữ liệu dự án cá nhân:', err);
       const msg = err.response?.data?.message || 'Không thể tải dữ liệu dự án và hồ sơ năng lực của bạn.';
@@ -88,9 +153,179 @@ export default function MyTechProjectsPage() {
     }
   }, []);
 
+  const handleMonthChange = useCallback(async (newMonth) => {
+    const safeMonth = newMonth || getCurrentMonthStr();
+    selectedMonthRef.current = safeMonth;
+    setSelectedMonth(safeMonth);
+    try {
+      const wlRes = await api.get('/api/tech/worklogs/my', { params: { month: safeMonth } });
+      setWorklogSummary(wlRes.data?.data || null);
+      lastFetchTimeRef.current = Date.now();
+    } catch (err) {
+      toastRef.current?.show('Lỗi', err.response?.data?.message || 'Không thể tải nhật ký giờ công theo tháng', 'error');
+    }
+  }, []);
+
+  const handleSelectTab = useCallback(
+    (tabId) => {
+      const nextTab = VALID_TABS.includes(tabId) ? tabId : 'projects';
+      setActiveTab(nextTab);
+      const nextParams = new URLSearchParams();
+      if (nextTab !== 'projects') nextParams.set('tab', nextTab);
+      setSearchParams(nextParams, { replace: true });
+      if (Date.now() - lastFetchTimeRef.current > 1500) {
+        loadAllData({ quiet: true });
+      }
+    },
+    [setSearchParams, loadAllData]
+  );
+
+  const handleFocusHandled = useCallback(
+    (handledToken) => {
+      clearLiveNotificationNavToken(handledToken);
+      if (
+        searchParams.has('worklogId') ||
+        searchParams.has('userId') ||
+        location.state?.fromNotificationAt
+      ) {
+        const cleaned = new URLSearchParams(searchParams);
+        cleaned.delete('worklogId');
+        cleaned.delete('userId');
+        const cleanSearch = cleaned.toString();
+        navigate(
+          { pathname: location.pathname, search: cleanSearch ? `?${cleanSearch}` : '' },
+          { replace: true, state: null }
+        );
+      }
+    },
+    [searchParams, location.pathname, location.state, navigate]
+  );
+
+  // Đồng bộ URL query (?tab=timesheet&worklogId=...&month=... hoặc ?tab=profile / projects) CHỈ khi bấm "Xem chi tiết" từ Thông báo
+  useEffect(() => {
+    const queryTab = searchParams.get('tab');
+    const queryWorklogId = searchParams.get('worklogId');
+    const queryUserId = searchParams.get('userId');
+    const queryMonth = searchParams.get('month');
+    const fromNotifAt = location.state?.fromNotificationAt;
+    const isLiveNotifClick = isMatchingLiveNotificationNavToken(fromNotifAt);
+
+    if (queryMonth && /^\d{4}-\d{2}$/.test(queryMonth) && queryMonth !== selectedMonthRef.current) {
+      selectedMonthRef.current = queryMonth;
+      setSelectedMonth(queryMonth);
+    }
+
+    if (queryTab && VALID_TABS.includes(queryTab)) {
+      setActiveTab(queryTab);
+    }
+
+    if (isLiveNotifClick) {
+      if (queryTab === 'timesheet') {
+        setFocusWorklogRequest({
+          worklogId: queryWorklogId || null,
+          requestedAt: fromNotifAt,
+          notificationContent: location.state?.notificationContent || '',
+        });
+        if (lastFetchTimeRef.current > 0) {
+          loadAllData({ quiet: true });
+        }
+      } else {
+        clearLiveNotificationNavToken(fromNotifAt);
+        if (lastFetchTimeRef.current > 0) {
+          loadAllData({ quiet: true });
+        }
+      }
+    } else if (queryWorklogId || queryUserId || fromNotifAt) {
+      // Sau F5 hoặc không bấm "Xem chi tiết": không tự cuộn và làm sạch tham số focus cũ trên URL
+      const cleaned = new URLSearchParams(searchParams);
+      cleaned.delete('worklogId');
+      cleaned.delete('userId');
+      const cleanSearch = cleaned.toString();
+      navigate(
+        { pathname: location.pathname, search: cleanSearch ? `?${cleanSearch}` : '' },
+        { replace: true, state: null }
+      );
+    }
+  }, [searchParams, location.pathname, location.state, navigate, loadAllData]);
+
   useEffect(() => {
     loadAllData();
   }, [loadAllData]);
+
+  // Đồng bộ dữ liệu Realtime qua WebSocket (Worklog đã duyệt/từ chối, kỹ năng mới xác thực, phân bổ dự án mới)
+  useEffect(() => {
+    let timerId = null;
+    const scheduleQuietRefresh = () => {
+      if (timerId) clearTimeout(timerId);
+      timerId = setTimeout(() => {
+        loadAllData({ quiet: true });
+      }, 180);
+    };
+
+    const handleRealtimeNotification = (e) => {
+      const notifType = String(e?.detail?.loai || '').toUpperCase();
+      if (notifType.startsWith('TECH_')) {
+        scheduleQuietRefresh();
+      }
+    };
+
+    const handleTechSync = () => {
+      scheduleQuietRefresh();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && Date.now() - lastFetchTimeRef.current > 3000) {
+        scheduleQuietRefresh();
+      }
+    };
+
+    window.addEventListener('hrm:notification', handleRealtimeNotification);
+    window.addEventListener('hrm:tech-sync', handleTechSync);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      if (timerId) clearTimeout(timerId);
+      window.removeEventListener('hrm:notification', handleRealtimeNotification);
+      window.removeEventListener('hrm:tech-sync', handleTechSync);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [loadAllData]);
+
+  useEffect(() => {
+    if (!deleteWorklogTarget) return;
+    document.body.style.overflow = 'hidden';
+    const handleEsc = (e) => {
+      if (e.key === 'Escape' && !deletingWorklog) {
+        e.stopPropagation();
+        setDeleteWorklogTarget(null);
+      }
+    };
+    window.addEventListener('keydown', handleEsc, true);
+    return () => {
+      window.removeEventListener('keydown', handleEsc, true);
+      setTimeout(() => {
+        const remaining = document.querySelectorAll('[data-tech-modal="true"]');
+        if (remaining.length === 0) {
+          document.body.style.overflow = 'unset';
+        }
+      }, 50);
+    };
+  }, [deleteWorklogTarget, deletingWorklog]);
+
+  const handleConfirmDeleteWorklog = async () => {
+    if (!deleteWorklogTarget || deletingWorklog) return;
+    try {
+      setDeletingWorklog(true);
+      await api.delete(`/api/tech/worklogs/${deleteWorklogTarget.id}`);
+      toastRef.current?.show('Đã xóa', 'Đã xóa bản ghi nhật ký giờ công', 'success');
+      setDeleteWorklogTarget(null);
+      await loadAllData({ quiet: true });
+    } catch (err) {
+      toastRef.current?.show('Thất bại', err.response?.data?.message || 'Không thể xóa nhật ký giờ công', 'error');
+    } finally {
+      setDeletingWorklog(false);
+    }
+  };
 
   const getMyMembership = useCallback(
     (project) => {
@@ -174,12 +409,131 @@ export default function MyTechProjectsPage() {
     });
   }, [projects, keyword]);
 
+  const filteredWorklogs = useMemo(() => {
+    const list = worklogSummary?.worklogs || [];
+    return list.filter((w) => {
+      if (wlMonthOnly && selectedMonth && w.workDate && !String(w.workDate).startsWith(selectedMonth)) {
+        return false;
+      }
+      if (wlProjectFilter && String(w.projectId) !== String(wlProjectFilter)) return false;
+      if (wlStatusFilter && w.approvalStatus !== wlStatusFilter) return false;
+      return true;
+    });
+  }, [worklogSummary, wlMonthOnly, selectedMonth, wlProjectFilter, wlStatusFilter]);
+
+  useEffect(() => {
+    const reqAt = focusWorklogRequest?.requestedAt;
+    if (!reqAt || reqAt === lastAppliedFocusRef.current) return;
+    lastAppliedFocusRef.current = reqAt;
+    setWlProjectFilter('');
+    setWlStatusFilter('');
+    setWlMonthOnly(true);
+  }, [focusWorklogRequest]);
+
+  const hasWlSubFilters = Boolean(wlProjectFilter || wlStatusFilter);
+
+  const matchedWorklogId = useMemo(() => {
+    if (!focusWorklogRequest?.requestedAt || hasWlSubFilters) return null;
+    const row = matchWorklogFromFocusRequest(filteredWorklogs, focusWorklogRequest, 'engineer');
+    return row ? String(row.id) : null;
+  }, [focusWorklogRequest, hasWlSubFilters, filteredWorklogs]);
+
+  const hiddenInOtherMonth = useMemo(() => {
+    const targetId = focusWorklogRequest?.worklogId ? String(focusWorklogRequest.worklogId) : null;
+    if (!targetId || !wlMonthOnly || matchedWorklogId) return false;
+    const allWorklogs = worklogSummary?.worklogs || [];
+    return allWorklogs.some((w) => String(w.id) === targetId);
+  }, [focusWorklogRequest, wlMonthOnly, matchedWorklogId, worklogSummary]);
+
+  useEffect(() => {
+    if (activeTab !== 'timesheet' || loading || hasWlSubFilters) return;
+    const reqAt = focusWorklogRequest?.requestedAt;
+    if (!reqAt || lastScrolledFocusRef.current === reqAt) return;
+
+    if (hiddenInOtherMonth) {
+      setWlMonthOnly(false);
+      return;
+    }
+
+    if (focusWorklogRequest.worklogId && !matchedWorklogId) {
+      const waitTimer = setTimeout(() => {
+        if (lastScrolledFocusRef.current !== reqAt && myWorklogTableRef.current) {
+          lastScrolledFocusRef.current = reqAt;
+          scrollElementIntoViewCleanly(myWorklogTableRef.current, 'start');
+          handleFocusHandled(reqAt);
+        }
+      }, 2200);
+      return () => clearTimeout(waitTimer);
+    }
+
+    const targetId = matchedWorklogId;
+    let initialTimer = null;
+    let retryTimer = null;
+    let realignTimer = null;
+
+    const attemptScroll = (retryCount = 0) => {
+      const rowEl = targetId ? document.getElementById(`my-worklog-row-${targetId}`) : null;
+      const anchorEl = rowEl || myWorklogTableRef.current;
+      if (!anchorEl || (targetId && !rowEl && retryCount < 8)) {
+        if (retryCount < 8) {
+          retryTimer = setTimeout(() => attemptScroll(retryCount + 1), 100);
+        }
+        return;
+      }
+
+      lastScrolledFocusRef.current = reqAt;
+      if (targetId) {
+        setHighlightState({ id: targetId, at: reqAt });
+      }
+      scrollElementIntoViewCleanly(anchorEl, rowEl ? 'center' : 'start');
+      handleFocusHandled(reqAt);
+
+      realignTimer = setTimeout(() => {
+        const freshRowEl = targetId ? document.getElementById(`my-worklog-row-${targetId}`) : null;
+        const freshAnchor = freshRowEl || myWorklogTableRef.current;
+        if (freshAnchor) {
+          scrollElementIntoViewCleanly(freshAnchor, freshRowEl ? 'center' : 'start');
+        }
+      }, 320);
+    };
+
+    initialTimer = setTimeout(() => attemptScroll(0), 220);
+
+    return () => {
+      clearTimeout(initialTimer);
+      if (retryTimer) clearTimeout(retryTimer);
+      if (realignTimer) clearTimeout(realignTimer);
+    };
+  }, [
+    activeTab,
+    loading,
+    focusWorklogRequest,
+    matchedWorklogId,
+    hiddenInOtherMonth,
+    hasWlSubFilters,
+    handleFocusHandled,
+  ]);
+
+  useEffect(() => {
+    if (!highlightState?.id) return;
+    const clearTimer = setTimeout(() => {
+      setHighlightState((prev) => (prev && prev.at === highlightState.at ? null : prev));
+    }, 5000);
+    return () => clearTimeout(clearTimer);
+  }, [highlightState]);
+
   const tabs = [
     {
       id: 'projects',
       label: 'Dự án đang tham gia',
       count: projects.length,
       icon: FolderGit2,
+    },
+    {
+      id: 'timesheet',
+      label: 'Nhật ký Giờ công',
+      count: (worklogSummary?.worklogs || []).length,
+      icon: Clock,
     },
     {
       id: 'profile',
@@ -294,7 +648,7 @@ export default function MyTechProjectsPage() {
                 {/* Well 1 */}
                 <button
                   type="button"
-                  onClick={() => setActiveTab('projects')}
+                  onClick={() => handleSelectTab('projects')}
                   className="p-4 rounded-xl bg-slate-50/75 hover:bg-blue-50/50 border border-slate-200/75 hover:border-blue-300 text-left transition flex flex-col justify-between gap-2.5 cursor-pointer"
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -353,7 +707,7 @@ export default function MyTechProjectsPage() {
                 {/* Well 3 */}
                 <button
                   type="button"
-                  onClick={() => setActiveTab('profile')}
+                  onClick={() => handleSelectTab('profile')}
                   className="p-4 rounded-xl bg-slate-50/75 hover:bg-blue-50/50 border border-slate-200/75 hover:border-blue-300 text-left transition flex flex-col justify-between gap-2.5 cursor-pointer"
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -376,7 +730,7 @@ export default function MyTechProjectsPage() {
                 {/* Well 4 */}
                 <button
                   type="button"
-                  onClick={() => setActiveTab('profile')}
+                  onClick={() => handleSelectTab('profile')}
                   className="p-4 rounded-xl bg-slate-50/75 hover:bg-blue-50/50 border border-slate-200/75 hover:border-blue-300 text-left transition flex flex-col justify-between gap-2.5 cursor-pointer"
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -486,7 +840,7 @@ export default function MyTechProjectsPage() {
                   <button
                     type="button"
                     key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
+                    onClick={() => handleSelectTab(tab.id)}
                     className={`relative px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-colors flex items-center gap-2 cursor-pointer ${
                       isActive ? 'text-white' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                     }`}
@@ -562,7 +916,7 @@ export default function MyTechProjectsPage() {
                         </p>
                         <button
                           type="button"
-                          onClick={() => setActiveTab('profile')}
+                          onClick={() => handleSelectTab('profile')}
                           className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#1E3A8A] hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs transition cursor-pointer"
                         >
                           <Award size={14} />
@@ -701,6 +1055,23 @@ export default function MyTechProjectsPage() {
                                     />
                                   </div>
 
+                                  {(project.milestonesCount > 0 || (project.totalApprovedHours || 0) > 0) && (
+                                    <div className="flex items-center justify-between gap-2 text-[11px] pt-0.5 border-t border-slate-200/60 tabular">
+                                      <span className="inline-flex items-center gap-1 text-[#1E3A8A] font-semibold">
+                                        <Flag size={11} className="shrink-0" />
+                                        <span>
+                                          {project.actualProgressPercent !== null && project.actualProgressPercent !== undefined
+                                            ? `Nghiệm thu: ${project.actualProgressPercent}% (${project.completedMilestonesCount || 0}/${project.milestonesCount} mốc)`
+                                            : 'Chưa có mốc'}
+                                        </span>
+                                      </span>
+                                      <span className="inline-flex items-center gap-1 text-slate-600 font-semibold">
+                                        <Clock size={11} className="text-slate-400 shrink-0" />
+                                        <span>{formatHours(project.totalApprovedHours || 0)} dự án</span>
+                                      </span>
+                                    </div>
+                                  )}
+
                                   <div className="flex items-center gap-1.5 text-[11px] text-slate-600 pt-0.5">
                                     <UserCheck size={13} className="text-blue-600 shrink-0" />
                                     <span>
@@ -784,23 +1155,336 @@ export default function MyTechProjectsPage() {
                                   )}
                                 </div>
 
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedDetailProject(project);
-                                  }}
-                                  className="px-3 py-1.5 text-xs font-semibold bg-white hover:bg-[#1E3A8A] text-[#1E3A8A] hover:text-white border border-blue-200 hover:border-[#1E3A8A] rounded-xl transition flex items-center gap-1.5 shrink-0 cursor-pointer"
-                                >
-                                  <Eye size={13} />
-                                  <span>Xem chi tiết</span>
-                                </button>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEditingWorklog(null);
+                                      setWorklogInitialProjectId(project.id);
+                                      setIsWorklogModalOpen(true);
+                                    }}
+                                    className="px-3 py-1.5 text-xs font-bold bg-[#1E3A8A] hover:bg-blue-700 text-white rounded-xl shadow-2xs transition flex items-center gap-1.5 shrink-0 cursor-pointer whitespace-nowrap"
+                                  >
+                                    <Plus size={13} />
+                                    <span>Ghi giờ công</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedDetailProject(project);
+                                    }}
+                                    className="px-3 py-1.5 text-xs font-semibold bg-white hover:bg-slate-100 text-[#1E3A8A] border border-blue-200 rounded-xl transition flex items-center gap-1.5 shrink-0 cursor-pointer whitespace-nowrap"
+                                  >
+                                    <Eye size={13} />
+                                    <span>Chi tiết</span>
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           );
                         })}
                       </div>
                     )}
+                  </div>
+                )}
+
+                {activeTab === 'timesheet' && (
+                  <div className="space-y-5">
+                    {/* Personal Worklog Control Bar */}
+                    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                      <div className="flex flex-wrap items-center gap-2.5">
+                        <TechMonthPicker
+                          id="my-wl-month"
+                          label="Tháng KPI:"
+                          value={selectedMonth}
+                          onChange={handleMonthChange}
+                          align="left"
+                        />
+
+                        <label className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={wlMonthOnly}
+                            onChange={(e) => setWlMonthOnly(e.target.checked)}
+                            className="w-3.5 h-3.5 accent-[#1E3A8A]"
+                          />
+                          <span className="tabular">Chỉ lọc tháng {formatMonthShortVN(selectedMonth)}</span>
+                        </label>
+
+                        <select
+                          value={wlProjectFilter}
+                          onChange={(e) => setWlProjectFilter(e.target.value)}
+                          className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 cursor-pointer"
+                        >
+                          <option value="">Tất cả dự án</option>
+                          {projects.map((p) => (
+                            <option key={p.id} value={String(p.id)}>
+                              [{p.projectCode}] {p.projectName}
+                            </option>
+                          ))}
+                        </select>
+
+                        <select
+                          value={wlStatusFilter}
+                          onChange={(e) => setWlStatusFilter(e.target.value)}
+                          className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 cursor-pointer"
+                        >
+                          <option value="">Tất cả trạng thái</option>
+                          <option value="PENDING">Chờ thẩm định</option>
+                          <option value="APPROVED">Đã phê duyệt</option>
+                          <option value="REJECTED">Từ chối</option>
+                        </select>
+                      </div>
+
+                      <button
+                        type="button"
+                        disabled={projects.length === 0}
+                        onClick={() => {
+                          setEditingWorklog(null);
+                          setWorklogInitialProjectId(projects[0]?.id || null);
+                          setIsWorklogModalOpen(true);
+                        }}
+                        className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-[#1E3A8A] hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs transition cursor-pointer disabled:opacity-50 whitespace-nowrap shrink-0"
+                      >
+                        <Plus size={14} />
+                        <span>Ghi giờ công</span>
+                      </button>
+                    </div>
+
+                    {/* 4 Personal Timesheet KPI Wells */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                      <div className="bg-white rounded-2xl border border-slate-200/90 p-4 space-y-1.5 shadow-2xs">
+                        <span className="text-xs font-semibold text-slate-500 tabular">
+                          Đã duyệt tháng {formatMonthShortVN(selectedMonth)}
+                        </span>
+                        <div className="flex items-baseline justify-between gap-2 tabular">
+                          <p className="text-2xl font-extrabold text-[#1E3A8A]">
+                            {formatHours(worklogSummary?.currentMonthApprovedHours ?? 0)}
+                          </p>
+                          <span className="text-xs font-bold text-slate-600">
+                            {worklogSummary?.currentMonthManDays ?? 0} Man-days
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 tabular">
+                          Tổng lũy kế: {formatHours(worklogSummary?.totalApprovedHours ?? 0)}
+                        </p>
+                      </div>
+
+                      <div className="bg-white rounded-2xl border border-slate-200/90 p-4 space-y-1.5 shadow-2xs">
+                        <span className="text-xs font-semibold text-slate-500">Chờ thẩm định (Tháng)</span>
+                        <div className="flex items-baseline justify-between gap-2 tabular">
+                          <p className="text-2xl font-extrabold text-orange-600">
+                            {formatHours(worklogSummary?.currentMonthPendingHours ?? 0)}
+                          </p>
+                          <span className="text-[11px] font-semibold text-slate-500">
+                            Bị từ chối: {formatHours(worklogSummary?.totalRejectedHours ?? 0)}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400">
+                          Tổng chờ duyệt: {formatHours(worklogSummary?.totalPendingHours ?? 0)}
+                        </p>
+                      </div>
+
+                      <div className="bg-white rounded-2xl border border-slate-200/90 p-4 space-y-1.5 shadow-2xs">
+                        <span className="text-xs font-semibold text-slate-500">Giờ công tuần hiện tại</span>
+                        <div className="flex items-baseline justify-between gap-2 tabular">
+                          <p className="text-2xl font-extrabold text-slate-900">
+                            {formatHours(worklogSummary?.currentWeekHours ?? 0)}
+                          </p>
+                          <span className="text-[11px] font-medium text-slate-500">Định mức 40h/tuần</span>
+                        </div>
+                        <div className="w-full h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-[#1E3A8A]"
+                            style={{ width: `${Math.min(100, Math.round(((worklogSummary?.currentWeekHours || 0) / 40) * 100))}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="bg-white rounded-2xl border border-slate-200/90 p-4 space-y-1.5 shadow-2xs">
+                        <span className="text-xs font-semibold text-slate-500">Tỷ lệ Billable tháng</span>
+                        <div className="flex items-baseline justify-between gap-2 tabular">
+                          <p className="text-2xl font-extrabold text-emerald-700">
+                            {worklogSummary?.billablePercent ?? 0}%
+                          </p>
+                          <span className="text-[11px] font-semibold text-slate-500">
+                            {formatHours(worklogSummary?.billableApprovedHours ?? 0)} tính phí
+                          </span>
+                        </div>
+                        <div className="w-full h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-emerald-600"
+                            style={{ width: `${Math.min(100, worklogSummary?.billablePercent ?? 0)}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Personal Worklogs Table */}
+                    <div
+                      ref={myWorklogTableRef}
+                      className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden"
+                    >
+                      <div className="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between">
+                        <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                          <Clock size={16} className="text-[#1E3A8A]" />
+                          <span>Danh sách Nhật ký Giờ công ({filteredWorklogs.length} bản ghi)</span>
+                        </h3>
+                      </div>
+
+                      {filteredWorklogs.length === 0 ? (
+                        <div className="p-10 text-center space-y-2.5">
+                          <Clock size={36} className="mx-auto text-slate-300" />
+                          <p className="text-sm font-bold text-slate-700">Chưa có nhật ký giờ công phù hợp</p>
+                          <p className="text-xs text-slate-400">
+                            {projects.length === 0
+                              ? 'Bạn cần đang tham gia ít nhất một dự án để ghi nhận giờ công.'
+                              : 'Bấm "Ghi giờ công" để báo cáo giờ làm việc kỹ thuật hoặc bỏ lọc tháng để xem các tháng trước.'}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                                <th className="py-3 px-4 whitespace-nowrap">Ngày</th>
+                                <th className="py-3 px-4">Dự án &amp; Hạng mục kỹ thuật</th>
+                                <th className="py-3 px-4 whitespace-nowrap">Số giờ</th>
+                                <th className="py-3 px-4 whitespace-nowrap">Trạng thái</th>
+                                <th className="py-3 px-4 text-right whitespace-nowrap">Thao tác</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
+                              {filteredWorklogs.map((w) => {
+                                const typeCfg = WORKLOG_TYPE_CONFIG[w.workType] || {
+                                  shortLabel: w.workType,
+                                  badgeClass: 'bg-slate-100 text-slate-700 border-slate-200',
+                                };
+                                const statusCfg = WORKLOG_STATUS_CONFIG[w.approvalStatus] || {
+                                  label: w.approvalStatus,
+                                  badgeClass: 'bg-slate-100 text-slate-700 border-slate-200',
+                                };
+                                const isLocked = w.approvalStatus === 'APPROVED';
+                                const isHighlighted = highlightedWorklogId === String(w.id);
+
+                                return (
+                                  <tr
+                                    key={w.id}
+                                    id={`my-worklog-row-${w.id}`}
+                                    className={`transition duration-300 ${
+                                      isHighlighted
+                                        ? 'bg-blue-50/95 ring-2 ring-inset ring-blue-500'
+                                        : 'hover:bg-blue-50/30'
+                                    }`}
+                                  >
+                                    <td className="py-3.5 px-4 align-top whitespace-nowrap tabular font-bold text-slate-900">
+                                      {formatDateVN(w.workDate)}
+                                    </td>
+                                    <td className="py-3.5 px-4 align-top max-w-lg space-y-1.5">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-[#1E3A8A] border border-blue-200">
+                                          {w.projectCode}
+                                        </span>
+                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border whitespace-nowrap ${typeCfg.badgeClass}`}>
+                                          {typeCfg.shortLabel}
+                                        </span>
+                                        <span
+                                          className={`text-[10px] font-bold px-2 py-0.5 rounded-md border whitespace-nowrap ${
+                                            w.isBillable
+                                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                              : 'bg-slate-100 text-slate-600 border-slate-200'
+                                          }`}
+                                        >
+                                          {w.isBillable ? 'Billable' : 'Internal'}
+                                        </span>
+                                      </div>
+
+                                      {w.milestoneTitle && (
+                                        <p className="text-[11px] font-semibold text-blue-700">
+                                          Mốc: {w.milestoneTitle}
+                                        </p>
+                                      )}
+
+                                      <p className="text-slate-700 leading-relaxed text-pretty">{w.taskSummary}</p>
+
+                                      {w.referenceUrl && (
+                                        <a
+                                          href={w.referenceUrl}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:underline"
+                                        >
+                                          <span>Link PR / Task</span>
+                                          <ExternalLink size={11} />
+                                        </a>
+                                      )}
+
+                                      {w.approvalStatus === 'REJECTED' && w.rejectionReason && (
+                                        <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-[11px] text-rose-700 space-y-1">
+                                          <p className="font-bold text-rose-800">Lý do từ chối:</p>
+                                          <p className="whitespace-pre-line leading-relaxed">{w.rejectionReason}</p>
+                                          <p className="text-[10px] font-medium text-rose-600/90">
+                                            Vui lòng sửa và gửi duyệt lại.
+                                          </p>
+                                        </div>
+                                      )}
+                                    </td>
+
+                                    <td className="py-3.5 px-4 align-top whitespace-nowrap tabular">
+                                      <strong className="text-sm text-[#1E3A8A]">{formatHours(w.hoursSpent)}</strong>
+                                    </td>
+
+                                    <td className="py-3.5 px-4 align-top whitespace-nowrap">
+                                      <span className={`inline-block text-[11px] font-bold px-2.5 py-0.5 rounded-full border whitespace-nowrap shrink-0 ${statusCfg.badgeClass}`}>
+                                        {statusCfg.label}
+                                      </span>
+                                      {w.approverName && (
+                                        <p className="text-[10px] text-slate-400 mt-1">Bởi {w.approverName}</p>
+                                      )}
+                                    </td>
+
+                                    <td className="py-3.5 px-4 align-top text-right whitespace-nowrap">
+                                      {isLocked ? (
+                                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-400">
+                                          <Lock size={12} />
+                                          <span>Đã khóa duyệt</span>
+                                        </span>
+                                      ) : (
+                                        <div className="inline-flex items-center gap-1">
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setEditingWorklog(w);
+                                              setWorklogInitialProjectId(w.projectId);
+                                              setIsWorklogModalOpen(true);
+                                            }}
+                                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition cursor-pointer"
+                                          >
+                                            <Edit3 size={12} />
+                                            <span>{w.approvalStatus === 'REJECTED' ? 'Sửa & Gửi lại' : 'Sửa'}</span>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setDeleteWorklogTarget(w)}
+                                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                            title="Xóa bản ghi"
+                                          >
+                                            <Trash2 size={14} />
+                                          </button>
+                                        </div>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -815,12 +1499,88 @@ export default function MyTechProjectsPage() {
           </>
         )}
 
-        {/* Popup Xem Chi tiết Dự án (Chế độ Read-Only cho Kỹ sư — Không hiển thị Sửa / Phân bổ / Tech Profile đồng đội) */}
+        {/* Popup Xem Chi tiết Dự án (Chế độ Read-Only cho Kỹ sư — Không hiển thị Sửa / Phân bổ / AI Health Brief) */}
         <ProjectDetailModal
           isOpen={!!selectedDetailProject}
           onClose={() => setSelectedDetailProject(null)}
           project={selectedDetailProject}
+          canManageMilestones={false}
+          canAnalyzeHealth={false}
         />
+
+        {/* Modal Ghi nhận / Chỉnh sửa Giờ công */}
+        <WorklogModal
+          isOpen={isWorklogModalOpen}
+          onClose={() => {
+            setIsWorklogModalOpen(false);
+            setEditingWorklog(null);
+            setWorklogInitialProjectId(null);
+          }}
+          projects={projects}
+          existingWorklogs={worklogSummary?.worklogs || []}
+          initialProjectId={worklogInitialProjectId}
+          initialData={editingWorklog}
+          onSuccess={() => loadAllData({ quiet: true })}
+        />
+
+        {/* Dialog xác nhận xóa bản ghi giờ công */}
+        {deleteWorklogTarget &&
+          createPortal(
+            <div
+              data-tech-modal="true"
+              className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
+              onClick={(e) => {
+                if (e.target === e.currentTarget && !deletingWorklog) {
+                  setDeleteWorklogTarget(null);
+                }
+              }}
+            >
+              <motion.div
+                role="dialog"
+                aria-modal="true"
+                initial={{ opacity: 0, scale: 0.96, y: 8 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 border border-slate-200 space-y-4"
+              >
+                <div className="flex items-start gap-3.5">
+                  <div className="w-11 h-11 rounded-2xl bg-rose-50 text-rose-600 border border-rose-100 flex items-center justify-center shrink-0">
+                    <Trash2 size={20} />
+                  </div>
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-bold text-slate-900">Xác nhận xóa nhật ký giờ công</h3>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      Bạn có chắc muốn xóa bản ghi{' '}
+                      <strong className="text-slate-900">{formatHours(deleteWorklogTarget.hoursSpent)}</strong> ngày{' '}
+                      <strong className="text-slate-900 tabular">{formatDateVN(deleteWorklogTarget.workDate)}</strong> tại dự án{' '}
+                      <strong>{deleteWorklogTarget.projectCode}</strong> không?
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    disabled={deletingWorklog}
+                    onClick={() => setDeleteWorklogTarget(null)}
+                    className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition cursor-pointer"
+                  >
+                    Hủy bỏ
+                  </button>
+                  <button
+                    type="button"
+                    disabled={deletingWorklog}
+                    onClick={handleConfirmDeleteWorklog}
+                    className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs transition cursor-pointer disabled:opacity-50"
+                  >
+                    {deletingWorklog ? 'Đang xóa...' : 'Xác nhận xóa'}
+                  </button>
+                </div>
+              </motion.div>
+            </div>,
+            document.body
+          )}
       </div>
     </MotionConfig>
   );

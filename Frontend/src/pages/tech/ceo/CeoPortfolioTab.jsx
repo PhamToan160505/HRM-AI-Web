@@ -15,10 +15,13 @@ import {
   Users,
   X,
   ArrowUpRight,
+  Flag,
+  Clock,
 } from 'lucide-react';
 import {
   PROJECT_STATUS_CONFIG,
   formatDateVN,
+  formatHours,
   computeTimelineHealth,
 } from './ceoTechHelpers';
 
@@ -88,6 +91,24 @@ export default function CeoPortfolioTab({
           severity: 'medium',
           badge: 'Thiếu Lead',
           reason: 'Chưa chỉ định Tech Lead phụ trách',
+          project: p,
+        });
+      }
+
+      if ((p.overdueMilestonesCount || 0) > 0) {
+        signals.push({
+          key: `ms-overdue-${p.id}`,
+          severity: 'high',
+          badge: `${p.overdueMilestonesCount} mốc quá hạn`,
+          reason: 'Mốc bàn giao (Milestone) đã vượt hạn chót',
+          project: p,
+        });
+      } else if ((p.dueSoonMilestonesCount || 0) > 0) {
+        signals.push({
+          key: `ms-duesoon-${p.id}`,
+          severity: 'medium',
+          badge: `${p.dueSoonMilestonesCount} mốc sắp hạn`,
+          reason: 'Có mốc nghiệm thu sắp đến hạn trong 7 ngày',
           project: p,
         });
       }
@@ -456,6 +477,29 @@ export default function CeoPortfolioTab({
                       />
                     </div>
 
+                    {/* Milestone Delivery & Approved Hours Pill Row */}
+                    {(project.milestonesCount > 0 || (project.totalApprovedHours || 0) > 0) && (
+                      <div className="flex items-center justify-between gap-2 text-[11px] pt-0.5 border-t border-slate-200/60 tabular">
+                        <span className="inline-flex items-center gap-1 text-[#1E3A8A] font-semibold">
+                          <Flag size={11} className="shrink-0" />
+                          <span>
+                            {project.actualProgressPercent !== null && project.actualProgressPercent !== undefined
+                              ? `Nghiệm thu: ${project.actualProgressPercent}% (${project.completedMilestonesCount || 0}/${project.milestonesCount} mốc)`
+                              : 'Chưa có mốc'}
+                          </span>
+                          {(project.overdueMilestonesCount || 0) > 0 && (
+                            <span className="text-[10px] font-bold text-rose-600">
+                              • {project.overdueMilestonesCount} quá hạn
+                            </span>
+                          )}
+                        </span>
+                        <span className="inline-flex items-center gap-1 text-slate-600 font-semibold">
+                          <Clock size={11} className="text-slate-400 shrink-0" />
+                          <span>{formatHours(project.totalApprovedHours || 0)} đã duyệt</span>
+                        </span>
+                      </div>
+                    )}
+
                     <div className="flex items-center justify-between gap-2 text-[11px] pt-0.5">
                       <span className="inline-flex items-center gap-1.5 text-slate-600 truncate">
                         <UserCheck size={13} className="text-blue-600 shrink-0" />
@@ -617,19 +661,31 @@ export default function CeoPortfolioTab({
                           <p className="font-medium text-slate-800">
                             {formatDateVN(project.startDate)} → {formatDateVN(project.endDate)}
                           </p>
-                          <p
-                            className={`text-[11px] font-semibold ${
-                              timeline.tone === 'overdue'
-                                ? 'text-rose-600'
-                                : timeline.tone === 'dueSoon'
-                                ? 'text-orange-600'
-                                : timeline.tone === 'completed'
-                                ? 'text-blue-700'
-                                : 'text-emerald-700'
-                            }`}
-                          >
-                            {timeline.text}
-                          </p>
+                          <div className="flex items-center gap-2 text-[11px] mt-0.5">
+                            <span
+                              className={`font-semibold ${
+                                timeline.tone === 'overdue'
+                                  ? 'text-rose-600'
+                                  : timeline.tone === 'dueSoon'
+                                  ? 'text-orange-600'
+                                  : timeline.tone === 'completed'
+                                  ? 'text-blue-700'
+                                  : 'text-emerald-700'
+                              }`}
+                            >
+                              {timeline.text}
+                            </span>
+                            {project.actualProgressPercent !== null && project.actualProgressPercent !== undefined && (
+                              <span className="font-bold text-[#1E3A8A]">
+                                • Mốc: {project.actualProgressPercent}%
+                              </span>
+                            )}
+                            {(project.totalApprovedHours || 0) > 0 && (
+                              <span className="text-slate-500">
+                                • {formatHours(project.totalApprovedHours)}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </td>
 

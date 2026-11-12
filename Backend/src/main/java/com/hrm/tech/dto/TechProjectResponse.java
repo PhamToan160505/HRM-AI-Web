@@ -36,5 +36,12 @@ public class TechProjectResponse {
     private String techLeadName;
     private Integer totalMembersCount;
     private Integer totalAllocationSum;
+    private Integer actualProgressPercent;
+    private Integer milestonesCount;
+    private Integer completedMilestonesCount;
+    private Integer overdueMilestonesCount;
+    private Integer dueSoonMilestonesCount;
+    private Double totalApprovedHours;
+    private Double totalPendingHours;
 }
 

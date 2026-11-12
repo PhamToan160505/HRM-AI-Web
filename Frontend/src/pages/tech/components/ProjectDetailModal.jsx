@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import {
@@ -20,13 +20,21 @@ import {
   Layers,
   Activity,
   ChevronRight,
+  Flag,
+  Plus,
+  Trash2,
 } from 'lucide-react';
 import api from '../../../services/api';
+import { useToast } from '../../../components/common/Toast';
+import MilestoneFormModal from './MilestoneFormModal';
+import ProjectHealthPanel from './ProjectHealthPanel';
 import {
   PROJECT_STATUS_CONFIG,
   PROJECT_ROLE_LABELS,
+  MILESTONE_STATUS_CONFIG,
   formatDateVN,
   formatDateTimeVN,
+  formatHours,
   computeTimelineHealth,
 } from '../techHelpers';
 
@@ -38,13 +46,53 @@ export default function ProjectDetailModal({
   onOpenEdit,
   onInspectEngineer,
   hasTopModalOpen = false,
+  canManageMilestones = false,
+  canAnalyzeHealth = false,
+  onProjectDataUpdated,
 }) {
+  const toast = useToast();
   const [projectData, setProjectData] = useState(project);
+  const [milestoneSummary, setMilestoneSummary] = useState(null);
+  const [loadingMilestones, setLoadingMilestones] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Milestone CRUD state
+  const [isMilestoneFormOpen, setIsMilestoneFormOpen] = useState(false);
+  const [editingMilestone, setEditingMilestone] = useState(null);
+  const [deleteMilestoneTarget, setDeleteMilestoneTarget] = useState(null);
+  const [deletingMilestone, setDeletingMilestone] = useState(false);
+  const [completingMilestoneId, setCompletingMilestoneId] = useState(null);
+
+  const fetchFreshDetail = useCallback(async (projectId) => {
+    if (!projectId) return;
+    try {
+      setRefreshing(true);
+      setLoadingMilestones(true);
+      const [projRes, msRes] = await Promise.allSettled([
+        api.get(`/api/tech/projects/${projectId}`),
+        api.get(`/api/tech/projects/${projectId}/milestones`),
+      ]);
+      if (projRes.status === 'fulfilled' && projRes.value?.data?.data) {
+        setProjectData(projRes.value.data.data);
+      }
+      if (msRes.status === 'fulfilled' && msRes.value?.data?.data) {
+        setMilestoneSummary(msRes.value.data.data);
+      }
+    } catch (err) {
+      console.error('Không thể tải chi tiết dự án mới nhất:', err);
+    } finally {
+      setRefreshing(false);
+      setLoadingMilestones(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (isOpen && project?.id) {
       setProjectData(project);
+      setMilestoneSummary(null);
+      setIsMilestoneFormOpen(false);
+      setEditingMilestone(null);
+      setDeleteMilestoneTarget(null);
       fetchFreshDetail(project.id);
       document.body.style.overflow = 'hidden';
     }
@@ -57,30 +105,73 @@ export default function ProjectDetailModal({
         }
       }, 50);
     };
-  }, [isOpen, project]);
+  }, [isOpen, project, fetchFreshDetail]);
+
+  const effectiveTopModalOpen = hasTopModalOpen || isMilestoneFormOpen || !!deleteMilestoneTarget;
 
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && !hasTopModalOpen) {
+      if (e.key === 'Escape' && !effectiveTopModalOpen) {
         onClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, hasTopModalOpen, onClose]);
+  }, [isOpen, effectiveTopModalOpen, onClose]);
 
-  const fetchFreshDetail = async (projectId) => {
-    try {
-      setRefreshing(true);
-      const res = await api.get(`/api/tech/projects/${projectId}`);
-      if (res.data?.data) {
-        setProjectData(res.data.data);
+  useEffect(() => {
+    if (!deleteMilestoneTarget) return;
+    const handleDeleteEsc = (e) => {
+      if (e.key === 'Escape' && !deletingMilestone) {
+        e.stopPropagation();
+        setDeleteMilestoneTarget(null);
       }
+    };
+    window.addEventListener('keydown', handleDeleteEsc, true);
+    return () => window.removeEventListener('keydown', handleDeleteEsc, true);
+  }, [deleteMilestoneTarget, deletingMilestone]);
+
+  const refreshAfterMilestoneChange = async () => {
+    if (!projectData?.id) return;
+    await fetchFreshDetail(projectData.id);
+    if (onProjectDataUpdated) await onProjectDataUpdated();
+  };
+
+  const handleQuickCompleteMilestone = async (ms) => {
+    if (!canManageMilestones || completingMilestoneId) return;
+    try {
+      setCompletingMilestoneId(ms.id);
+      await api.put(`/api/tech/projects/${projectData.id}/milestones/${ms.id}`, {
+        title: ms.title,
+        description: ms.description,
+        dueDate: ms.dueDate,
+        status: 'COMPLETED',
+        weightPercent: ms.weightPercent ?? 0,
+        completionPercent: 100,
+        deliverableUrl: ms.deliverableUrl,
+      });
+      toast?.show('Thành công', `Đã nghiệm thu hoàn tất 100% mốc "${ms.title}"`, 'success');
+      await refreshAfterMilestoneChange();
     } catch (err) {
-      console.error('Không thể tải chi tiết dự án mới nhất:', err);
+      toast?.show('Lỗi', err.response?.data?.message || 'Không thể nghiệm thu mốc tiến độ', 'error');
     } finally {
-      setRefreshing(false);
+      setCompletingMilestoneId(null);
+    }
+  };
+
+  const handleConfirmDeleteMilestone = async () => {
+    if (!deleteMilestoneTarget || deletingMilestone) return;
+    try {
+      setDeletingMilestone(true);
+      await api.delete(`/api/tech/projects/${projectData.id}/milestones/${deleteMilestoneTarget.id}`);
+      toast?.show('Đã xóa', `Đã xóa mốc "${deleteMilestoneTarget.title}"`, 'success');
+      setDeleteMilestoneTarget(null);
+      await refreshAfterMilestoneChange();
+    } catch (err) {
+      toast?.show('Lỗi', err.response?.data?.message || 'Không thể xóa mốc tiến độ', 'error');
+    } finally {
+      setDeletingMilestone(false);
     }
   };
 
@@ -101,14 +192,26 @@ export default function ProjectDetailModal({
   const fteEquivalent = ((projectData.totalAllocationSum || 0) / 100).toFixed(1);
   const timeline = computeTimelineHealth(projectData);
 
-  return createPortal(
-    <div
-      data-tech-modal="true"
-      className="fixed inset-0 z-[9980] bg-slate-900/55 backdrop-blur-xs p-4 sm:p-6 flex items-center justify-center overflow-y-auto"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
+  const milestones = milestoneSummary?.milestones || [];
+  const actualProgress =
+    milestoneSummary?.actualProgressPercent ?? projectData.actualProgressPercent ?? null;
+  const totalWeightPercent = milestoneSummary?.totalWeightPercent ?? 0;
+  const completedMsCount = milestoneSummary?.completedCount ?? projectData.completedMilestonesCount ?? 0;
+  const totalMsCount = milestoneSummary?.totalCount ?? projectData.milestonesCount ?? milestones.length;
+  const usedWeightByOthers = editingMilestone
+    ? Math.max(0, totalWeightPercent - (editingMilestone.weightPercent || 0))
+    : totalWeightPercent;
+
+  return (
+    <>
+      {createPortal(
+        <div
+          data-tech-modal="true"
+          className="fixed inset-0 z-[9980] bg-slate-900/55 backdrop-blur-xs p-4 sm:p-6 flex items-center justify-center overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) onClose();
+          }}
+        >
       <motion.div
         role="dialog"
         aria-modal="true"
@@ -238,29 +341,243 @@ export default function ProjectDetailModal({
             </div>
           </div>
 
-          {/* Tiến độ thời gian trực quan */}
-          {projectData.startDate && projectData.endDate && (
-            <div className="p-4 rounded-xl bg-blue-50/50 border border-blue-100 space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-slate-700">Độ phủ lịch trình thực hiện</span>
-                <span className="font-bold text-blue-700 tabular">{timeline.elapsedPercent}% chu kỳ thời gian</span>
+          {/* Tiến độ Kép: Nghiệm thu Milestones vs Chu kỳ Lịch trình */}
+          <div className="p-4 rounded-xl bg-blue-50/50 border border-blue-100 space-y-3">
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs gap-2 flex-wrap">
+                <span className="font-semibold text-slate-700 flex items-center gap-1.5">
+                  <Flag size={13} className="text-[#1E3A8A] shrink-0" />
+                  <span>Tiến độ Nghiệm thu Thực tế (Milestones)</span>
+                </span>
+                <span className="font-bold text-[#1E3A8A] tabular">
+                  {actualProgress !== null
+                    ? `${actualProgress}% (${completedMsCount}/${totalMsCount} mốc)`
+                    : 'Chưa thiết lập mốc'}
+                </span>
               </div>
               <div className="w-full h-2 rounded-full bg-white border border-blue-100 overflow-hidden">
                 <div
-                  className={`h-full rounded-full ${
-                    timeline.tone === 'overdue'
-                      ? 'bg-rose-500'
-                      : timeline.tone === 'dueSoon'
-                      ? 'bg-orange-500'
-                      : timeline.tone === 'completed'
-                      ? 'bg-emerald-600'
-                      : 'bg-blue-600'
-                  }`}
-                  style={{ width: `${timeline.elapsedPercent}%` }}
+                  className="h-full rounded-full bg-[#1E3A8A] transition-all duration-300"
+                  style={{ width: `${actualProgress ?? 0}%` }}
                 />
               </div>
             </div>
-          )}
+
+            {projectData.startDate && projectData.endDate && (
+              <div className="space-y-1.5 pt-1 border-t border-blue-100/80">
+                <div className="flex items-center justify-between text-xs gap-2 flex-wrap">
+                  <span className="font-semibold text-slate-700">Độ phủ lịch trình thực hiện</span>
+                  <span className="font-bold text-blue-700 tabular">
+                    {timeline.elapsedPercent}% chu kỳ thời gian
+                  </span>
+                </div>
+                <div className="w-full h-2 rounded-full bg-white border border-blue-100 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${
+                      timeline.tone === 'overdue'
+                        ? 'bg-rose-500'
+                        : timeline.tone === 'dueSoon'
+                        ? 'bg-orange-500'
+                        : timeline.tone === 'completed'
+                        ? 'bg-emerald-600'
+                        : 'bg-blue-600'
+                    }`}
+                    style={{ width: `${timeline.elapsedPercent}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between text-[11px] text-slate-600 pt-1 border-t border-blue-100/80 flex-wrap gap-2 tabular">
+              <span>
+                Giờ công đã duyệt:{' '}
+                <strong className="text-[#1E3A8A]">
+                  {formatHours(projectData.totalApprovedHours || 0)}
+                </strong>
+              </span>
+              {(projectData.totalPendingHours || 0) > 0 && (
+                <span className="text-orange-700 font-semibold">
+                  Chờ thẩm định: {formatHours(projectData.totalPendingHours)}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Mốc Tiến độ & Bàn giao (Milestones) */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h4 className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <Flag size={14} className="text-blue-600" />
+                  <span>Mốc Tiến độ &amp; Bàn giao ({totalMsCount} mốc)</span>
+                </h4>
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 tabular whitespace-nowrap">
+                  Trọng số: {totalWeightPercent}% / 100%
+                </span>
+              </div>
+
+              {canManageMilestones && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingMilestone(null);
+                    setIsMilestoneFormOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#1E3A8A] hover:bg-blue-700 text-white text-xs font-bold shadow-2xs transition cursor-pointer whitespace-nowrap"
+                >
+                  <Plus size={13} />
+                  <span>Thêm mốc</span>
+                </button>
+              )}
+            </div>
+
+            {loadingMilestones && milestones.length === 0 ? (
+              <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 text-xs text-slate-500">
+                Đang tải danh sách mốc tiến độ...
+              </div>
+            ) : milestones.length === 0 ? (
+              <div className="p-5 rounded-xl border border-dashed border-slate-200 bg-slate-50/60 text-center space-y-2">
+                <p className="text-xs text-slate-500">
+                  Dự án này chưa có mốc nghiệm thu (Milestone) nào được thiết lập.
+                </p>
+                {canManageMilestones && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingMilestone(null);
+                      setIsMilestoneFormOpen(true);
+                    }}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white hover:bg-blue-50 text-[#1E3A8A] border border-blue-200 text-xs font-bold transition cursor-pointer"
+                  >
+                    <Plus size={13} />
+                    <span>Thiết lập mốc đầu tiên</span>
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {milestones.map((ms) => {
+                  const msCfg = MILESTONE_STATUS_CONFIG[ms.status] || {
+                    label: ms.status,
+                    badgeClass: 'bg-slate-100 text-slate-700 border-slate-200',
+                  };
+                  return (
+                    <div
+                      key={ms.id}
+                      className="p-3.5 rounded-xl border border-slate-200/90 bg-white space-y-2.5"
+                    >
+                      <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div className="space-y-1 min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap shrink-0 ${msCfg.badgeClass}`}
+                            >
+                              {msCfg.label}
+                            </span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-[#1E3A8A] border border-blue-200 tabular whitespace-nowrap shrink-0">
+                              Trọng số {ms.weightPercent}%
+                            </span>
+                            {ms.isOverdue && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap shrink-0">
+                                Quá hạn mốc
+                              </span>
+                            )}
+                            {!ms.isOverdue && ms.isDueSoon && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 border border-orange-200 whitespace-nowrap shrink-0">
+                                Sắp đến hạn
+                              </span>
+                            )}
+                          </div>
+                          <h5 className="text-xs font-bold text-slate-900">{ms.title}</h5>
+                          {ms.description && (
+                            <p className="text-[11px] text-slate-600 leading-relaxed text-pretty">
+                              {ms.description}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="text-right shrink-0 space-y-1 tabular">
+                          <p className="text-xs font-extrabold text-[#1E3A8A]">{ms.completionPercent}%</p>
+                          <p className="text-[11px] text-slate-500">Hạn: {formatDateVN(ms.dueDate)}</p>
+                        </div>
+                      </div>
+
+                      <div className="w-full h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${
+                            ms.status === 'COMPLETED'
+                              ? 'bg-emerald-600'
+                              : ms.isOverdue || ms.status === 'DELAYED'
+                              ? 'bg-rose-500'
+                              : 'bg-blue-600'
+                          }`}
+                          style={{ width: `${ms.completionPercent}%` }}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2 flex-wrap text-[11px]">
+                        <div>
+                          {ms.deliverableUrl ? (
+                            <a
+                              href={ms.deliverableUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:underline"
+                            >
+                              <span>Link nghiệm thu / Release</span>
+                              <ExternalLink size={11} />
+                            </a>
+                          ) : (
+                            <span className="text-slate-400 italic">Chưa gắn link nghiệm thu</span>
+                          )}
+                        </div>
+
+                        {canManageMilestones && (
+                          <div className="flex items-center gap-1.5">
+                            {ms.status !== 'COMPLETED' && (
+                              <button
+                                type="button"
+                                disabled={completingMilestoneId === ms.id}
+                                onClick={() => handleQuickCompleteMilestone(ms)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200 font-bold transition cursor-pointer disabled:opacity-50"
+                              >
+                                <CheckCircle2 size={12} />
+                                <span>
+                                  {completingMilestoneId === ms.id ? 'Đang lưu...' : 'Nghiệm thu 100%'}
+                                </span>
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingMilestone(ms);
+                                setIsMilestoneFormOpen(true);
+                              }}
+                              className="p-1.5 text-slate-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition cursor-pointer"
+                              title="Chỉnh sửa mốc"
+                            >
+                              <Edit3 size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeleteMilestoneTarget(ms)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                              title="Xóa mốc"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* AI Project Health Brief (Chỉ dành cho Giám đốc / Trưởng phòng / CEO) */}
+          {canAnalyzeHealth && <ProjectHealthPanel projectId={projectData.id} />}
 
           {/* Mô tả & Mục tiêu */}
           <div className="space-y-2">
@@ -586,6 +903,80 @@ export default function ProjectDetailModal({
         </div>
       </motion.div>
     </div>,
-    document.body
+        document.body
+      )}
+
+      {canManageMilestones && (
+        <MilestoneFormModal
+          isOpen={isMilestoneFormOpen}
+          onClose={() => {
+            setIsMilestoneFormOpen(false);
+            setEditingMilestone(null);
+          }}
+          projectId={projectData.id}
+          projectName={projectData.projectName}
+          initialData={editingMilestone}
+          usedWeightByOthers={usedWeightByOthers}
+          onSuccess={refreshAfterMilestoneChange}
+        />
+      )}
+
+      {canManageMilestones &&
+        deleteMilestoneTarget &&
+        createPortal(
+          <div
+            data-tech-modal="true"
+            className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
+            onClick={(e) => {
+              if (e.target === e.currentTarget && !deletingMilestone) {
+                setDeleteMilestoneTarget(null);
+              }
+            }}
+          >
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 border border-slate-200 space-y-4"
+            >
+              <div className="flex items-start gap-3.5">
+                <div className="w-11 h-11 rounded-2xl bg-rose-50 text-rose-600 border border-rose-100 flex items-center justify-center shrink-0">
+                  <Trash2 size={20} />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-sm font-bold text-slate-900">Xác nhận xóa mốc tiến độ</h3>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Bạn có chắc chắn muốn xóa mốc{' '}
+                    <strong className="text-slate-900">{deleteMilestoneTarget.title}</strong> không? Các worklog từng gắn vào mốc này vẫn được giữ nguyên.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  disabled={deletingMilestone}
+                  onClick={() => setDeleteMilestoneTarget(null)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="button"
+                  disabled={deletingMilestone}
+                  onClick={handleConfirmDeleteMilestone}
+                  className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs transition cursor-pointer disabled:opacity-50"
+                >
+                  {deletingMilestone ? 'Đang xóa...' : 'Xác nhận xóa'}
+                </button>
+              </div>
+            </motion.div>
+          </div>,
+          document.body
+        )}
+    </>
   );
 }

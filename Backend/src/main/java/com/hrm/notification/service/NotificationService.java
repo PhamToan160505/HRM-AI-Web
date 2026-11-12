@@ -38,6 +38,12 @@ public class NotificationService {
         return saved;
     }
 
+    public void broadcastTopic(String destination, Object payload) {
+        if (messagingTemplate != null && destination != null && payload != null) {
+            messagingTemplate.convertAndSend(destination, payload);
+        }
+    }
+
     public List<Notification> getNotificationsForUser(Long userId) {
         return notificationRepository.findByUserIdOrderByCreatedAtDesc(userId);
     }

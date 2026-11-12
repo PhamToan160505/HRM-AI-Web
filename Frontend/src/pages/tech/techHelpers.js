@@ -270,3 +270,194 @@ export const getShortEngineerName = (fullName) => {
   return `${parts[parts.length - 2]} ${parts[parts.length - 1]}`;
 };
 
+export const MILESTONE_STATUS_CONFIG = {
+  NOT_STARTED: {
+    label: 'Chưa bắt đầu',
+    badgeClass: 'bg-slate-100 text-slate-700 border-slate-200',
+    dotClass: 'bg-slate-400',
+  },
+  IN_PROGRESS: {
+    label: 'Đang thực hiện',
+    badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
+    dotClass: 'bg-blue-600',
+  },
+  COMPLETED: {
+    label: 'Đã nghiệm thu',
+    badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    dotClass: 'bg-emerald-600',
+  },
+  DELAYED: {
+    label: 'Chậm tiến độ',
+    badgeClass: 'bg-rose-50 text-rose-700 border-rose-200',
+    dotClass: 'bg-rose-600',
+  },
+};
+
+export const MILESTONE_STATUS_OPTIONS = [
+  { value: 'NOT_STARTED', label: 'Chưa bắt đầu' },
+  { value: 'IN_PROGRESS', label: 'Đang thực hiện' },
+  { value: 'COMPLETED', label: 'Đã nghiệm thu (100%)' },
+  { value: 'DELAYED', label: 'Chậm tiến độ' },
+];
+
+export const WORKLOG_TYPE_CONFIG = {
+  DEVELOPMENT: {
+    label: 'Phát triển tính năng',
+    shortLabel: 'Phát triển',
+    badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
+  },
+  CODE_REVIEW: {
+    label: 'Review mã nguồn / Hỗ trợ',
+    shortLabel: 'Code Review',
+    badgeClass: 'bg-sky-50 text-sky-700 border-sky-200',
+  },
+  TESTING_QA: {
+    label: 'Kiểm thử & Automation Test',
+    shortLabel: 'QA / Test',
+    badgeClass: 'bg-teal-50 text-teal-700 border-teal-200',
+  },
+  BUG_FIX: {
+    label: 'Sửa lỗi / Hotfix',
+    shortLabel: 'Bug Fix',
+    badgeClass: 'bg-rose-50 text-rose-700 border-rose-200',
+  },
+  ARCHITECTURE: {
+    label: 'Thiết kế Kiến trúc & DB',
+    shortLabel: 'Kiến trúc',
+    badgeClass: 'bg-slate-100 text-slate-800 border-slate-300',
+  },
+  DEPLOYMENT: {
+    label: 'Triển khai CI/CD & Cloud',
+    shortLabel: 'Triển khai',
+    badgeClass: 'bg-orange-50 text-orange-700 border-orange-200',
+  },
+  MEETING: {
+    label: 'Họp kỹ thuật / Sprint Planning',
+    shortLabel: 'Họp kỹ thuật',
+    badgeClass: 'bg-slate-50 text-slate-600 border-slate-200',
+  },
+};
+
+export const WORKLOG_TYPE_OPTIONS = Object.entries(WORKLOG_TYPE_CONFIG).map(([value, cfg]) => ({
+  value,
+  label: cfg.label,
+  shortLabel: cfg.shortLabel,
+}));
+
+export const WORKLOG_STATUS_CONFIG = {
+  PENDING: {
+    label: 'Chờ thẩm định',
+    badgeClass: 'bg-orange-50 text-orange-700 border-orange-200',
+  },
+  APPROVED: {
+    label: 'Đã phê duyệt',
+    badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  },
+  REJECTED: {
+    label: 'Từ chối',
+    badgeClass: 'bg-rose-50 text-rose-700 border-rose-200',
+  },
+};
+
+export const formatHours = (hours) => {
+  const num = Number(hours || 0);
+  return Number.isInteger(num) ? `${num}h` : `${Number(num.toFixed(2))}h`;
+};
+
+export const formatCurrencyVND = (amount) => {
+  if (amount === null || amount === undefined) return 'Chưa cấu hình';
+  return new Intl.NumberFormat('vi-VN', {
+    style: 'currency',
+    currency: 'VND',
+    maximumFractionDigits: 0,
+  }).format(amount);
+};
+
+export const getCurrentMonthStr = () => {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  return `${y}-${m}`;
+};
+
+export const formatMonthShortVN = (monthStr) => {
+  if (!monthStr || !/^\d{4}-\d{2}$/.test(String(monthStr))) {
+    const now = new Date();
+    return `${now.getMonth() + 1} - ${now.getFullYear()}`;
+  }
+  const [year, month] = String(monthStr).split('-');
+  return `${Number(month)} - ${year}`;
+};
+
+export const scrollElementIntoViewCleanly = (element, block = 'center') => {
+  if (!element || typeof window === 'undefined') return;
+  let parent = element.parentElement;
+  while (parent && parent !== document.body && parent !== document.documentElement) {
+    const style = window.getComputedStyle(parent);
+    const overflowY = style.overflowY;
+    const isScrollableY =
+      (overflowY === 'auto' || overflowY === 'scroll') &&
+      parent.scrollHeight > parent.clientHeight + 24;
+    if (isScrollableY) {
+      const parentRect = parent.getBoundingClientRect();
+      const elemRect = element.getBoundingClientRect();
+      const offsetWithinParent =
+        block === 'center'
+          ? elemRect.top - parentRect.top - Math.max(24, (parent.clientHeight - elemRect.height) / 2)
+          : elemRect.top - parentRect.top - 24;
+      const targetTop = Math.max(0, parent.scrollTop + offsetWithinParent);
+      parent.scrollTo({ top: targetTop, behavior: 'smooth' });
+      return;
+    }
+    parent = parent.parentElement;
+  }
+  element.scrollIntoView({ behavior: 'smooth', block, inline: 'nearest' });
+};
+
+export const matchWorklogFromFocusRequest = (list = [], focusRequest = null, roleMode = 'manager') => {
+  if (!Array.isArray(list) || list.length === 0 || !focusRequest) return null;
+
+  if (focusRequest.worklogId) {
+    return list.find((w) => String(w.id) === String(focusRequest.worklogId)) || null;
+  }
+
+  if (focusRequest.notificationContent) {
+    const content = String(focusRequest.notificationContent);
+    const codeMatch = content.match(/\[([A-Z0-9_-]+)\]/i);
+    const dateMatch = content.match(/\b(\d{4}-\d{2}-\d{2})\b/);
+    const hoursMatch = content.match(/(\d+(?:\.\d+)?)h\b/i);
+
+    if (codeMatch || dateMatch) {
+      const codeUpper = codeMatch ? codeMatch[1].toUpperCase() : null;
+      const dateStr = dateMatch ? dateMatch[1] : null;
+      const targetHours = hoursMatch ? Number(hoursMatch[1]) : null;
+
+      const exactHint = list.find((w) => {
+        if (roleMode === 'manager' && w.approvalStatus !== 'PENDING') return false;
+        if (codeUpper && String(w.projectCode || '').toUpperCase() !== codeUpper) return false;
+        if (dateStr && String(w.workDate || '') !== dateStr) return false;
+        if (targetHours !== null && Math.abs(Number(w.hoursSpent || 0) - targetHours) > 0.05) return false;
+        return true;
+      });
+      if (exactHint) return exactHint;
+
+      const looseHint = list.find((w) => {
+        if (codeUpper && String(w.projectCode || '').toUpperCase() !== codeUpper) return false;
+        if (dateStr && String(w.workDate || '') !== dateStr) return false;
+        return true;
+      });
+      if (looseHint) return looseHint;
+    }
+  }
+
+  if (roleMode === 'engineer') {
+    return (
+      list.find((w) => w.approvalStatus === 'APPROVED' || w.approvalStatus === 'REJECTED') ||
+      list[0] ||
+      null
+    );
+  }
+  return list.find((w) => w.approvalStatus === 'PENDING') || list[0] || null;
+};
+
+

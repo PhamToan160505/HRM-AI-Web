@@ -5,17 +5,24 @@ import com.hrm.common.entity.Role;
 import com.hrm.common.entity.User;
 import com.hrm.common.repository.DepartmentRepository;
 import com.hrm.common.repository.UserRepository;
+import com.hrm.tech.entity.MilestoneStatus;
 import com.hrm.tech.entity.ProjectRole;
 import com.hrm.tech.entity.ProjectStatus;
 import com.hrm.tech.entity.ProjectType;
 import com.hrm.tech.entity.TechProject;
 import com.hrm.tech.entity.TechProjectMember;
+import com.hrm.tech.entity.TechProjectMilestone;
+import com.hrm.tech.entity.TechWorklog;
 import com.hrm.tech.entity.ProficiencyLevel;
 import com.hrm.tech.entity.UserTechSkill;
 import com.hrm.tech.entity.UserTechCertificate;
+import com.hrm.tech.entity.WorklogApprovalStatus;
+import com.hrm.tech.entity.WorklogType;
 import com.hrm.tech.repository.TechProjectMemberRepository;
+import com.hrm.tech.repository.TechProjectMilestoneRepository;
 import com.hrm.tech.repository.TechProjectRepository;
 import com.hrm.tech.repository.TechSkillRepository;
+import com.hrm.tech.repository.TechWorklogRepository;
 import com.hrm.tech.repository.UserTechSkillRepository;
 import com.hrm.tech.repository.UserTechCertificateRepository;
 import lombok.RequiredArgsConstructor;
@@ -50,6 +57,8 @@ public class DataSeeder implements CommandLineRunner {
     private final TechSkillRepository techSkillRepository;
     private final UserTechSkillRepository userTechSkillRepository;
     private final UserTechCertificateRepository userTechCertificateRepository;
+    private final TechProjectMilestoneRepository techProjectMilestoneRepository;
+    private final TechWorklogRepository techWorklogRepository;
 
     private static final String DEFAULT_PASSWORD = "Admin@123";
 
@@ -63,6 +72,7 @@ public class DataSeeder implements CommandLineRunner {
         updateDemoMaNhanVien();
         seedTechProjects();
         seedTechSkillsAndCertificates();
+        seedTechMilestonesAndWorklogs();
     }
 
     private void migrateApplicationsTable() {
@@ -529,5 +539,229 @@ public class DataSeeder implements CommandLineRunner {
                     .highlightProject(project)
                     .build());
         });
+    }
+
+    private void seedTechMilestonesAndWorklogs() {
+        User tpKt = userRepository.findByEmail("truongphong_kt@hrm.vn")
+                .or(() -> userRepository.findByEmail("giamdocphong@hrm.vn"))
+                .orElse(null);
+        if (tpKt == null) return;
+
+        TechProject hrmPrj = techProjectRepository.findByProjectCode("PRJ-HRM-AI").orElse(null);
+        TechProject ecomPrj = techProjectRepository.findByProjectCode("PRJ-ECOMMERCE").orElse(null);
+
+        java.time.LocalDate today = java.time.LocalDate.now();
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+
+        TechProjectMilestone hrmMs1 = null;
+        TechProjectMilestone hrmMs2 = null;
+        TechProjectMilestone ecomMs1 = null;
+
+        if (techProjectMilestoneRepository.count() == 0) {
+            if (hrmPrj != null) {
+                hrmMs1 = techProjectMilestoneRepository.save(TechProjectMilestone.builder()
+                        .project(hrmPrj)
+                        .title("Phân tích nghiệp vụ & Thiết kế DB Flyway")
+                        .description("Hoàn thiện ERD toàn hệ thống, chuẩn hóa Flyway migrations và cấu hình phân quyền JWT RBAC.")
+                        .dueDate(today.minusDays(20))
+                        .completedAt(now.minusDays(21))
+                        .status(MilestoneStatus.COMPLETED)
+                        .weightPercent(25)
+                        .completionPercent(100)
+                        .deliverableUrl("https://github.com/company/hrm-ai/releases/tag/v1.0-schema")
+                        .createdBy(tpKt.getId())
+                        .build());
+
+                hrmMs2 = techProjectMilestoneRepository.save(TechProjectMilestone.builder()
+                        .project(hrmPrj)
+                        .title("Phát triển Core Backend API & AI Pipeline")
+                        .description("Triển khai module Tuyển dụng AI, Chấm công FaceID, Bảng lương và Tích hợp WebSocket thông báo.")
+                        .dueDate(today.plusDays(2))
+                        .status(MilestoneStatus.IN_PROGRESS)
+                        .weightPercent(40)
+                        .completionPercent(80)
+                        .deliverableUrl("https://jira.company.com/browse/HRM-CORE")
+                        .createdBy(tpKt.getId())
+                        .build());
+
+                techProjectMilestoneRepository.save(TechProjectMilestone.builder()
+                        .project(hrmPrj)
+                        .title("Hoàn thiện Frontend UI & Kiểm thử UAT")
+                        .description("Đồng bộ Design System Sapphire trên toàn dashboard, kiểm thử E2E và tối ưu hiệu năng.")
+                        .dueDate(today.plusDays(25))
+                        .status(MilestoneStatus.IN_PROGRESS)
+                        .weightPercent(35)
+                        .completionPercent(30)
+                        .createdBy(tpKt.getId())
+                        .build());
+            }
+
+            if (ecomPrj != null) {
+                ecomMs1 = techProjectMilestoneRepository.save(TechProjectMilestone.builder()
+                        .project(ecomPrj)
+                        .title("Khởi tạo Kiến trúc NestJS & Schema PostgreSQL")
+                        .description("Thiết lập monorepo NestJS + Next.js, Docker Compose và hệ thống Auth khách hàng.")
+                        .dueDate(today.minusDays(2))
+                        .completedAt(now.minusDays(3))
+                        .status(MilestoneStatus.COMPLETED)
+                        .weightPercent(30)
+                        .completionPercent(100)
+                        .deliverableUrl("https://github.com/company/ecom-b2c/pulls/12")
+                        .createdBy(tpKt.getId())
+                        .build());
+
+                techProjectMilestoneRepository.save(TechProjectMilestone.builder()
+                        .project(ecomPrj)
+                        .title("Tích hợp Giỏ hàng & Thanh toán VNPay")
+                        .description("Xây dựng flow đặt hàng, webhook đối soát giao dịch VNPay và quản lý tồn kho.")
+                        .dueDate(today.plusDays(18))
+                        .status(MilestoneStatus.IN_PROGRESS)
+                        .weightPercent(40)
+                        .completionPercent(25)
+                        .createdBy(tpKt.getId())
+                        .build());
+
+                techProjectMilestoneRepository.save(TechProjectMilestone.builder()
+                        .project(ecomPrj)
+                        .title("Giao diện Storefront Next.js & Go-live")
+                        .description("Hoàn thiện giao diện người mua hàng SEO SSR, stress test và triển khai Production.")
+                        .dueDate(today.plusDays(45))
+                        .status(MilestoneStatus.NOT_STARTED)
+                        .weightPercent(30)
+                        .completionPercent(0)
+                        .createdBy(tpKt.getId())
+                        .build());
+            }
+            log.info("[Seed] Đã khởi tạo các mốc tiến độ (Milestones) mẫu cho dự án Công nghệ.");
+        } else {
+            if (hrmPrj != null) {
+                var list = techProjectMilestoneRepository.findByProjectIdOrderByDueDateAscIdAsc(hrmPrj.getId());
+                if (!list.isEmpty()) hrmMs1 = list.get(0);
+                if (list.size() > 1) hrmMs2 = list.get(1);
+            }
+            if (ecomPrj != null) {
+                var list = techProjectMilestoneRepository.findByProjectIdOrderByDueDateAscIdAsc(ecomPrj.getId());
+                if (!list.isEmpty()) ecomMs1 = list.get(0);
+            }
+        }
+
+        if (techWorklogRepository.count() == 0) {
+            User devNam = userRepository.findByEmail("dev_nam@hrm.vn").orElse(null);
+            User devLan = userRepository.findByEmail("dev_lan@hrm.vn").orElse(null);
+            User testerHung = userRepository.findByEmail("tester_hung@hrm.vn").orElse(null);
+
+            java.time.LocalDate baseDay = today.withDayOfMonth(Math.max(1, Math.min(today.getDayOfMonth(), 4)));
+            java.time.LocalDate d1 = today.minusDays(3).isBefore(baseDay) ? today : today.minusDays(3);
+            java.time.LocalDate d2 = today.minusDays(2).isBefore(baseDay) ? today : today.minusDays(2);
+            java.time.LocalDate d3 = today.minusDays(1).isBefore(baseDay) ? today : today.minusDays(1);
+
+            if (devNam != null && hrmPrj != null) {
+                techWorklogRepository.save(TechWorklog.builder()
+                        .project(hrmPrj)
+                        .milestone(hrmMs2)
+                        .userId(devNam.getId())
+                        .workDate(d1)
+                        .hoursSpent(java.math.BigDecimal.valueOf(6.00))
+                        .workType(WorklogType.ARCHITECTURE)
+                        .isBillable(false)
+                        .taskSummary("Thiết kế và tối ưu hóa API phân hệ chấm công & payroll engine")
+                        .referenceUrl("https://github.com/company/hrm-ai/pull/48")
+                        .approvalStatus(WorklogApprovalStatus.APPROVED)
+                        .approvedBy(tpKt.getId())
+                        .approvedAt(now.minusDays(2))
+                        .build());
+
+                techWorklogRepository.save(TechWorklog.builder()
+                        .project(hrmPrj)
+                        .milestone(hrmMs2)
+                        .userId(devNam.getId())
+                        .workDate(d2)
+                        .hoursSpent(java.math.BigDecimal.valueOf(5.50))
+                        .workType(WorklogType.CODE_REVIEW)
+                        .isBillable(false)
+                        .taskSummary("Review PR bảo mật phân quyền CEO Read-Only & tối ưu query repository")
+                        .referenceUrl("https://github.com/company/hrm-ai/pull/52")
+                        .approvalStatus(WorklogApprovalStatus.PENDING)
+                        .build());
+            }
+
+            if (devNam != null && ecomPrj != null) {
+                techWorklogRepository.save(TechWorklog.builder()
+                        .project(ecomPrj)
+                        .milestone(ecomMs1)
+                        .userId(devNam.getId())
+                        .workDate(d3)
+                        .hoursSpent(java.math.BigDecimal.valueOf(4.00))
+                        .workType(WorklogType.DEVELOPMENT)
+                        .isBillable(true)
+                        .taskSummary("Xây dựng API giỏ hàng & tích hợp sandbox thanh toán VNPay IPN")
+                        .referenceUrl("https://github.com/company/ecom-b2c/pull/15")
+                        .approvalStatus(WorklogApprovalStatus.APPROVED)
+                        .approvedBy(tpKt.getId())
+                        .approvedAt(now.minusDays(1))
+                        .build());
+            }
+
+            if (devLan != null && hrmPrj != null) {
+                techWorklogRepository.save(TechWorklog.builder()
+                        .project(hrmPrj)
+                        .milestone(hrmMs1)
+                        .userId(devLan.getId())
+                        .workDate(d1)
+                        .hoursSpent(java.math.BigDecimal.valueOf(7.50))
+                        .workType(WorklogType.DEVELOPMENT)
+                        .isBillable(false)
+                        .taskSummary("Xây dựng hệ thống Dashboard Corporate Sapphire & biểu đồ Recharts")
+                        .referenceUrl("https://github.com/company/hrm-ai/pull/49")
+                        .approvalStatus(WorklogApprovalStatus.APPROVED)
+                        .approvedBy(tpKt.getId())
+                        .approvedAt(now.minusDays(2))
+                        .build());
+
+                techWorklogRepository.save(TechWorklog.builder()
+                        .project(hrmPrj)
+                        .milestone(hrmMs2)
+                        .userId(devLan.getId())
+                        .workDate(today)
+                        .hoursSpent(java.math.BigDecimal.valueOf(6.00))
+                        .workType(WorklogType.DEVELOPMENT)
+                        .isBillable(false)
+                        .taskSummary("Hoàn thiện UI Modal xếp chồng đa tầng & kiểm tra chuẩn accessibility")
+                        .referenceUrl("https://github.com/company/hrm-ai/pull/55")
+                        .approvalStatus(WorklogApprovalStatus.PENDING)
+                        .build());
+            }
+
+            if (testerHung != null && hrmPrj != null) {
+                techWorklogRepository.save(TechWorklog.builder()
+                        .project(hrmPrj)
+                        .milestone(hrmMs2)
+                        .userId(testerHung.getId())
+                        .workDate(d2)
+                        .hoursSpent(java.math.BigDecimal.valueOf(5.00))
+                        .workType(WorklogType.TESTING_QA)
+                        .isBillable(false)
+                        .taskSummary("Chạy bộ test phân quyền API Phòng Công nghệ & kiểm thử luồng lọc kỹ năng")
+                        .referenceUrl("https://jira.company.com/browse/HRM-QA-19")
+                        .approvalStatus(WorklogApprovalStatus.APPROVED)
+                        .approvedBy(tpKt.getId())
+                        .approvedAt(now.minusDays(1))
+                        .build());
+
+                techWorklogRepository.save(TechWorklog.builder()
+                        .project(hrmPrj)
+                        .milestone(hrmMs2)
+                        .userId(testerHung.getId())
+                        .workDate(today)
+                        .hoursSpent(java.math.BigDecimal.valueOf(4.00))
+                        .workType(WorklogType.BUG_FIX)
+                        .isBillable(false)
+                        .taskSummary("Retest xử lý lỗi escape modal & kiểm tra validation chứng chỉ")
+                        .approvalStatus(WorklogApprovalStatus.PENDING)
+                        .build());
+            }
+
+            log.info("[Seed] Đã khởi tạo nhật ký giờ công (Tech Worklogs) mẫu trong tháng hiện tại.");
+        }
     }
 }

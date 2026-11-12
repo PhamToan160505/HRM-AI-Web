@@ -6,6 +6,7 @@ import com.hrm.common.entity.User;
 import com.hrm.common.repository.DepartmentRepository;
 import com.hrm.common.repository.UserRepository;
 import com.hrm.exception.AppException;
+import com.hrm.notification.service.NotificationService;
 import com.hrm.tech.dto.*;
 import com.hrm.tech.entity.*;
 import com.hrm.tech.repository.*;
@@ -30,6 +31,7 @@ public class TechSkillService {
     private final TechProjectMemberRepository memberRepository;
     private final UserRepository userRepository;
     private final DepartmentRepository departmentRepository;
+    private final NotificationService notificationService;
 
     // Trọng số cấp bậc phục vụ tính điểm Radar & Match Score
     private static final Map<ProficiencyLevel, Integer> LEVEL_WEIGHTS = Map.of(
@@ -101,6 +103,8 @@ public class TechSkillService {
                 .build();
 
         UserTechSkill saved = userSkillRepository.save(userSkill);
+        notifyManagersOnNewSkill(userId, skill.getSkillName(), req.getProficiencyLevel());
+        broadcastSkillSync("CREATED", saved);
         log.info("[Tech] Kỹ sư {} khai báo thêm kỹ năng: {} ({})", userId, skill.getSkillName(),
                 req.getProficiencyLevel());
         return mapToUserSkillResponse(saved);
@@ -140,6 +144,7 @@ public class TechSkillService {
         }
 
         UserTechSkill updated = userSkillRepository.save(userSkill);
+        broadcastSkillSync("UPDATED", updated);
         return mapToUserSkillResponse(updated);
     }
 
@@ -153,6 +158,7 @@ public class TechSkillService {
         }
 
         userSkillRepository.delete(userSkill);
+        broadcastSkillSync("DELETED", userSkill);
         log.info("[Tech] Kỹ sư {} đã xóa kỹ năng id: {}", userId, userSkillId);
     }
 
@@ -173,6 +179,8 @@ public class TechSkillService {
         userSkill.setVerifiedAt(LocalDateTime.now());
 
         UserTechSkill saved = userSkillRepository.save(userSkill);
+        notifyEngineerOnSkillVerified(saved, verifier);
+        broadcastSkillSync("VERIFIED", saved);
         log.info("[Tech] Quản lý {} đã xác thực kỹ năng '{}' cho nhân viên {}", verifier.getHoTen(),
                 saved.getSkill().getSkillName(), saved.getUserId());
         return mapToUserSkillResponse(saved);
@@ -491,5 +499,81 @@ public class TechSkillService {
                 .isExpired(isExpired)
                 .status(status)
                 .build();
+    }
+
+    private void notifyEngineerOnSkillVerified(UserTechSkill saved, User verifier) {
+        if (notificationService == null || saved == null) return;
+        try {
+            notificationService.createNotification(
+                    saved.getUserId(),
+                    "TECH_SKILL_VERIFIED",
+                    "Kỹ năng chuyên môn đã được xác thực",
+                    verifier.getHoTen() + " đã cấp tích xanh xác thực cho kỹ năng \""
+                            + saved.getSkill().getSkillName() + "\" (" + saved.getProficiencyLevel() + ").",
+                    "binh_thuong",
+                    "/employee/my-projects?tab=profile"
+            );
+        } catch (Exception e) {
+            log.warn("[Tech] Không thể gửi thông báo xác thực kỹ năng cho user {}: {}", saved.getUserId(), e.getMessage());
+        }
+    }
+
+    private void notifyManagersOnNewSkill(Long engineerId, String skillName, ProficiencyLevel level) {
+        if (notificationService == null) return;
+        try {
+            User engineer = userRepository.findById(engineerId).orElse(null);
+            String engName = engineer != null ? engineer.getHoTen() : "Kỹ sư";
+            Long deptId = engineer != null ? engineer.getDepartmentId() : null;
+            if (deptId == null) {
+                deptId = departmentRepository.findByTenPhong("Công nghệ")
+                        .or(() -> departmentRepository.findByTenPhong("Kỹ thuật"))
+                        .map(Department::getId)
+                        .orElse(null);
+            }
+            if (deptId == null) return;
+
+            List<User> recipients = new ArrayList<>();
+            recipients.addAll(userRepository.findByDepartmentIdAndRole(deptId, Role.TRUONG_PHONG));
+            recipients.addAll(userRepository.findByDepartmentIdAndRole(deptId, Role.GIAM_DOC_PHONG_BAN));
+            Map<Long, User> uniqueManagers = new LinkedHashMap<>();
+            for (User m : recipients) {
+                if (m != null && m.getId() != null) {
+                    uniqueManagers.putIfAbsent(m.getId(), m);
+                }
+            }
+
+            String query = engineerId != null ? "?tab=skills&userId=" + engineerId : "?tab=skills";
+            for (User mgr : uniqueManagers.values()) {
+                if (Boolean.TRUE.equals(mgr.getActive()) && !mgr.getId().equals(engineerId)) {
+                    String baseRoute = mgr.getRole() == Role.GIAM_DOC_PHONG_BAN
+                            ? "/director/tech-projects"
+                            : "/manager/tech-projects";
+                    notificationService.createNotification(
+                            mgr.getId(),
+                            "TECH_SKILL_SUBMITTED",
+                            "Kỹ sư khai báo kỹ năng mới chờ thẩm định",
+                            engName + " vừa khai báo kỹ năng \"" + skillName + "\" (" + level + ") cần xác thực.",
+                            "binh_thuong",
+                            baseRoute + query
+                    );
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[Tech] Không thể gửi thông báo khai báo kỹ năng mới tới quản lý: {}", e.getMessage());
+        }
+    }
+
+    private void broadcastSkillSync(String action, UserTechSkill skill) {
+        if (notificationService == null) return;
+        try {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("domain", "TECH_SKILL");
+            payload.put("action", action);
+            payload.put("userSkillId", skill != null && skill.getId() != null ? skill.getId() : 0L);
+            payload.put("userId", skill != null && skill.getUserId() != null ? skill.getUserId() : 0L);
+            notificationService.broadcastTopic("/topic/tech-updates", payload);
+        } catch (Exception e) {
+            log.warn("[Tech] Không thể broadcast sync skill: {}", e.getMessage());
+        }
     }
 }

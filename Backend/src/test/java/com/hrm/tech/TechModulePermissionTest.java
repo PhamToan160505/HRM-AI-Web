@@ -5,8 +5,11 @@ import com.hrm.common.entity.User;
 import com.hrm.common.repository.DepartmentRepository;
 import com.hrm.common.repository.UserRepository;
 import com.hrm.exception.AppException;
+import com.hrm.notification.service.NotificationService;
+import com.hrm.tech.controller.TechMilestoneController;
 import com.hrm.tech.controller.TechProjectController;
 import com.hrm.tech.controller.TechSkillController;
+import com.hrm.tech.controller.TechWorklogController;
 import com.hrm.tech.dto.UserSkillResponse;
 import com.hrm.tech.entity.ProficiencyLevel;
 import com.hrm.tech.entity.SkillCategory;
@@ -37,6 +40,7 @@ class TechModulePermissionTest {
     private final TechProjectMemberRepository memberRepository = mock(TechProjectMemberRepository.class);
     private final UserRepository userRepository = mock(UserRepository.class);
     private final DepartmentRepository departmentRepository = mock(DepartmentRepository.class);
+    private final NotificationService notificationService = mock(NotificationService.class);
 
     private TechSkillService techSkillService;
 
@@ -48,7 +52,8 @@ class TechModulePermissionTest {
                 certificateRepository,
                 memberRepository,
                 userRepository,
-                departmentRepository
+                departmentRepository,
+                notificationService
         );
     }
 
@@ -107,6 +112,22 @@ class TechModulePermissionTest {
 
         assertHasCeo(TechSkillController.class, "createSkill", false);
         assertHasCeo(TechSkillController.class, "verifySkill", false);
+    }
+
+    @Test
+    void techMilestoneAndWorklogControllersEnforceExecutiveReadOnlyForCeo() {
+        assertHasCeo(TechMilestoneController.class, "getProjectMilestones", true);
+        assertHasCeo(TechMilestoneController.class, "generateHealthBrief", true);
+        assertHasCeo(TechMilestoneController.class, "createMilestone", false);
+        assertHasCeo(TechMilestoneController.class, "updateMilestone", false);
+        assertHasCeo(TechMilestoneController.class, "deleteMilestone", false);
+
+        assertHasCeo(TechWorklogController.class, "getDepartmentWorklogs", true);
+        assertHasCeo(TechWorklogController.class, "getDepartmentWorklogsPaginated", true);
+        assertHasCeo(TechWorklogController.class, "getAnalytics", true);
+        assertHasCeo(TechWorklogController.class, "approveWorklog", false);
+        assertHasCeo(TechWorklogController.class, "rejectWorklog", false);
+        assertHasCeo(TechWorklogController.class, "batchApproveWorklogs", false);
     }
 
     private void assertHasCeo(Class<?> clazz, String methodName, boolean expectedAllowed) {

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Search,
   CheckCircle2,
@@ -28,6 +28,7 @@ import {
   PROFICIENCY_CONFIG,
   RADAR_DIMENSIONS,
   sortSkillsByLevel,
+  scrollElementIntoViewCleanly,
 } from '../techHelpers';
 
 function TechCoverageTooltip({ active, payload }) {
@@ -59,6 +60,8 @@ export default function SkillsMatrixTab({
   onOpenProjectSelect,
   onVerifySkill,
   verifyingId = null,
+  focusUserRequest = null,
+  onFocusHandled,
 }) {
   const toast = useToast();
 
@@ -74,6 +77,20 @@ export default function SkillsMatrixTab({
   const [matrixKeyword, setMatrixKeyword] = useState('');
   const [verificationFilter, setVerificationFilter] = useState('all'); // 'all' | 'pending' | 'verified'
   const [benchOnlyView, setBenchOnlyView] = useState(false);
+  const [highlightState, setHighlightState] = useState(null);
+  const highlightedUserId = highlightState?.id || null;
+  const directoryRef = useRef(null);
+  const lastAppliedFocusRef = useRef(0);
+  const lastScrolledFocusRef = useRef(0);
+
+  useEffect(() => {
+    const reqAt = focusUserRequest?.requestedAt;
+    if (!reqAt || reqAt === lastAppliedFocusRef.current) return;
+    lastAppliedFocusRef.current = reqAt;
+    setMatrixKeyword('');
+    setBenchOnlyView(false);
+    setVerificationFilter(focusUserRequest.userId ? 'all' : 'pending');
+  }, [focusUserRequest]);
 
   // Compute Department Average 6-Axis Radar & Tech Coverage
   const capabilitySummary = useMemo(() => {
@@ -186,6 +203,81 @@ export default function SkillsMatrixTab({
       return true;
     });
   }, [matrixData, matrixKeyword, benchOnlyView, verificationFilter]);
+
+  const matchedUserId = useMemo(() => {
+    if (!focusUserRequest?.requestedAt) return null;
+    if (focusUserRequest.userId) {
+      const found = filteredMatrix.find((p) => String(p.userId) === String(focusUserRequest.userId));
+      return found ? String(found.userId) : null;
+    }
+    const firstPending = filteredMatrix.find((p) => (p.skills || []).some((s) => !s.isVerified));
+    return firstPending ? String(firstPending.userId) : filteredMatrix[0] ? String(filteredMatrix[0].userId) : null;
+  }, [focusUserRequest, filteredMatrix]);
+
+  useEffect(() => {
+    const reqAt = focusUserRequest?.requestedAt;
+    if (!reqAt || lastScrolledFocusRef.current === reqAt) return;
+
+    if (focusUserRequest.userId && !matchedUserId) {
+      const waitTimer = setTimeout(() => {
+        if (lastScrolledFocusRef.current !== reqAt && directoryRef.current) {
+          lastScrolledFocusRef.current = reqAt;
+          scrollElementIntoViewCleanly(directoryRef.current, 'start');
+          if (onFocusHandled) onFocusHandled(reqAt);
+        }
+      }, 2200);
+      return () => clearTimeout(waitTimer);
+    }
+
+    const targetUid = matchedUserId;
+    let initialTimer = null;
+    let retryTimer = null;
+    let realignTimer = null;
+
+    const attemptScroll = (retryCount = 0) => {
+      const targetEl = targetUid ? document.getElementById(`tech-skill-row-${targetUid}`) : null;
+      const anchorEl = targetEl || directoryRef.current;
+      if (!anchorEl || (targetUid && !targetEl && retryCount < 6)) {
+        if (retryCount < 6) {
+          retryTimer = setTimeout(() => attemptScroll(retryCount + 1), 100);
+        }
+        return;
+      }
+
+      lastScrolledFocusRef.current = reqAt;
+      if (targetUid) {
+        setHighlightState({ id: targetUid, at: reqAt });
+      }
+      scrollElementIntoViewCleanly(anchorEl, targetEl ? 'center' : 'start');
+      if (onFocusHandled) {
+        onFocusHandled(reqAt);
+      }
+
+      realignTimer = setTimeout(() => {
+        const freshTargetEl = targetUid ? document.getElementById(`tech-skill-row-${targetUid}`) : null;
+        const freshAnchor = freshTargetEl || directoryRef.current;
+        if (freshAnchor) {
+          scrollElementIntoViewCleanly(freshAnchor, freshTargetEl ? 'center' : 'start');
+        }
+      }, 320);
+    };
+
+    initialTimer = setTimeout(() => attemptScroll(0), 180);
+
+    return () => {
+      clearTimeout(initialTimer);
+      if (retryTimer) clearTimeout(retryTimer);
+      if (realignTimer) clearTimeout(realignTimer);
+    };
+  }, [focusUserRequest, matchedUserId, onFocusHandled]);
+
+  useEffect(() => {
+    if (!highlightState?.id) return;
+    const clearTimer = setTimeout(() => {
+      setHighlightState((prev) => (prev && prev.at === highlightState.at ? null : prev));
+    }, 5000);
+    return () => clearTimeout(clearTimer);
+  }, [highlightState]);
 
   return (
     <div className="space-y-5">
@@ -505,7 +597,10 @@ export default function SkillsMatrixTab({
       </div>
 
       {/* 3. Department Engineer Skills Directory */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden">
+      <div
+        ref={directoryRef}
+        className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden"
+      >
         <div className="p-5 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-slate-50/40">
           <div>
             <h3 className="text-sm font-bold text-slate-900">
@@ -611,7 +706,15 @@ export default function SkillsMatrixTab({
               const displayedSkills = sortSkillsByLevel(filteredSkills);
 
               return (
-                <div key={profile.userId} className="p-5 hover:bg-blue-50/25 transition space-y-3">
+                <div
+                  key={profile.userId}
+                  id={`tech-skill-row-${profile.userId}`}
+                  className={`p-5 transition-colors duration-500 space-y-3 ${
+                    highlightedUserId === String(profile.userId)
+                      ? 'bg-blue-50/90 ring-2 ring-inset ring-blue-500'
+                      : 'hover:bg-blue-50/25'
+                  }`}
+                >
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                     {/* Info */}
                     <div className="flex items-center gap-3">

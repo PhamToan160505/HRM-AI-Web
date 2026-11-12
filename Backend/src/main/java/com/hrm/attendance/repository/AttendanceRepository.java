@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -14,6 +15,7 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
     List<Attendance> findByEmployeeIdOrderByDateDesc(Long employeeId);
     List<Attendance> findByEmployeeIdInAndDate(List<Long> employeeIds, LocalDate date);
     List<Attendance> findByEmployeeIdAndDateBetween(Long employeeId, LocalDate startDate, LocalDate endDate);
+    List<Attendance> findByEmployeeIdInAndDateBetween(Collection<Long> employeeIds, LocalDate startDate, LocalDate endDate);
     boolean existsByEmployeeIdAndDateBetweenAndExceptionStatus(Long employeeId, LocalDate startDate, LocalDate endDate, String exceptionStatus);
     
     long countByDateAndStatus(LocalDate date, String status);

@@ -1,7 +1,10 @@
 import React, { useContext } from 'react';
 import { NotificationContext } from '../../context/NotificationContext';
 import { useAuth } from '../../context/AuthContext';
-import { resolveNotificationLink } from '../../utils/notificationUtils';
+import {
+  resolveNotificationLink,
+  createLiveNotificationNavToken,
+} from '../../utils/notificationUtils';
 import { AlertTriangle, Info, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -68,8 +71,23 @@ const NotificationModal = () => {
               className="mt-3 inline-flex w-full justify-center rounded-lg bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto transition-colors"
               onClick={() => {
                 handleClose();
-                const targetUrl = resolveNotificationLink(notif.lienKet, role);
-                if (targetUrl) navigate(targetUrl);
+                const targetUrl = resolveNotificationLink(notif.lienKet, role, notif.loai, notif.noiDung);
+                if (targetUrl) {
+                  const triggeredAt = createLiveNotificationNavToken();
+                  window.dispatchEvent(
+                    new CustomEvent('hrm:notification-navigate', {
+                      detail: { targetUrl, notification: notif, triggeredAt },
+                    })
+                  );
+                  navigate(targetUrl, {
+                    state: {
+                      fromNotificationAt: triggeredAt,
+                      notificationId: notif.id,
+                      notificationType: notif.loai,
+                      notificationContent: notif.noiDung,
+                    },
+                  });
+                }
               }}
             >
               Xem chi tiết

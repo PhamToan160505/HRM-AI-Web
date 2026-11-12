@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import {
@@ -19,13 +19,17 @@ import {
   Activity,
   ShieldCheck,
   ChevronRight,
+  Flag,
 } from 'lucide-react';
 import api from '../../../services/api';
+import ProjectHealthPanel from '../components/ProjectHealthPanel';
 import {
   PROJECT_STATUS_CONFIG,
   PROJECT_ROLE_LABELS,
+  MILESTONE_STATUS_CONFIG,
   formatDateVN,
   formatDateTimeVN,
+  formatHours,
   computeTimelineHealth,
 } from './ceoTechHelpers';
 
@@ -37,11 +41,37 @@ export default function CeoProjectDetailModal({
   hasTopModalOpen = false,
 }) {
   const [projectData, setProjectData] = useState(project);
+  const [milestoneSummary, setMilestoneSummary] = useState(null);
+  const [loadingMilestones, setLoadingMilestones] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  const fetchFreshDetail = useCallback(async (projectId) => {
+    if (!projectId) return;
+    try {
+      setRefreshing(true);
+      setLoadingMilestones(true);
+      const [projRes, msRes] = await Promise.allSettled([
+        api.get(`/api/tech/projects/${projectId}`),
+        api.get(`/api/tech/projects/${projectId}/milestones`),
+      ]);
+      if (projRes.status === 'fulfilled' && projRes.value?.data?.data) {
+        setProjectData(projRes.value.data.data);
+      }
+      if (msRes.status === 'fulfilled' && msRes.value?.data?.data) {
+        setMilestoneSummary(msRes.value.data.data);
+      }
+    } catch (err) {
+      console.error('Không thể tải chi tiết dự án:', err);
+    } finally {
+      setRefreshing(false);
+      setLoadingMilestones(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (isOpen && project?.id) {
       setProjectData(project);
+      setMilestoneSummary(null);
       fetchFreshDetail(project.id);
       document.body.style.overflow = 'hidden';
     }
@@ -54,7 +84,7 @@ export default function CeoProjectDetailModal({
         }
       }, 50);
     };
-  }, [isOpen, project]);
+  }, [isOpen, project, fetchFreshDetail]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -66,20 +96,6 @@ export default function CeoProjectDetailModal({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, hasTopModalOpen, onClose]);
-
-  const fetchFreshDetail = async (projectId) => {
-    try {
-      setRefreshing(true);
-      const res = await api.get(`/api/tech/projects/${projectId}`);
-      if (res.data?.data) {
-        setProjectData(res.data.data);
-      }
-    } catch (err) {
-      console.error('Không thể tải chi tiết dự án:', err);
-    } finally {
-      setRefreshing(false);
-    }
-  };
 
   if (!isOpen || !projectData) return null;
 
@@ -97,6 +113,13 @@ export default function CeoProjectDetailModal({
   const hasOverload = overloadedMembers.length > 0;
   const fteEquivalent = ((projectData.totalAllocationSum || 0) / 100).toFixed(1);
   const timeline = computeTimelineHealth(projectData);
+
+  const milestones = milestoneSummary?.milestones || [];
+  const actualProgress =
+    milestoneSummary?.actualProgressPercent ?? projectData.actualProgressPercent ?? null;
+  const totalWeightPercent = milestoneSummary?.totalWeightPercent ?? 0;
+  const completedMsCount = milestoneSummary?.completedCount ?? projectData.completedMilestonesCount ?? 0;
+  const totalMsCount = milestoneSummary?.totalCount ?? projectData.milestonesCount ?? milestones.length;
 
   return createPortal(
     <div
@@ -235,29 +258,166 @@ export default function CeoProjectDetailModal({
             </div>
           </div>
 
-          {/* Tiến độ thời gian trực quan */}
-          {projectData.startDate && projectData.endDate && (
-            <div className="p-4 rounded-xl bg-blue-50/50 border border-blue-100 space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-slate-700">Độ phủ lịch trình thực hiện</span>
-                <span className="font-bold text-blue-700 tabular">{timeline.elapsedPercent}% chu kỳ thời gian</span>
+          {/* Tiến độ Kép: Nghiệm thu Milestones vs Chu kỳ Lịch trình */}
+          <div className="p-4 rounded-xl bg-blue-50/50 border border-blue-100 space-y-3">
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs gap-2 flex-wrap">
+                <span className="font-semibold text-slate-700 flex items-center gap-1.5">
+                  <Flag size={13} className="text-[#1E3A8A] shrink-0" />
+                  <span>Tiến độ Nghiệm thu Thực tế (Milestones)</span>
+                </span>
+                <span className="font-bold text-[#1E3A8A] tabular">
+                  {actualProgress !== null
+                    ? `${actualProgress}% (${completedMsCount}/${totalMsCount} mốc)`
+                    : 'Chưa thiết lập mốc'}
+                </span>
               </div>
               <div className="w-full h-2 rounded-full bg-white border border-blue-100 overflow-hidden">
                 <div
-                  className={`h-full rounded-full transition-transform duration-300 origin-left ${
-                    timeline.tone === 'overdue'
-                      ? 'bg-rose-500'
-                      : timeline.tone === 'dueSoon'
-                      ? 'bg-orange-500'
-                      : timeline.tone === 'completed'
-                      ? 'bg-emerald-600'
-                      : 'bg-blue-600'
-                  }`}
-                  style={{ width: `${timeline.elapsedPercent}%` }}
+                  className="h-full rounded-full bg-[#1E3A8A] transition-all duration-300"
+                  style={{ width: `${actualProgress ?? 0}%` }}
                 />
               </div>
             </div>
-          )}
+
+            {projectData.startDate && projectData.endDate && (
+              <div className="space-y-1.5 pt-1 border-t border-blue-100/80">
+                <div className="flex items-center justify-between text-xs gap-2 flex-wrap">
+                  <span className="font-semibold text-slate-700">Độ phủ lịch trình thực hiện</span>
+                  <span className="font-bold text-blue-700 tabular">
+                    {timeline.elapsedPercent}% chu kỳ thời gian
+                  </span>
+                </div>
+                <div className="w-full h-2 rounded-full bg-white border border-blue-100 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-transform duration-300 origin-left ${
+                      timeline.tone === 'overdue'
+                        ? 'bg-rose-500'
+                        : timeline.tone === 'dueSoon'
+                        ? 'bg-orange-500'
+                        : timeline.tone === 'completed'
+                        ? 'bg-emerald-600'
+                        : 'bg-blue-600'
+                    }`}
+                    style={{ width: `${timeline.elapsedPercent}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between text-[11px] text-slate-600 pt-1 border-t border-blue-100/80 flex-wrap gap-2 tabular">
+              <span>
+                Giờ công đã duyệt:{' '}
+                <strong className="text-[#1E3A8A]">
+                  {formatHours(projectData.totalApprovedHours || 0)}
+                </strong>
+              </span>
+              {(projectData.totalPendingHours || 0) > 0 && (
+                <span className="text-orange-700 font-semibold">
+                  Chờ thẩm định: {formatHours(projectData.totalPendingHours)}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Mốc Tiến độ & Bàn giao (Read-Only cho CEO) */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <h4 className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                <Flag size={14} className="text-blue-600" />
+                <span>Mốc Tiến độ &amp; Bàn giao ({totalMsCount} mốc)</span>
+              </h4>
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 tabular whitespace-nowrap">
+                Tổng trọng số: {totalWeightPercent}% / 100%
+              </span>
+            </div>
+
+            {loadingMilestones && milestones.length === 0 ? (
+              <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 text-xs text-slate-500">
+                Đang tải danh sách mốc tiến độ...
+              </div>
+            ) : milestones.length === 0 ? (
+              <div className="p-4 rounded-xl border border-dashed border-slate-200 bg-slate-50/60 text-xs text-slate-500 text-center">
+                Dự án chưa thiết lập mốc nghiệm thu (Milestone).
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {milestones.map((ms) => {
+                  const msCfg = MILESTONE_STATUS_CONFIG[ms.status] || {
+                    label: ms.status,
+                    badgeClass: 'bg-slate-100 text-slate-700 border-slate-200',
+                  };
+                  return (
+                    <div
+                      key={ms.id}
+                      className="p-3.5 rounded-xl border border-slate-200/90 bg-white space-y-2"
+                    >
+                      <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div className="space-y-1 min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap shrink-0 ${msCfg.badgeClass}`}
+                            >
+                              {msCfg.label}
+                            </span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-[#1E3A8A] border border-blue-200 tabular whitespace-nowrap shrink-0">
+                              Trọng số {ms.weightPercent}%
+                            </span>
+                            {ms.isOverdue && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap shrink-0">
+                                Quá hạn mốc
+                              </span>
+                            )}
+                            {!ms.isOverdue && ms.isDueSoon && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 border border-orange-200 whitespace-nowrap shrink-0">
+                                Sắp đến hạn
+                              </span>
+                            )}
+                          </div>
+                          <h5 className="text-xs font-bold text-slate-900">{ms.title}</h5>
+                          {ms.description && (
+                            <p className="text-[11px] text-slate-600 leading-relaxed text-pretty">
+                              {ms.description}
+                            </p>
+                          )}
+                        </div>
+                        <div className="text-right shrink-0 space-y-1 tabular">
+                          <p className="text-xs font-extrabold text-[#1E3A8A]">{ms.completionPercent}%</p>
+                          <p className="text-[11px] text-slate-500">Hạn: {formatDateVN(ms.dueDate)}</p>
+                        </div>
+                      </div>
+                      <div className="w-full h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${
+                            ms.status === 'COMPLETED'
+                              ? 'bg-emerald-600'
+                              : ms.isOverdue || ms.status === 'DELAYED'
+                              ? 'bg-rose-500'
+                              : 'bg-blue-600'
+                          }`}
+                          style={{ width: `${ms.completionPercent}%` }}
+                        />
+                      </div>
+                      {ms.deliverableUrl && (
+                        <a
+                          href={ms.deliverableUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:underline"
+                        >
+                          <span>Link nghiệm thu / Release</span>
+                          <ExternalLink size={11} />
+                        </a>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* AI Project Health Brief */}
+          <ProjectHealthPanel projectId={projectData.id} />
 
           {/* Mô tả & Mục tiêu */}
           <div className="space-y-2">

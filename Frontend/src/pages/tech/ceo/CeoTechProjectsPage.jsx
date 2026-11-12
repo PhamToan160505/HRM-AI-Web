@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import {
   FolderGit2,
   Users,
@@ -9,6 +10,7 @@ import {
   Activity,
   Layers,
   CheckCircle2,
+  Clock,
 } from 'lucide-react';
 import { MotionConfig, motion, AnimatePresence } from 'framer-motion';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
@@ -17,9 +19,14 @@ import { useToast } from '../../../components/common/Toast';
 import CeoPortfolioTab from './CeoPortfolioTab';
 import CeoCapacityBenchTab from './CeoCapacityBenchTab';
 import CeoCapabilityTab from './CeoCapabilityTab';
+import CeoTimesheetTab from './CeoTimesheetTab';
 import CeoProjectDetailModal from './CeoProjectDetailModal';
 import CeoTechProfileModal from './CeoTechProfileModal';
-import { PROJECT_STATUS_CONFIG, computeTimelineHealth } from './ceoTechHelpers';
+import { PROJECT_STATUS_CONFIG, computeTimelineHealth, getCurrentMonthStr } from './ceoTechHelpers';
+import {
+  isMatchingLiveNotificationNavToken,
+  clearLiveNotificationNavToken,
+} from '../../../utils/notificationUtils';
 
 function StatusDonutTooltip({ active, payload }) {
   if (!active || !payload || !payload.length) return null;
@@ -34,23 +41,53 @@ function StatusDonutTooltip({ active, payload }) {
   );
 }
 
+const VALID_TABS = ['projects', 'bench', 'skills', 'timesheet'];
+
 export default function CeoTechProjectsPage() {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
   const toast = useToast();
   const toastRef = useRef(toast);
   toastRef.current = toast;
+
+  const initialTabFromQuery = VALID_TABS.includes(searchParams.get('tab'))
+    ? searchParams.get('tab')
+    : 'projects';
+  const queryMonthInit = searchParams.get('month');
+  const initialMonthFromQuery =
+    queryMonthInit && /^\d{4}-\d{2}$/.test(queryMonthInit)
+      ? queryMonthInit
+      : getCurrentMonthStr();
 
   // Data states
   const [projects, setProjects] = useState([]);
   const [benchUsers, setBenchUsers] = useState([]);
   const [matrixData, setMatrixData] = useState([]);
   const [availableSkills, setAvailableSkills] = useState([]);
+  const [selectedMonth, setSelectedMonth] = useState(initialMonthFromQuery);
+  const selectedMonthRef = useRef(selectedMonth);
+  selectedMonthRef.current = selectedMonth;
+  const [worklogs, setWorklogs] = useState([]);
+  const [worklogPageData, setWorklogPageData] = useState(null);
+  const [worklogQuery, setWorklogQuery] = useState({
+    page: 0,
+    size: 5,
+    projectId: '',
+    status: '',
+  });
+  const worklogQueryRef = useRef(worklogQuery);
+  worklogQueryRef.current = worklogQuery;
+  const [worklogsLoading, setWorklogsLoading] = useState(false);
+  const [worklogAnalytics, setWorklogAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
+  const lastFetchTimeRef = useRef(0);
 
   // Navigation & filter states
-  const [activeTab, setActiveTab] = useState('projects'); // 'projects' | 'bench' | 'skills'
+  const [activeTab, setActiveTab] = useState(initialTabFromQuery); // 'projects' | 'bench' | 'skills' | 'timesheet'
   const [projectStatusFilter, setProjectStatusFilter] = useState('');
 
   // Modal states (Nested support: ProjectDetail -> Engineer TechProfile)
@@ -58,37 +95,223 @@ export default function CeoTechProjectsPage() {
   const [selectedProfile, setSelectedProfile] = useState(null);
   const [loadingProfileId, setLoadingProfileId] = useState(null);
 
-  const loadAllData = useCallback(async (isManualRefresh = false) => {
-    try {
-      if (isManualRefresh) setRefreshing(true);
-      else setLoading(true);
-      setErrorMsg('');
+  const buildWorklogParams = useCallback((monthStr, queryObj) => {
+    const q = queryObj || {};
+    return {
+      month: monthStr || getCurrentMonthStr(),
+      page: q.page ?? 0,
+      size: q.size ?? 5,
+      ...(q.projectId ? { projectId: Number(q.projectId) } : {}),
+      ...(q.status ? { status: q.status } : {}),
+    };
+  }, []);
 
-      const [projRes, benchRes, matrixRes, skillsRes] = await Promise.all([
-        api.get('/api/tech/projects'),
-        api.get('/api/tech/projects/bench'),
-        api.get('/api/tech/skills/matrix'),
-        api.get('/api/tech/skills'),
-      ]);
-
-      setProjects(projRes.data?.data || []);
-      setBenchUsers(benchRes.data?.data || []);
-      setMatrixData(matrixRes.data?.data || []);
-      setAvailableSkills(skillsRes.data?.data || []);
-      setLastUpdated(new Date());
-    } catch (err) {
-      console.error('Lỗi tải dữ liệu giám sát công nghệ:', err);
-      const msg = err.response?.data?.message || 'Không thể kết nối máy chủ để tải dữ liệu phòng Công nghệ.';
-      setErrorMsg(msg);
-      toastRef.current?.show('Lỗi tải dữ liệu', msg, 'error');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+  const applyWorklogPageResponse = useCallback((pageDto) => {
+    setWorklogPageData(pageDto || null);
+    setWorklogs(pageDto?.content || []);
+    if (
+      pageDto &&
+      typeof pageDto.number === 'number' &&
+      pageDto.number !== worklogQueryRef.current.page
+    ) {
+      const synced = { ...worklogQueryRef.current, page: pageDto.number };
+      worklogQueryRef.current = synced;
+      setWorklogQuery(synced);
     }
   }, []);
 
+  const loadAllData = useCallback(
+    async ({ manual = false, quiet = false } = {}) => {
+      try {
+        if (manual) setRefreshing(true);
+        else if (!quiet) setLoading(true);
+        if (!quiet) setErrorMsg('');
+
+        const activeMonth = selectedMonthRef.current || getCurrentMonthStr();
+        const [projRes, benchRes, matrixRes, skillsRes, wlRes, analyticsRes] = await Promise.all([
+          api.get('/api/tech/projects'),
+          api.get('/api/tech/projects/bench'),
+          api.get('/api/tech/skills/matrix'),
+          api.get('/api/tech/skills'),
+          api.get('/api/tech/worklogs/paginated', {
+            params: buildWorklogParams(activeMonth, worklogQueryRef.current),
+          }),
+          api.get('/api/tech/worklogs/analytics', { params: { month: activeMonth } }),
+        ]);
+
+        const freshProjects = projRes.data?.data || [];
+        setProjects(freshProjects);
+        setSelectedDetailProject((prev) =>
+          prev ? freshProjects.find((p) => String(p.id) === String(prev.id)) || prev : prev
+        );
+        setBenchUsers(benchRes.data?.data || []);
+        setMatrixData(matrixRes.data?.data || []);
+        setAvailableSkills(skillsRes.data?.data || []);
+        applyWorklogPageResponse(wlRes.data?.data);
+        setWorklogAnalytics(analyticsRes.data?.data || null);
+        setLastUpdated(new Date());
+        lastFetchTimeRef.current = Date.now();
+      } catch (err) {
+        console.error('Lỗi tải dữ liệu giám sát công nghệ:', err);
+        const msg = err.response?.data?.message || 'Không thể kết nối máy chủ để tải dữ liệu phòng Công nghệ.';
+        if (!quiet) setErrorMsg(msg);
+        toastRef.current?.show('Lỗi tải dữ liệu', msg, 'error');
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [buildWorklogParams, applyWorklogPageResponse]
+  );
+
+  const handleChangeWorklogQuery = useCallback(
+    async (nextOrUpdater) => {
+      const nextQuery =
+        typeof nextOrUpdater === 'function'
+          ? nextOrUpdater(worklogQueryRef.current)
+          : nextOrUpdater;
+      worklogQueryRef.current = nextQuery;
+      setWorklogQuery(nextQuery);
+      try {
+        setWorklogsLoading(true);
+        const activeMonth = selectedMonthRef.current || getCurrentMonthStr();
+        const wlRes = await api.get('/api/tech/worklogs/paginated', {
+          params: buildWorklogParams(activeMonth, nextQuery),
+        });
+        applyWorklogPageResponse(wlRes.data?.data);
+        lastFetchTimeRef.current = Date.now();
+      } catch (err) {
+        toastRef.current?.show(
+          'Lỗi',
+          err.response?.data?.message || 'Không thể tải danh sách nhật ký giờ công',
+          'error'
+        );
+      } finally {
+        setWorklogsLoading(false);
+      }
+    },
+    [buildWorklogParams, applyWorklogPageResponse]
+  );
+
+  const handleMonthChange = useCallback(
+    async (newMonth) => {
+      const safeMonth = newMonth || getCurrentMonthStr();
+      selectedMonthRef.current = safeMonth;
+      setSelectedMonth(safeMonth);
+      const resetPageQuery = { ...worklogQueryRef.current, page: 0 };
+      worklogQueryRef.current = resetPageQuery;
+      setWorklogQuery(resetPageQuery);
+      try {
+        setWorklogsLoading(true);
+        const [wlRes, analyticsRes] = await Promise.all([
+          api.get('/api/tech/worklogs/paginated', {
+            params: buildWorklogParams(safeMonth, resetPageQuery),
+          }),
+          api.get('/api/tech/worklogs/analytics', { params: { month: safeMonth } }),
+        ]);
+        applyWorklogPageResponse(wlRes.data?.data);
+        setWorklogAnalytics(analyticsRes.data?.data || null);
+        lastFetchTimeRef.current = Date.now();
+      } catch (err) {
+        toastRef.current?.show('Lỗi', err.response?.data?.message || 'Không thể tải dữ liệu giờ công theo tháng', 'error');
+      } finally {
+        setWorklogsLoading(false);
+      }
+    },
+    [buildWorklogParams, applyWorklogPageResponse]
+  );
+
+  const handleSelectTab = useCallback(
+    (tabId) => {
+      const nextTab = VALID_TABS.includes(tabId) ? tabId : 'projects';
+      setActiveTab(nextTab);
+      const nextParams = new URLSearchParams();
+      if (nextTab !== 'projects') nextParams.set('tab', nextTab);
+      setSearchParams(nextParams, { replace: true });
+      if (Date.now() - lastFetchTimeRef.current > 1500) {
+        loadAllData({ quiet: true });
+      }
+    },
+    [setSearchParams, loadAllData]
+  );
+
   useEffect(() => {
-    loadAllData(false);
+    const queryTab = searchParams.get('tab');
+    const queryMonth = searchParams.get('month');
+    const queryWorklogId = searchParams.get('worklogId');
+    const queryUserId = searchParams.get('userId');
+    const fromNotifAt = location.state?.fromNotificationAt;
+    const isLiveNotifClick = isMatchingLiveNotificationNavToken(fromNotifAt);
+
+    if (queryMonth && /^\d{4}-\d{2}$/.test(queryMonth) && queryMonth !== selectedMonthRef.current) {
+      selectedMonthRef.current = queryMonth;
+      setSelectedMonth(queryMonth);
+    }
+
+    if (queryTab && VALID_TABS.includes(queryTab)) {
+      setActiveTab(queryTab);
+    }
+
+    if (isLiveNotifClick) {
+      clearLiveNotificationNavToken(fromNotifAt);
+      if (lastFetchTimeRef.current > 0) {
+        loadAllData({ quiet: true });
+      }
+    }
+
+    if (queryWorklogId || queryUserId || fromNotifAt) {
+      const cleaned = new URLSearchParams(searchParams);
+      cleaned.delete('worklogId');
+      cleaned.delete('userId');
+      const cleanSearch = cleaned.toString();
+      navigate(
+        { pathname: location.pathname, search: cleanSearch ? `?${cleanSearch}` : '' },
+        { replace: true, state: null }
+      );
+    }
+  }, [searchParams, location.pathname, location.state, navigate, loadAllData]);
+
+  useEffect(() => {
+    loadAllData();
+  }, [loadAllData]);
+
+  // Đồng bộ Realtime khi có thay đổi Dự án / Worklog / Kỹ năng từ Kỹ sư hoặc Trưởng phòng
+  useEffect(() => {
+    let timerId = null;
+    const scheduleQuietRefresh = () => {
+      if (timerId) clearTimeout(timerId);
+      timerId = setTimeout(() => {
+        loadAllData({ quiet: true });
+      }, 180);
+    };
+
+    const handleRealtimeNotification = (e) => {
+      const notifType = String(e?.detail?.loai || '').toUpperCase();
+      if (notifType.startsWith('TECH_')) {
+        scheduleQuietRefresh();
+      }
+    };
+
+    const handleTechSync = () => {
+      scheduleQuietRefresh();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && Date.now() - lastFetchTimeRef.current > 3000) {
+        scheduleQuietRefresh();
+      }
+    };
+
+    window.addEventListener('hrm:notification', handleRealtimeNotification);
+    window.addEventListener('hrm:tech-sync', handleTechSync);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      if (timerId) clearTimeout(timerId);
+      window.removeEventListener('hrm:notification', handleRealtimeNotification);
+      window.removeEventListener('hrm:tech-sync', handleTechSync);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [loadAllData]);
 
   const handleInspectEngineer = useCallback(async (userId) => {
@@ -126,14 +349,16 @@ export default function CeoTechProjectsPage() {
     // Real risk signals count
     let overdueProjects = 0;
     let missingLeadProjects = 0;
+    let overdueMilestones = 0;
     projects.forEach((p) => {
       if (p.status === 'COMPLETED' || p.status === 'PAUSED') return;
       const health = computeTimelineHealth(p);
       if (health.tone === 'overdue') overdueProjects += 1;
       if (!p.techLeadName) missingLeadProjects += 1;
+      if ((p.overdueMilestonesCount || 0) > 0) overdueMilestones += p.overdueMilestonesCount;
     });
 
-    const riskCount = overloadedEngineers + overdueProjects + missingLeadProjects;
+    const riskCount = overloadedEngineers + overdueProjects + missingLeadProjects + overdueMilestones;
 
     // Status distribution for Donut chart
     const statusOrder = ['IN_PROGRESS', 'PLANNING', 'MAINTENANCE', 'COMPLETED', 'PAUSED'];
@@ -189,11 +414,17 @@ export default function CeoTechProjectsPage() {
       count: matrixData.length,
       icon: Cpu,
     },
+    {
+      id: 'timesheet',
+      label: 'Giờ công & Hiệu suất',
+      count: worklogPageData?.monthTotalCount ?? worklogs.length,
+      icon: Clock,
+    },
   ];
 
   const handleSelectStatusFromChart = (statusKey) => {
     setProjectStatusFilter((prev) => (prev === statusKey ? '' : statusKey));
-    setActiveTab('projects');
+    handleSelectTab('projects');
   };
 
   return (
@@ -230,7 +461,7 @@ export default function CeoTechProjectsPage() {
 
             <button
               type="button"
-              onClick={() => loadAllData(true)}
+              onClick={() => loadAllData({ manual: true })}
               disabled={refreshing || loading}
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-semibold transition cursor-pointer disabled:opacity-60"
             >
@@ -254,7 +485,7 @@ export default function CeoTechProjectsPage() {
             </div>
             <button
               type="button"
-              onClick={() => loadAllData(false)}
+              onClick={() => loadAllData({ manual: false })}
               className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-semibold transition cursor-pointer shrink-0"
             >
               Thử lại
@@ -291,7 +522,7 @@ export default function CeoTechProjectsPage() {
                   type="button"
                   onClick={() => {
                     setProjectStatusFilter('');
-                    setActiveTab('projects');
+                    handleSelectTab('projects');
                   }}
                   className="p-4 rounded-xl bg-slate-50/75 hover:bg-blue-50/50 border border-slate-200/75 hover:border-blue-300 text-left transition flex flex-col justify-between gap-2.5 cursor-pointer"
                 >
@@ -313,7 +544,7 @@ export default function CeoTechProjectsPage() {
                 {/* Well 2: Deployed FTE */}
                 <button
                   type="button"
-                  onClick={() => setActiveTab('bench')}
+                  onClick={() => handleSelectTab('bench')}
                   className="p-4 rounded-xl bg-slate-50/75 hover:bg-blue-50/50 border border-slate-200/75 hover:border-blue-300 text-left transition flex flex-col justify-between gap-2.5 cursor-pointer"
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -336,7 +567,7 @@ export default function CeoTechProjectsPage() {
                 {/* Well 3: Utilization Rate */}
                 <button
                   type="button"
-                  onClick={() => setActiveTab('bench')}
+                  onClick={() => handleSelectTab('bench')}
                   className="p-4 rounded-xl bg-slate-50/75 hover:bg-blue-50/50 border border-slate-200/75 hover:border-blue-300 text-left transition flex flex-col justify-between gap-2.5 cursor-pointer"
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -374,7 +605,7 @@ export default function CeoTechProjectsPage() {
                 {/* Well 4: Bench & Attention Signals */}
                 <button
                   type="button"
-                  onClick={() => setActiveTab(telemetry.riskCount > 0 ? 'projects' : 'bench')}
+                  onClick={() => handleSelectTab(telemetry.riskCount > 0 ? 'projects' : 'bench')}
                   className="p-4 rounded-xl bg-slate-50/75 hover:bg-blue-50/50 border border-slate-200/75 hover:border-blue-300 text-left transition flex flex-col justify-between gap-2.5 cursor-pointer"
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -519,7 +750,7 @@ export default function CeoTechProjectsPage() {
                   <button
                     type="button"
                     key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
+                    onClick={() => handleSelectTab(tab.id)}
                     className={`relative px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-colors flex items-center gap-2 cursor-pointer ${
                       isActive ? 'text-white' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                     }`}
@@ -576,6 +807,25 @@ export default function CeoTechProjectsPage() {
                   <CeoCapabilityTab
                     matrixData={matrixData}
                     availableSkills={availableSkills}
+                    onInspectEngineer={handleInspectEngineer}
+                  />
+                )}
+
+                {activeTab === 'timesheet' && (
+                  <CeoTimesheetTab
+                    analytics={worklogAnalytics}
+                    worklogs={worklogs}
+                    worklogPageData={worklogPageData}
+                    worklogQuery={worklogQuery}
+                    worklogsLoading={worklogsLoading}
+                    onChangeWorklogQuery={handleChangeWorklogQuery}
+                    projects={projects}
+                    selectedMonth={selectedMonth}
+                    onChangeMonth={handleMonthChange}
+                    onSelectProjectById={(pid) => {
+                      const found = projects.find((p) => String(p.id) === String(pid));
+                      if (found) setSelectedDetailProject(found);
+                    }}
                     onInspectEngineer={handleInspectEngineer}
                   />
                 )}

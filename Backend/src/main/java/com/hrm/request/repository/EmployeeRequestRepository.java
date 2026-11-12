@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 
 @Repository
@@ -18,6 +19,12 @@ public interface EmployeeRequestRepository extends JpaRepository<EmployeeRequest
 
     @Query("SELECT r FROM EmployeeRequest r WHERE r.user.id = :userId AND r.status = 'APPROVED' AND r.startDate <= :endDate AND r.endDate >= :startDate ORDER BY r.startDate DESC")
     List<EmployeeRequest> findApprovedRequestsForMonth(@Param("userId") Long userId, @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
+
+    @Query("SELECT r FROM EmployeeRequest r JOIN FETCH r.user WHERE r.user.id IN :userIds AND r.status = 'APPROVED' AND r.startDate <= :endDate AND r.endDate >= :startDate ORDER BY r.startDate DESC")
+    List<EmployeeRequest> findApprovedRequestsByUserIdsInRange(
+            @Param("userIds") Collection<Long> userIds,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate);
 
     @Query("SELECT r FROM EmployeeRequest r JOIN FETCH r.user WHERE r.status = :status ORDER BY r.createdAt DESC")
     List<EmployeeRequest> findByStatusWithUser(@Param("status") com.hrm.request.entity.RequestStatus status);
