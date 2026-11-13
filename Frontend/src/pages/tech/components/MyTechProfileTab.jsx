@@ -27,6 +27,7 @@ import {
   RADAR_DIMENSIONS,
   sortSkillsByLevel,
   formatDateVN,
+  getCertExpiryInfo,
 } from '../techHelpers';
 
 export default function MyTechProfileTab({ externalProfile = null, onRefreshProfile = null }) {
@@ -175,7 +176,10 @@ export default function MyTechProfileTab({ externalProfile = null, onRefreshProf
   const certsList = profile.certificates || [];
   const existingSkillIds = skillsList.map((s) => s.skillId);
   const sortedSkills = sortSkillsByLevel(skillsList);
-  const todayStr = new Date().toISOString().split('T')[0];
+  const alertCerts = certsList.filter((c) => {
+    const exp = getCertExpiryInfo(c);
+    return exp.status === 'EXPIRING_SOON' || exp.status === 'EXPIRED';
+  });
 
   return (
     <div className="space-y-6">
@@ -426,6 +430,20 @@ export default function MyTechProfileTab({ externalProfile = null, onRefreshProf
               </button>
             </div>
 
+            {alertCerts.length > 0 && (
+              <div className="p-3.5 rounded-xl bg-orange-50 border border-orange-200 flex items-start gap-2.5 text-xs text-orange-900">
+                <AlertTriangle size={16} className="text-orange-600 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <p className="font-bold">
+                    Bạn có {alertCerts.length} chứng chỉ quốc tế cần chú ý gia hạn!
+                  </p>
+                  <p className="text-[11px] text-orange-800/90 leading-relaxed">
+                    Chứng chỉ còn hiệu lực đóng góp điểm trong Trụ cột Năng lực (tối đa 8đ) khi đánh giá hiệu suất kỳ. Vui lòng cập nhật chứng chỉ mới hoặc gia hạn để giữ trọn điểm Telemetry.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {certsList.length === 0 ? (
               <div className="py-10 text-center rounded-xl border border-dashed border-slate-200 bg-slate-50/60 space-y-1.5">
                 <Award size={28} className="mx-auto text-slate-300" />
@@ -437,15 +455,19 @@ export default function MyTechProfileTab({ externalProfile = null, onRefreshProf
             ) : (
               <div className="space-y-2.5">
                 {certsList.map((cert) => {
-                  const isExpired = cert.expiryDate && cert.expiryDate < todayStr;
-                  const isLifetime = !cert.expiryDate;
+                  const expInfo = getCertExpiryInfo(cert);
+                  const isExpired = expInfo.status === 'EXPIRED';
+                  const isExpiringSoon = expInfo.status === 'EXPIRING_SOON';
+                  const isLifetime = expInfo.status === 'LIFETIME';
 
                   return (
                     <div
                       key={cert.id}
                       className={`p-4 rounded-xl border flex items-start justify-between gap-3 text-xs transition ${
                         isExpired
-                          ? 'bg-slate-50/80 border-slate-200 opacity-80'
+                          ? 'bg-rose-50/40 border-rose-200/90'
+                          : isExpiringSoon
+                          ? 'bg-orange-50/45 border-orange-200/90'
                           : 'bg-blue-50/35 border-blue-200/80 hover:border-blue-300'
                       }`}
                     >
@@ -453,7 +475,9 @@ export default function MyTechProfileTab({ externalProfile = null, onRefreshProf
                         <div
                           className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 mt-0.5 ${
                             isExpired
-                              ? 'bg-slate-200 text-slate-500 border-slate-300'
+                              ? 'bg-rose-100/80 text-rose-600 border-rose-200'
+                              : isExpiringSoon
+                              ? 'bg-orange-100/80 text-orange-600 border-orange-200'
                               : 'bg-blue-100/80 border-blue-200 text-[#1E3A8A]'
                           }`}
                         >
@@ -468,16 +492,22 @@ export default function MyTechProfileTab({ externalProfile = null, onRefreshProf
                                 <span>Vĩnh viễn</span>
                               </span>
                             )}
-                            {!isLifetime && !isExpired && (
+                            {expInfo.status === 'VALID' && (
                               <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200 whitespace-nowrap shrink-0">
                                 <CheckCircle2 size={10} className="text-blue-600 shrink-0" />
                                 <span>Còn hiệu lực</span>
                               </span>
                             )}
+                            {isExpiringSoon && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full border border-orange-200 whitespace-nowrap shrink-0 tabular">
+                                <Clock size={10} className="text-orange-600 shrink-0" />
+                                <span>{expInfo.label}</span>
+                              </span>
+                            )}
                             {isExpired && (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200 whitespace-nowrap shrink-0">
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200 whitespace-nowrap shrink-0 tabular">
                                 <AlertTriangle size={10} className="text-rose-600 shrink-0" />
-                                <span>Đã hết hạn</span>
+                                <span>{expInfo.label}</span>
                               </span>
                             )}
                           </div>
@@ -488,7 +518,15 @@ export default function MyTechProfileTab({ externalProfile = null, onRefreshProf
                             {cert.expiryDate && (
                               <span>
                                 {' '}• Hạn:{' '}
-                                <span className={isExpired ? 'text-rose-600 font-semibold' : ''}>
+                                <span
+                                  className={
+                                    isExpired
+                                      ? 'text-rose-600 font-semibold'
+                                      : isExpiringSoon
+                                      ? 'text-orange-700 font-semibold'
+                                      : ''
+                                  }
+                                >
                                   {formatDateVN(cert.expiryDate)}
                                 </span>
                               </span>

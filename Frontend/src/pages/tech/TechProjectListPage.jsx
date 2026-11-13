@@ -16,6 +16,7 @@ import {
   X,
   Briefcase,
   Clock,
+  TrendingUp,
 } from 'lucide-react';
 import { MotionConfig, motion, AnimatePresence } from 'framer-motion';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
@@ -31,11 +32,14 @@ import ProjectsPortfolioTab from './components/ProjectsPortfolioTab';
 import CapacityBenchTab from './components/CapacityBenchTab';
 import SkillsMatrixTab from './components/SkillsMatrixTab';
 import TimesheetAnalyticsTab from './components/TimesheetAnalyticsTab';
+import PerformanceCareerTab from './components/PerformanceCareerTab';
 import ProjectFormModal from './components/ProjectFormModal';
 import StaffingModal from './components/StaffingModal';
 import ProjectDetailModal from './components/ProjectDetailModal';
 import TechProfileModal from './components/TechProfileModal';
 import ProjectSelectModal from './components/ProjectSelectModal';
+import CreateEvaluationCycleModal from './components/CreateEvaluationCycleModal';
+import TechReviewDetailModal from './components/TechReviewDetailModal';
 
 function StatusDonutTooltip({ active, payload }) {
   if (!active || !payload || !payload.length) return null;
@@ -50,7 +54,7 @@ function StatusDonutTooltip({ active, payload }) {
   );
 }
 
-const VALID_TABS = ['projects', 'bench', 'skills', 'timesheet'];
+const VALID_TABS = ['projects', 'bench', 'skills', 'timesheet', 'reviews'];
 
 export default function TechProjectListPage() {
   const { user } = useAuth();
@@ -105,6 +109,25 @@ export default function TechProjectListPage() {
   worklogQueryRef.current = worklogQuery;
   const [worklogsLoading, setWorklogsLoading] = useState(false);
   const [worklogAnalytics, setWorklogAnalytics] = useState(null);
+  const [expiringCerts, setExpiringCerts] = useState([]);
+  const [remindingCertId, setRemindingCertId] = useState(null);
+  const [reviewCycles, setReviewCycles] = useState([]);
+  const [selectedCycleId, setSelectedCycleId] = useState('');
+  const selectedCycleIdRef = useRef(selectedCycleId);
+  selectedCycleIdRef.current = selectedCycleId;
+  const [reviews, setReviews] = useState([]);
+  const [reviewPageData, setReviewPageData] = useState(null);
+  const [reviewQuery, setReviewQuery] = useState({
+    page: 0,
+    size: 10,
+    status: '',
+    grade: '',
+    keyword: '',
+  });
+  const reviewQueryRef = useRef(reviewQuery);
+  reviewQueryRef.current = reviewQuery;
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewAnalytics, setReviewAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -116,12 +139,19 @@ export default function TechProjectListPage() {
       ? searchParams.get('worklogId') || null
       : null
   );
+  const initialLiveFocusReviewIdRef = useRef(
+    initialTabFromQuery === 'reviews' &&
+      isMatchingLiveNotificationNavToken(location.state?.fromNotificationAt)
+      ? searchParams.get('reviewId') || null
+      : null
+  );
 
   // Navigation & filter states
-  const [activeTab, setActiveTab] = useState(initialTabFromQuery); // 'projects' | 'bench' | 'skills' | 'timesheet'
+  const [activeTab, setActiveTab] = useState(initialTabFromQuery); // 'projects' | 'bench' | 'skills' | 'timesheet' | 'reviews'
   const [projectStatusFilter, setProjectStatusFilter] = useState('');
   const [focusWorklogRequest, setFocusWorklogRequest] = useState(null);
   const [focusUserRequest, setFocusUserRequest] = useState(null);
+  const [focusReviewRequest, setFocusReviewRequest] = useState(null);
 
   // Nested / Stacked Modals
   const [selectedDetailProject, setSelectedDetailProject] = useState(null);
@@ -130,6 +160,8 @@ export default function TechProjectListPage() {
   const [staffingProject, setStaffingProject] = useState(null);
   const [staffingInitialUserId, setStaffingInitialUserId] = useState(null);
   const [staffingInitialAllocation, setStaffingInitialAllocation] = useState(null);
+  const [isCycleModalOpen, setIsCycleModalOpen] = useState(false);
+  const [selectedReview, setSelectedReview] = useState(null);
 
   // Engineer Tech Profile & Quick Project Selection
   const [selectedProfile, setSelectedProfile] = useState(null);
@@ -173,24 +205,54 @@ export default function TechProjectListPage() {
     }
   }, []);
 
+  const buildReviewParams = useCallback((cycleIdStr, queryObj, focusId = null) => {
+    const q = queryObj || {};
+    return {
+      ...(cycleIdStr ? { cycleId: Number(cycleIdStr) } : {}),
+      page: q.page ?? 0,
+      size: q.size ?? 10,
+      ...(q.status ? { status: q.status } : {}),
+      ...(q.grade ? { grade: q.grade } : {}),
+      ...(q.keyword && q.keyword.trim() ? { keyword: q.keyword.trim() } : {}),
+      ...(focusId ? { focusReviewId: Number(focusId) } : {}),
+    };
+  }, []);
+
+  const applyReviewPageResponse = useCallback((pageDto) => {
+    setReviewPageData(pageDto || null);
+    setReviews(pageDto?.content || []);
+    if (
+      pageDto &&
+      typeof pageDto.number === 'number' &&
+      pageDto.number !== reviewQueryRef.current.page
+    ) {
+      const synced = { ...reviewQueryRef.current, page: pageDto.number };
+      reviewQueryRef.current = synced;
+      setReviewQuery(synced);
+    }
+  }, []);
+
   const loadAllData = useCallback(
-    async ({ manual = false, quiet = false, focusWorklogId = null } = {}) => {
+    async ({ manual = false, quiet = false, focusWorklogId = null, focusReviewId = null } = {}) => {
       try {
         if (manual) setRefreshing(true);
         else if (!quiet) setLoading(true);
         if (!quiet) setErrorMsg('');
 
         const activeMonth = selectedMonthRef.current || getCurrentMonthStr();
-        const [projRes, benchRes, matrixRes, skillsRes, wlRes, analyticsRes] = await Promise.all([
-          api.get('/api/tech/projects'),
-          api.get('/api/tech/projects/bench'),
-          api.get('/api/tech/skills/matrix'),
-          api.get('/api/tech/skills'),
-          api.get('/api/tech/worklogs/paginated', {
-            params: buildWorklogParams(activeMonth, worklogQueryRef.current, focusWorklogId),
-          }),
-          api.get('/api/tech/worklogs/analytics', { params: { month: activeMonth } }),
-        ]);
+        const [projRes, benchRes, matrixRes, skillsRes, wlRes, analyticsRes, expiringRes, cyclesRes] =
+          await Promise.all([
+            api.get('/api/tech/projects'),
+            api.get('/api/tech/projects/bench'),
+            api.get('/api/tech/skills/matrix'),
+            api.get('/api/tech/skills'),
+            api.get('/api/tech/worklogs/paginated', {
+              params: buildWorklogParams(activeMonth, worklogQueryRef.current, focusWorklogId),
+            }),
+            api.get('/api/tech/worklogs/analytics', { params: { month: activeMonth } }),
+            api.get('/api/tech/skills/certificates/expiring'),
+            api.get('/api/tech/reviews/cycles'),
+          ]);
 
         const freshProjects = projRes.data?.data || [];
         setProjects(freshProjects);
@@ -202,6 +264,53 @@ export default function TechProjectListPage() {
         setAvailableSkills(skillsRes.data?.data || []);
         applyWorklogPageResponse(wlRes.data?.data);
         setWorklogAnalytics(analyticsRes.data?.data || null);
+        setExpiringCerts(expiringRes.data?.data || []);
+
+        const freshCycles = cyclesRes.data?.data || [];
+        setReviewCycles(freshCycles);
+
+        let targetCycleId = selectedCycleIdRef.current;
+        if (focusReviewId) {
+          try {
+            const focusedRevRes = await api.get(`/api/tech/reviews/${focusReviewId}`);
+            const revCycleId = focusedRevRes.data?.data?.cycleId;
+            if (revCycleId) {
+              targetCycleId = String(revCycleId);
+            }
+          } catch {
+            // Keep existing or latest cycle fallback if review lookup fails
+          }
+        }
+        if (
+          freshCycles.length > 0 &&
+          (!targetCycleId || !freshCycles.some((c) => String(c.id) === String(targetCycleId)))
+        ) {
+          targetCycleId = String(freshCycles[0].id);
+        } else if (freshCycles.length === 0) {
+          targetCycleId = '';
+        }
+
+        if (targetCycleId !== selectedCycleIdRef.current) {
+          selectedCycleIdRef.current = targetCycleId;
+          setSelectedCycleId(targetCycleId);
+        }
+
+        if (freshCycles.length > 0) {
+          const [revPageRes, revAnalyticsRes] = await Promise.all([
+            api.get('/api/tech/reviews/paginated', {
+              params: buildReviewParams(targetCycleId, reviewQueryRef.current, focusReviewId),
+            }),
+            api.get('/api/tech/reviews/analytics', {
+              params: targetCycleId ? { cycleId: Number(targetCycleId) } : {},
+            }),
+          ]);
+          applyReviewPageResponse(revPageRes.data?.data);
+          setReviewAnalytics(revAnalyticsRes.data?.data || null);
+        } else {
+          applyReviewPageResponse(null);
+          setReviewAnalytics(null);
+        }
+
         setLastUpdated(new Date());
         lastFetchTimeRef.current = Date.now();
       } catch (err) {
@@ -214,7 +323,7 @@ export default function TechProjectListPage() {
         setRefreshing(false);
       }
     },
-    [buildWorklogParams, applyWorklogPageResponse]
+    [buildWorklogParams, applyWorklogPageResponse, buildReviewParams, applyReviewPageResponse]
   );
 
   const handleChangeWorklogQuery = useCallback(
@@ -274,17 +383,102 @@ export default function TechProjectListPage() {
     [buildWorklogParams, applyWorklogPageResponse]
   );
 
+  const handleChangeReviewQuery = useCallback(
+    async (nextOrUpdater) => {
+      const nextQuery =
+        typeof nextOrUpdater === 'function'
+          ? nextOrUpdater(reviewQueryRef.current)
+          : nextOrUpdater;
+      reviewQueryRef.current = nextQuery;
+      setReviewQuery(nextQuery);
+      try {
+        setReviewsLoading(true);
+        const revPageRes = await api.get('/api/tech/reviews/paginated', {
+          params: buildReviewParams(selectedCycleIdRef.current, nextQuery),
+        });
+        applyReviewPageResponse(revPageRes.data?.data);
+        lastFetchTimeRef.current = Date.now();
+      } catch (err) {
+        toastRef.current?.show(
+          'Lỗi',
+          err.response?.data?.message || 'Không thể tải danh sách phiếu đánh giá',
+          'error'
+        );
+      } finally {
+        setReviewsLoading(false);
+      }
+    },
+    [buildReviewParams, applyReviewPageResponse]
+  );
+
+  const handleChangeCycle = useCallback(
+    async (nextCycleId) => {
+      const safeId = nextCycleId ? String(nextCycleId) : '';
+      selectedCycleIdRef.current = safeId;
+      setSelectedCycleId(safeId);
+      const resetPageQuery = { ...reviewQueryRef.current, page: 0 };
+      reviewQueryRef.current = resetPageQuery;
+      setReviewQuery(resetPageQuery);
+      try {
+        setReviewsLoading(true);
+        const [revPageRes, revAnalyticsRes] = await Promise.all([
+          api.get('/api/tech/reviews/paginated', {
+            params: buildReviewParams(safeId, resetPageQuery),
+          }),
+          api.get('/api/tech/reviews/analytics', {
+            params: safeId ? { cycleId: Number(safeId) } : {},
+          }),
+        ]);
+        applyReviewPageResponse(revPageRes.data?.data);
+        setReviewAnalytics(revAnalyticsRes.data?.data || null);
+        lastFetchTimeRef.current = Date.now();
+      } catch (err) {
+        toastRef.current?.show(
+          'Lỗi',
+          err.response?.data?.message || 'Không thể tải dữ liệu kỳ đánh giá',
+          'error'
+        );
+      } finally {
+        setReviewsLoading(false);
+      }
+    },
+    [buildReviewParams, applyReviewPageResponse]
+  );
+
+  const handleRemindCert = useCallback(async (cert) => {
+    if (!cert?.certId || remindingCertId === cert.certId) return;
+    try {
+      setRemindingCertId(cert.certId);
+      await api.post(`/api/tech/skills/certificates/${cert.certId}/remind`);
+      toastRef.current?.show(
+        'Đã gửi nhắc nhở',
+        `Đã gửi thông báo nhắc gia hạn chứng chỉ "${cert.certificateName}" tới ${cert.hoTen}.`,
+        'success'
+      );
+    } catch (err) {
+      toastRef.current?.show(
+        'Lỗi',
+        err.response?.data?.message || 'Không thể gửi nhắc gia hạn chứng chỉ.',
+        'error'
+      );
+    } finally {
+      setRemindingCertId(null);
+    }
+  }, [remindingCertId]);
+
   const handleFocusHandled = useCallback(
     (handledToken) => {
       clearLiveNotificationNavToken(handledToken);
       if (
         searchParams.has('worklogId') ||
         searchParams.has('userId') ||
+        searchParams.has('reviewId') ||
         location.state?.fromNotificationAt
       ) {
         const cleaned = new URLSearchParams(searchParams);
         cleaned.delete('worklogId');
         cleaned.delete('userId');
+        cleaned.delete('reviewId');
         const cleanSearch = cleaned.toString();
         navigate(
           { pathname: location.pathname, search: cleanSearch ? `?${cleanSearch}` : '' },
@@ -309,12 +503,13 @@ export default function TechProjectListPage() {
     [setSearchParams, loadAllData]
   );
 
-  // Đồng bộ URL query (?tab=timesheet&worklogId=...&month=... hoặc ?tab=skills&userId=...) CHỈ khi bấm "Xem chi tiết" từ Thông báo
+  // Đồng bộ URL query (?tab=timesheet&worklogId=..., ?tab=skills&userId=..., ?tab=reviews&reviewId=...) CHỈ khi bấm "Xem chi tiết" từ Thông báo
   useEffect(() => {
     const queryTab = searchParams.get('tab');
     const queryWorklogId = searchParams.get('worklogId');
     const queryMonth = searchParams.get('month');
     const queryUserId = searchParams.get('userId');
+    const queryReviewId = searchParams.get('reviewId');
     const fromNotifAt = location.state?.fromNotificationAt;
     const isLiveNotifClick = isMatchingLiveNotificationNavToken(fromNotifAt);
 
@@ -355,14 +550,35 @@ export default function TechProjectListPage() {
         if (lastFetchTimeRef.current > 0) {
           loadAllData({ quiet: true });
         }
-      } else if (lastFetchTimeRef.current > 0) {
-        loadAllData({ quiet: true });
+      } else if (queryTab === 'reviews') {
+        const resetRevQuery = {
+          ...reviewQueryRef.current,
+          page: 0,
+          status: '',
+          grade: '',
+          keyword: '',
+        };
+        reviewQueryRef.current = resetRevQuery;
+        setReviewQuery(resetRevQuery);
+        setFocusReviewRequest({
+          reviewId: queryReviewId || null,
+          requestedAt: fromNotifAt,
+        });
+        if (lastFetchTimeRef.current > 0) {
+          loadAllData({ quiet: true, focusReviewId: queryReviewId || null });
+        }
+      } else {
+        clearLiveNotificationNavToken(fromNotifAt);
+        if (lastFetchTimeRef.current > 0) {
+          loadAllData({ quiet: true });
+        }
       }
-    } else if (queryWorklogId || queryUserId || fromNotifAt) {
+    } else if (queryWorklogId || queryUserId || queryReviewId || fromNotifAt) {
       // Sau F5 hoặc khi không bấm "Xem chi tiết": không tự động cuộn và làm sạch tham số focus cũ trên URL
       const cleaned = new URLSearchParams(searchParams);
       cleaned.delete('worklogId');
       cleaned.delete('userId');
+      cleaned.delete('reviewId');
       const cleanSearch = cleaned.toString();
       navigate(
         { pathname: location.pathname, search: cleanSearch ? `?${cleanSearch}` : '' },
@@ -372,7 +588,10 @@ export default function TechProjectListPage() {
   }, [searchParams, location.pathname, location.state, navigate, loadAllData]);
 
   useEffect(() => {
-    loadAllData({ focusWorklogId: initialLiveFocusWorklogIdRef.current });
+    loadAllData({
+      focusWorklogId: initialLiveFocusWorklogIdRef.current,
+      focusReviewId: initialLiveFocusReviewIdRef.current,
+    });
   }, [loadAllData]);
 
   // Đồng bộ dữ liệu Realtime qua WebSocket (không cần F5 khi có Worklog / Kỹ năng mới)
@@ -580,6 +799,11 @@ export default function TechProjectListPage() {
     const pendingWorklogsCount =
       worklogPageData?.monthPendingCount ??
       worklogs.filter((w) => w.approvalStatus === 'PENDING').length;
+    const pendingReviewsCount =
+      Number(reviewAnalytics?.managerReviewPendingCount ?? 0) +
+      (roleNormalized === 'giam_doc_phong_ban' || roleNormalized === 'admin'
+        ? Number(reviewAnalytics?.directorApprovalPendingCount ?? 0)
+        : 0);
 
     const statusOrder = ['IN_PROGRESS', 'PLANNING', 'MAINTENANCE', 'COMPLETED', 'PAUSED'];
     const statusBreakdown = statusOrder
@@ -608,12 +832,13 @@ export default function TechProjectListPage() {
       riskCount,
       pendingSkillsCount,
       pendingWorklogsCount,
+      pendingReviewsCount,
       avgUtilization,
       totalDeployedFte,
       totalBenchFte,
       statusBreakdown,
     };
-  }, [projects, benchUsers, matrixData, worklogs, worklogPageData]);
+  }, [projects, benchUsers, matrixData, worklogs, worklogPageData, reviewAnalytics, roleNormalized]);
 
   const tabs = [
     {
@@ -624,13 +849,13 @@ export default function TechProjectListPage() {
     },
     {
       id: 'bench',
-      label: 'Công suất & Ghế chờ Bench',
+      label: 'Công suất & Bench',
       count: telemetry.totalEngineers,
       icon: Activity,
     },
     {
       id: 'skills',
-      label: 'Ma trận Năng lực & Ghép nối',
+      label: 'Ma trận Năng lực',
       count: matrixData.length,
       pendingCount: !isReadOnly ? telemetry.pendingSkillsCount : 0,
       icon: Cpu,
@@ -641,6 +866,13 @@ export default function TechProjectListPage() {
       count: worklogPageData?.monthTotalCount ?? worklogs.length,
       pendingCount: !isReadOnly ? telemetry.pendingWorklogsCount : 0,
       icon: Clock,
+    },
+    {
+      id: 'reviews',
+      label: 'Đánh giá & Nâng bậc',
+      count: reviewAnalytics?.totalReviews ?? 0,
+      pendingCount: !isReadOnly ? telemetry.pendingReviewsCount : 0,
+      icon: TrendingUp,
     },
   ];
 
@@ -984,7 +1216,7 @@ export default function TechProjectListPage() {
             </motion.div>
 
             {/* 3. Segmented Executive Navigation Tabs */}
-            <div className="bg-white rounded-2xl border border-slate-200/90 p-1.5 inline-flex flex-wrap items-center gap-1 shadow-2xs">
+            <div className="w-full bg-white rounded-2xl border border-slate-200/90 p-1.5 flex flex-wrap items-center gap-1 shadow-2xs">
               {tabs.map((tab) => {
                 const IconComp = tab.icon;
                 const isActive = activeTab === tab.id;
@@ -993,7 +1225,7 @@ export default function TechProjectListPage() {
                     type="button"
                     key={tab.id}
                     onClick={() => handleSelectTab(tab.id)}
-                    className={`relative px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-colors flex items-center gap-2 cursor-pointer ${
+                    className={`relative flex-1 min-w-fit px-3 py-2 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer ${
                       isActive ? 'text-white' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                     }`}
                   >
@@ -1004,11 +1236,11 @@ export default function TechProjectListPage() {
                         className="absolute inset-0 bg-[#1E3A8A] rounded-xl shadow-xs"
                       />
                     )}
-                    <span className="relative z-10 flex items-center gap-2">
-                      <IconComp size={16} />
+                    <span className="relative z-10 flex items-center gap-1.5">
+                      <IconComp size={15} className="shrink-0" />
                       <span>{tab.label}</span>
                       <span
-                        className={`text-[11px] px-2 py-0.5 rounded-full tabular ${
+                        className={`text-[11px] px-1.5 py-0.5 rounded-full tabular ${
                           isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
                         }`}
                       >
@@ -1016,7 +1248,7 @@ export default function TechProjectListPage() {
                       </span>
                       {tab.pendingCount > 0 && (
                         <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full tabular ${
+                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full tabular ${
                             isActive
                               ? 'bg-orange-500 text-white'
                               : 'bg-orange-50 text-orange-700 border border-orange-200'
@@ -1024,6 +1256,8 @@ export default function TechProjectListPage() {
                           title={`${tab.pendingCount} ${
                             tab.id === 'timesheet'
                               ? 'nhật ký giờ công chờ thẩm định'
+                              : tab.id === 'reviews'
+                              ? 'phiếu đánh giá chờ thẩm định'
                               : 'kỹ năng chờ duyệt xác thực'
                           }`}
                         >
@@ -1070,6 +1304,10 @@ export default function TechProjectListPage() {
                         : undefined
                     }
                     isReadOnly={isReadOnly}
+                    expiringCerts={expiringCerts}
+                    onRemindCert={!isReadOnly ? handleRemindCert : undefined}
+                    remindingCertId={remindingCertId}
+                    onInspectEngineer={handleInspectEngineer}
                   />
                 )}
 
@@ -1116,6 +1354,32 @@ export default function TechProjectListPage() {
                     onInspectEngineer={handleInspectEngineer}
                     isReadOnly={isReadOnly}
                     focusWorklogRequest={focusWorklogRequest}
+                    onFocusHandled={handleFocusHandled}
+                  />
+                )}
+
+                {activeTab === 'reviews' && (
+                  <PerformanceCareerTab
+                    cycles={reviewCycles}
+                    selectedCycleId={selectedCycleId}
+                    onChangeCycle={handleChangeCycle}
+                    onRefreshCycles={() => loadAllData({ quiet: true })}
+                    analytics={reviewAnalytics}
+                    reviews={reviews}
+                    reviewPageData={reviewPageData}
+                    reviewQuery={reviewQuery}
+                    reviewsLoading={reviewsLoading}
+                    onChangeReviewQuery={handleChangeReviewQuery}
+                    expiringCerts={expiringCerts}
+                    onRemindCert={!isReadOnly ? handleRemindCert : undefined}
+                    remindingCertId={remindingCertId}
+                    currentUserId={user?.userId}
+                    viewerRole={user?.role}
+                    isReadOnly={isReadOnly}
+                    onOpenCreateCycle={!isReadOnly ? () => setIsCycleModalOpen(true) : undefined}
+                    onSelectReview={setSelectedReview}
+                    onInspectEngineer={handleInspectEngineer}
+                    focusReviewRequest={focusReviewRequest}
                     onFocusHandled={handleFocusHandled}
                   />
                 )}
@@ -1214,8 +1478,40 @@ export default function TechProjectListPage() {
             !!staffingProject ||
             !!selectedProfile ||
             !!projectSelectCandidate ||
+            isCycleModalOpen ||
+            !!selectedReview ||
             deleteConfirm.isOpen
           }
+        />
+
+        {/* Level 1 Modal: Create Evaluation Cycle */}
+        {!isReadOnly && (
+          <CreateEvaluationCycleModal
+            isOpen={isCycleModalOpen}
+            onClose={() => setIsCycleModalOpen(false)}
+            benchUsers={benchUsers}
+            onSuccess={async (created) => {
+              if (created?.id) {
+                selectedCycleIdRef.current = String(created.id);
+                setSelectedCycleId(String(created.id));
+              }
+              await loadAllData({ quiet: true });
+            }}
+          />
+        )}
+
+        {/* Level 1 Modal: Performance Review Detail / Evaluate / Escalation Approval */}
+        <TechReviewDetailModal
+          isOpen={!!selectedReview}
+          onClose={() => setSelectedReview(null)}
+          reviewId={selectedReview?.id}
+          initialReview={selectedReview}
+          viewerRole={user?.role}
+          currentUserId={user?.userId}
+          readOnlyMode={isReadOnly}
+          onInspectEngineer={handleInspectEngineer}
+          onSuccess={() => loadAllData({ quiet: true })}
+          hasTopModalOpen={!!selectedProfile || !!projectSelectCandidate || !!staffingProject}
         />
 
         {/* Level 1/2 Modal: Engineer 6-Axis Tech Profile (with Verify Skill & Allocate actions) */}
@@ -1226,7 +1522,9 @@ export default function TechProjectListPage() {
           onVerifySkill={!isReadOnly ? handleVerifySkill : undefined}
           verifyingId={verifyingId}
           onOpenProjectSelect={!isReadOnly ? handleOpenProjectSelect : undefined}
-          zIndexClass={selectedDetailProject ? 'z-[9990]' : 'z-[9985]'}
+          zIndexClass={
+            selectedReview ? 'z-[9993]' : selectedDetailProject ? 'z-[9990]' : 'z-[9985]'
+          }
           hasTopModalOpen={!!projectSelectCandidate || !!staffingProject}
         />
 

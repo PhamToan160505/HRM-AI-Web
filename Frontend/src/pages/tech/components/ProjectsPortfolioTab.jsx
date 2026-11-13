@@ -21,12 +21,15 @@ import {
   Plus,
   Flag,
   Clock,
+  Award,
+  Bell,
 } from 'lucide-react';
 import {
   PROJECT_STATUS_CONFIG,
   formatDateVN,
   formatHours,
   computeTimelineHealth,
+  getCertExpiryInfo,
 } from '../techHelpers';
 
 export default function ProjectsPortfolioTab({
@@ -39,6 +42,10 @@ export default function ProjectsPortfolioTab({
   onRequestDelete,
   onOpenCreate,
   isReadOnly = false,
+  expiringCerts = [],
+  onRemindCert,
+  remindingCertId = null,
+  onInspectEngineer,
 }) {
   const [keyword, setKeyword] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
@@ -238,6 +245,89 @@ export default function ProjectsPortfolioTab({
             </span>
           </div>
         )
+      )}
+
+      {/* 1b. Radar Tuân thủ Chứng chỉ Quốc tế (Sắp hết hạn / Hết hạn trong 30 ngày) */}
+      {expiringCerts.length > 0 && (
+        <div className="bg-white rounded-2xl border border-orange-200/90 shadow-[0_4px_20px_-4px_rgba(234,88,12,0.06)] p-4 sm:p-5 space-y-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-orange-50 border border-orange-200 text-orange-600 flex items-center justify-center shrink-0">
+                <Award size={16} />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">
+                  Radar Gia hạn Chứng chỉ Kỹ sư ({expiringCerts.length})
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Theo dõi chứng chỉ sắp hết hạn trong 30 ngày tới hoặc đã hết hạn để đảm bảo tiêu chuẩn dự án &amp; điểm Năng lực đánh giá kỳ
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+            {expiringCerts.map((cert) => {
+              const expInfo = getCertExpiryInfo(cert);
+              const isExpired = expInfo.status === 'EXPIRED';
+              return (
+                <div
+                  key={`radar-cert-${cert.certId}`}
+                  className={`p-3 rounded-xl border flex flex-col justify-between gap-2.5 text-xs ${
+                    isExpired
+                      ? 'bg-rose-50/45 border-rose-200/90'
+                      : 'bg-orange-50/45 border-orange-200/90'
+                  }`}
+                >
+                  <div className="space-y-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      {onInspectEngineer ? (
+                        <button
+                          type="button"
+                          onClick={() => onInspectEngineer(cert.userId)}
+                          className="font-bold text-[#1E3A8A] hover:underline truncate cursor-pointer text-left"
+                        >
+                          {cert.hoTen}
+                        </button>
+                      ) : (
+                        <span className="font-bold text-slate-900 truncate">{cert.hoTen}</span>
+                      )}
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap shrink-0 tabular ${
+                          isExpired
+                            ? 'bg-rose-100/80 text-rose-700 border-rose-200'
+                            : 'bg-orange-100/80 text-orange-700 border-orange-200'
+                        }`}
+                      >
+                        {expInfo.label}
+                      </span>
+                    </div>
+                    <p className="font-semibold text-slate-900 truncate" title={cert.certificateName}>
+                      {cert.certificateName}
+                    </p>
+                    <p className="text-[11px] text-slate-600 tabular truncate">
+                      {cert.issuingOrganization} • Hết hạn: {formatDateVN(cert.expiryDate)}
+                    </p>
+                  </div>
+
+                  {!isReadOnly && onRemindCert && (
+                    <div className="flex justify-end pt-1.5 border-t border-slate-200/60">
+                      <button
+                        type="button"
+                        disabled={remindingCertId === cert.certId}
+                        onClick={() => onRemindCert(cert)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white hover:bg-[#1E3A8A] text-[#1E3A8A] hover:text-white border border-blue-200 text-[11px] font-bold transition cursor-pointer disabled:opacity-50"
+                      >
+                        <Bell size={12} />
+                        <span>{remindingCertId === cert.certId ? 'Đang gửi...' : 'Nhắc gia hạn'}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {/* 2. Filter & View Toolbar */}

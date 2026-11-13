@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -262,6 +263,115 @@ public class TechSkillService {
     }
 
     @Transactional(readOnly = true)
+    public List<ExpiringCertificateResponse> getExpiringCertificates(Long departmentId) {
+        List<User> techUsers = getTechDepartmentUsers(departmentId);
+        if (techUsers.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Map<Long, User> userMap = techUsers.stream()
+                .collect(Collectors.toMap(User::getId, u -> u, (a, b) -> a));
+
+        List<UserTechCertificate> certs = certificateRepository.findByUserIdIn(new ArrayList<>(userMap.keySet()));
+        LocalDate today = LocalDate.now();
+        List<ExpiringCertificateResponse> alerts = new ArrayList<>();
+
+        for (UserTechCertificate c : certs) {
+            if (c.getExpiryDate() == null) {
+                continue;
+            }
+            long daysRemaining = ChronoUnit.DAYS.between(today, c.getExpiryDate());
+            String expiryStatus;
+            if (daysRemaining < 0) {
+                expiryStatus = "EXPIRED";
+            } else if (daysRemaining <= 30) {
+                expiryStatus = "EXPIRING_SOON";
+            } else {
+                continue;
+            }
+
+            User owner = userMap.get(c.getUserId());
+            if (owner == null) {
+                continue;
+            }
+            alerts.add(ExpiringCertificateResponse.builder()
+                    .certId(c.getId())
+                    .userId(owner.getId())
+                    .hoTen(owner.getHoTen())
+                    .maNhanVien(owner.getMaNhanVien())
+                    .chucVu(owner.getChucVu())
+                    .certificateName(c.getCertificateName())
+                    .issuingOrganization(c.getIssuingOrganization())
+                    .issueDate(c.getIssueDate())
+                    .expiryDate(c.getExpiryDate())
+                    .expiryStatus(expiryStatus)
+                    .daysRemaining(daysRemaining)
+                    .credentialUrl(c.getCredentialUrl())
+                    .build());
+        }
+
+        alerts.sort(Comparator.comparingLong(r -> r.getDaysRemaining() != null ? r.getDaysRemaining() : Long.MAX_VALUE));
+        return alerts;
+    }
+
+    @Transactional
+    public void remindCertificateRenewal(Long certId, Long actorId) {
+        User actor = userRepository.findById(actorId)
+                .orElseThrow(() -> AppException.notFound("Không tìm thấy người thực hiện!"));
+        if (actor.getRole() != Role.GIAM_DOC_PHONG_BAN
+                && actor.getRole() != Role.TRUONG_PHONG
+                && actor.getRole() != Role.ADMIN) {
+            throw AppException.forbidden("Chỉ Trưởng phòng hoặc Giám đốc Công nghệ mới có quyền gửi nhắc gia hạn chứng chỉ!");
+        }
+
+        UserTechCertificate cert = certificateRepository.findById(certId)
+                .orElseThrow(() -> AppException.notFound("Không tìm thấy chứng chỉ với ID: " + certId));
+        User owner = userRepository.findById(cert.getUserId())
+                .orElseThrow(() -> AppException.notFound("Không tìm thấy chủ sở hữu chứng chỉ!"));
+
+        if (actor.getRole() != Role.ADMIN
+                && actor.getDepartmentId() != null
+                && !actor.getDepartmentId().equals(owner.getDepartmentId())) {
+            throw AppException.forbidden("Bạn không có quyền gửi nhắc gia hạn cho nhân sự ngoài phòng ban của mình!");
+        }
+
+        if (cert.getExpiryDate() == null) {
+            throw AppException.badRequest("Chứng chỉ này có hiệu lực vĩnh viễn, không cần gia hạn!");
+        }
+
+        LocalDate today = LocalDate.now();
+        long daysRemaining = ChronoUnit.DAYS.between(today, cert.getExpiryDate());
+        if (daysRemaining > 30) {
+            throw AppException.badRequest("Chứng chỉ vẫn còn hiệu lực hơn 30 ngày!");
+        }
+
+        String statusText = daysRemaining < 0
+                ? "đã quá hạn " + Math.abs(daysRemaining) + " ngày (hết hạn ngày " + cert.getExpiryDate() + ")"
+                : (daysRemaining == 0
+                    ? "hết hạn hôm nay (" + cert.getExpiryDate() + ")"
+                    : "chỉ còn " + daysRemaining + " ngày sẽ hết hạn (" + cert.getExpiryDate() + ")");
+
+        if (notificationService != null) {
+            notificationService.createNotification(
+                    owner.getId(),
+                    "TECH_CERTIFICATE_EXPIRING",
+                    "Nhắc nhở gia hạn Chứng chỉ Quốc tế",
+                    actor.getHoTen() + " nhắc bạn gia hạn chứng chỉ \"" + cert.getCertificateName()
+                            + "\" (" + cert.getIssuingOrganization() + ") — hiện " + statusText
+                            + ". Vui lòng cập nhật chứng chỉ mới trong Hồ sơ Năng lực để giữ nguyên điểm Năng lực kỳ đánh giá.",
+                    daysRemaining <= 7 ? "quan_trong" : "binh_thuong",
+                    "/employee/my-projects?tab=profile"
+            );
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("domain", "TECH_CERTIFICATE");
+            payload.put("action", "REMINDED");
+            payload.put("certId", cert.getId());
+            payload.put("userId", owner.getId());
+            notificationService.broadcastTopic("/topic/tech-updates", payload);
+        }
+        log.info("[Tech] {} đã gửi nhắc gia hạn chứng chỉ '{}' tới kỹ sư {}", actor.getHoTen(), cert.getCertificateName(), owner.getHoTen());
+    }
+
+    @Transactional(readOnly = true)
     public List<TechProfileResponse> getSkillsMatrix(Long departmentId) {
         List<User> engineers = getTechEngineers(departmentId);
         return engineers.stream().map(u -> buildTechProfile(u.getId())).collect(Collectors.toList());
@@ -368,6 +478,25 @@ public class TechSkillService {
         return candidates.stream()
                 .filter(u -> Boolean.TRUE.equals(u.getActive()))
                 .filter(u -> u.getRole() == Role.NHAN_VIEN) // Chỉ lấy kỹ sư thực thi
+                .collect(Collectors.toList());
+    }
+
+    private List<User> getTechDepartmentUsers(Long departmentId) {
+        List<User> candidates;
+        if (departmentId != null) {
+            candidates = userRepository.findByDepartmentId(departmentId);
+        } else {
+            Optional<Department> techDept = departmentRepository.findByTenPhong("Công nghệ")
+                    .or(() -> departmentRepository.findByTenPhong("Kỹ thuật"));
+            candidates = techDept.map(d -> userRepository.findByDepartmentId(d.getId()))
+                    .orElseGet(userRepository::findAll);
+        }
+
+        return candidates.stream()
+                .filter(u -> Boolean.TRUE.equals(u.getActive()))
+                .filter(u -> u.getRole() == Role.NHAN_VIEN
+                        || u.getRole() == Role.TRUONG_PHONG
+                        || u.getRole() == Role.GIAM_DOC_PHONG_BAN)
                 .collect(Collectors.toList());
     }
 
@@ -484,8 +613,20 @@ public class TechSkillService {
     }
 
     private CertificateResponse mapToCertResponse(UserTechCertificate c) {
-        boolean isExpired = c.getExpiryDate() != null && c.getExpiryDate().isBefore(LocalDate.now());
+        LocalDate today = LocalDate.now();
+        Long daysRemaining = c.getExpiryDate() != null ? ChronoUnit.DAYS.between(today, c.getExpiryDate()) : null;
+        boolean isExpired = daysRemaining != null && daysRemaining < 0;
         String status = c.getExpiryDate() == null ? "LIFETIME" : (isExpired ? "EXPIRED" : "ACTIVE");
+        String expiryStatus;
+        if (c.getExpiryDate() == null) {
+            expiryStatus = "VALID";
+        } else if (isExpired) {
+            expiryStatus = "EXPIRED";
+        } else if (daysRemaining <= 30) {
+            expiryStatus = "EXPIRING_SOON";
+        } else {
+            expiryStatus = "VALID";
+        }
 
         return CertificateResponse.builder()
                 .id(c.getId())
@@ -498,6 +639,8 @@ public class TechSkillService {
                 .credentialUrl(c.getCredentialUrl())
                 .isExpired(isExpired)
                 .status(status)
+                .expiryStatus(expiryStatus)
+                .daysRemaining(daysRemaining)
                 .build();
     }
 

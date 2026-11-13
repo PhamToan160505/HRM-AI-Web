@@ -5,26 +5,11 @@ import com.hrm.common.entity.Role;
 import com.hrm.common.entity.User;
 import com.hrm.common.repository.DepartmentRepository;
 import com.hrm.common.repository.UserRepository;
-import com.hrm.tech.entity.MilestoneStatus;
-import com.hrm.tech.entity.ProjectRole;
-import com.hrm.tech.entity.ProjectStatus;
-import com.hrm.tech.entity.ProjectType;
-import com.hrm.tech.entity.TechProject;
-import com.hrm.tech.entity.TechProjectMember;
-import com.hrm.tech.entity.TechProjectMilestone;
-import com.hrm.tech.entity.TechWorklog;
-import com.hrm.tech.entity.ProficiencyLevel;
-import com.hrm.tech.entity.UserTechSkill;
-import com.hrm.tech.entity.UserTechCertificate;
-import com.hrm.tech.entity.WorklogApprovalStatus;
-import com.hrm.tech.entity.WorklogType;
-import com.hrm.tech.repository.TechProjectMemberRepository;
-import com.hrm.tech.repository.TechProjectMilestoneRepository;
-import com.hrm.tech.repository.TechProjectRepository;
-import com.hrm.tech.repository.TechSkillRepository;
-import com.hrm.tech.repository.TechWorklogRepository;
-import com.hrm.tech.repository.UserTechSkillRepository;
-import com.hrm.tech.repository.UserTechCertificateRepository;
+import com.hrm.tech.dto.TechTelemetryBreakdownResponse;
+import com.hrm.tech.entity.*;
+import com.hrm.tech.repository.*;
+import com.hrm.tech.service.TechTelemetryScoreCalculator;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
@@ -59,6 +44,11 @@ public class DataSeeder implements CommandLineRunner {
     private final UserTechCertificateRepository userTechCertificateRepository;
     private final TechProjectMilestoneRepository techProjectMilestoneRepository;
     private final TechWorklogRepository techWorklogRepository;
+    private final TechEvaluationCycleRepository techEvaluationCycleRepository;
+    private final TechPerformanceReviewRepository techPerformanceReviewRepository;
+    private final TechCareerEventRepository techCareerEventRepository;
+    private final TechTelemetryScoreCalculator techTelemetryScoreCalculator;
+    private final ObjectMapper objectMapper;
 
     private static final String DEFAULT_PASSWORD = "Admin@123";
 
@@ -73,6 +63,7 @@ public class DataSeeder implements CommandLineRunner {
         seedTechProjects();
         seedTechSkillsAndCertificates();
         seedTechMilestonesAndWorklogs();
+        seedTechPerformanceAndCertificates();
     }
 
     private void migrateApplicationsTable() {
@@ -762,6 +753,297 @@ public class DataSeeder implements CommandLineRunner {
             }
 
             log.info("[Seed] Đã khởi tạo nhật ký giờ công (Tech Worklogs) mẫu trong tháng hiện tại.");
+        }
+    }
+
+    private void seedTechPerformanceAndCertificates() {
+        java.time.LocalDate today = java.time.LocalDate.now();
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+
+        User devNam = userRepository.findByEmail("dev_nam@hrm.vn").orElse(null);
+        User devLan = userRepository.findByEmail("dev_lan@hrm.vn").orElse(null);
+        User testerHung = userRepository.findByEmail("tester_hung@hrm.vn").orElse(null);
+        User tpKt = userRepository.findByEmail("truongphong_kt@hrm.vn").orElse(null);
+        User giamDoc = userRepository.findByEmail("giamdocphong@hrm.vn").orElse(null);
+
+        // 1. Chứng chỉ sắp hết hạn & đã hết hạn (idempotent) phục vụ Certificate Expiry Radar
+        if (devLan != null) {
+            boolean hasExpiringCert = userTechCertificateRepository.findByUserIdOrderByIssueDateDesc(devLan.getId())
+                    .stream()
+                    .anyMatch(c -> c.getExpiryDate() != null);
+            if (!hasExpiringCert) {
+                userTechCertificateRepository.save(UserTechCertificate.builder()
+                        .userId(devLan.getId())
+                        .certificateName("AWS Certified Cloud Practitioner (CLF-C02)")
+                        .issuingOrganization("Amazon Web Services")
+                        .issueDate(today.minusYears(3).plusDays(12))
+                        .expiryDate(today.plusDays(12))
+                        .credentialId("AWS-CLF-2023-8841")
+                        .credentialUrl("https://aws.amazon.com/verification")
+                        .build());
+            }
+        }
+        if (testerHung != null) {
+            boolean hasExpiredCert = userTechCertificateRepository.findByUserIdOrderByIssueDateDesc(testerHung.getId())
+                    .stream()
+                    .anyMatch(c -> c.getExpiryDate() != null);
+            if (!hasExpiredCert) {
+                userTechCertificateRepository.save(UserTechCertificate.builder()
+                        .userId(testerHung.getId())
+                        .certificateName("ISTQB Certified Tester — Agile Extension")
+                        .issuingOrganization("ISTQB")
+                        .issueDate(today.minusYears(3).minusDays(5))
+                        .expiryDate(today.minusDays(5))
+                        .credentialId("ISTQB-AGILE-2023-412")
+                        .credentialUrl("https://www.istqb.org")
+                        .build());
+            }
+        }
+
+        if (techEvaluationCycleRepository.count() > 0) {
+            return;
+        }
+
+        Long techDeptId = departmentRepository.findByTenPhong("Công nghệ")
+                .or(() -> departmentRepository.findByTenPhong("Kỹ thuật"))
+                .map(Department::getId)
+                .orElse(devNam != null ? devNam.getDepartmentId() : null);
+        Long creatorId = tpKt != null ? tpKt.getId() : (giamDoc != null ? giamDoc.getId() : null);
+        if (techDeptId == null || creatorId == null) {
+            return;
+        }
+
+        // 2. Kỳ đánh giá Q3-2026 (Đã chốt - APPROVED) để có Career Timeline & dữ liệu lịch sử ngay
+        java.time.LocalDate q3Start = java.time.LocalDate.of(2026, 7, 1);
+        java.time.LocalDate q3End = java.time.LocalDate.of(2026, 9, 30);
+        TechEvaluationCycle q3Cycle = techEvaluationCycleRepository.save(TechEvaluationCycle.builder()
+                .cycleCode("Q3-2026")
+                .title("Đánh giá Hiệu suất Kỹ sư Quý 3/2026")
+                .reviewType(TechReviewType.QUARTERLY)
+                .periodStart(q3Start)
+                .periodEnd(q3End)
+                .selfReviewDeadline(java.time.LocalDate.of(2026, 10, 5))
+                .status(TechEvaluationCycleStatus.CLOSED)
+                .departmentId(techDeptId)
+                .createdBy(creatorId)
+                .build());
+
+        if (devNam != null && !techPerformanceReviewRepository.existsByEmployeeIdAndReviewTypeAndPeriodStartAndPeriodEnd(
+                devNam.getId(), TechReviewType.QUARTERLY, q3Start, q3End)) {
+            TechPerformanceReview q3Nam = techPerformanceReviewRepository.save(TechPerformanceReview.builder()
+                    .cycle(q3Cycle)
+                    .employeeId(devNam.getId())
+                    .departmentId(techDeptId)
+                    .reviewType(TechReviewType.QUARTERLY)
+                    .periodLabel("Q3-2026")
+                    .periodStart(q3Start)
+                    .periodEnd(q3End)
+                    .deliveryScore(java.math.BigDecimal.valueOf(31.50))
+                    .impactScore(java.math.BigDecimal.valueOf(23.00))
+                    .capabilityScore(java.math.BigDecimal.valueOf(18.50))
+                    .disciplineScore(java.math.BigDecimal.valueOf(19.00))
+                    .telemetryTotalScore(java.math.BigDecimal.valueOf(92.00))
+                    .selfSummary("Hoàn thành kiến trúc core Backend HRM AI và tích hợp hệ thống đối soát giờ công.")
+                    .selfAchievements("Đạt 100% milestone schema & core backend đúng hạn; hỗ trợ review PR toàn nhóm.")
+                    .selfRatingScore(java.math.BigDecimal.valueOf(90.0))
+                    .selfSubmittedAt(now.minusDays(42))
+                    .evaluatorId(creatorId)
+                    .qualCraftScore(java.math.BigDecimal.valueOf(23.5))
+                    .qualOwnershipScore(java.math.BigDecimal.valueOf(24.0))
+                    .qualCollabScore(java.math.BigDecimal.valueOf(22.5))
+                    .qualGrowthScore(java.math.BigDecimal.valueOf(22.0))
+                    .managerQualScore(java.math.BigDecimal.valueOf(92.0))
+                    .managerComment("Kỹ sư nòng cốt dẫn dắt kiến trúc ổn định, chất lượng code và độ tin cậy cao.")
+                    .managerFeedbackGoals("Tiếp tục hoàn thiện năng lực Microservices chuẩn bị mở rộng sang dự án B2C.")
+                    .finalScore(java.math.BigDecimal.valueOf(92.0))
+                    .finalGrade(TechRatingGrade.S)
+                    .status(TechReviewStatus.APPROVED)
+                    .finalApproverId(giamDoc != null ? giamDoc.getId() : creatorId)
+                    .finalApprovedAt(now.minusDays(38))
+                    .build());
+
+            techCareerEventRepository.save(TechCareerEvent.builder()
+                    .employeeId(devNam.getId())
+                    .reviewId(q3Nam.getId())
+                    .eventType(TechCareerEventType.REVIEW_COMPLETED)
+                    .title("Hoàn tất Đánh giá Hiệu suất kỳ Q3-2026 — Xếp hạng S")
+                    .oldValue("Telemetry 92đ")
+                    .newValue("Hạng S (92đ)")
+                    .actorId(giamDoc != null ? giamDoc.getId() : creatorId)
+                    .note("Duy trì vai trò Tech Lead dự án PRJ-HRM-AI.")
+                    .eventDate(now.minusDays(38))
+                    .build());
+
+            techCareerEventRepository.save(TechCareerEvent.builder()
+                    .employeeId(devNam.getId())
+                    .reviewId(q3Nam.getId())
+                    .eventType(TechCareerEventType.SKILL_LEVEL_UP)
+                    .title("Xác thực cấp bậc SENIOR kỹ năng Spring Boot")
+                    .oldValue("MIDDLE")
+                    .newValue("SENIOR")
+                    .actorId(creatorId)
+                    .note("Thiết kế hệ thống phân quyền RBAC & Engine tính công.")
+                    .eventDate(now.minusDays(38))
+                    .build());
+        }
+
+        // 3. Kỳ đánh giá Q4-2026 (Đang mở - OPEN) với đầy đủ các trạng thái chờ xử lý
+        java.time.LocalDate q4Start = java.time.LocalDate.of(2026, 10, 1);
+        java.time.LocalDate q4End = java.time.LocalDate.of(2026, 12, 31);
+        TechEvaluationCycle q4Cycle = techEvaluationCycleRepository.save(TechEvaluationCycle.builder()
+                .cycleCode("Q4-2026")
+                .title("Đánh giá Hiệu suất & Xét Nâng bậc Quý 4/2026")
+                .reviewType(TechReviewType.QUARTERLY)
+                .periodStart(q4Start)
+                .periodEnd(q4End)
+                .selfReviewDeadline(today.plusDays(14))
+                .status(TechEvaluationCycleStatus.OPEN)
+                .departmentId(techDeptId)
+                .createdBy(creatorId)
+                .build());
+
+        // 3a. Dev Nam -> DIRECTOR_APPROVAL_PENDING + PENDING_CEO (để Giám đốc / CEO test luồng leo thang & đãi ngộ)
+        if (devNam != null && !techPerformanceReviewRepository.existsByEmployeeIdAndReviewTypeAndPeriodStartAndPeriodEnd(
+                devNam.getId(), TechReviewType.QUARTERLY, q4Start, q4End)) {
+            TechTelemetryBreakdownResponse bNam = techTelemetryScoreCalculator.calculateTelemetry(devNam.getId(), q4Start, q4End);
+            TechPerformanceReview revNam = TechPerformanceReview.builder()
+                    .cycle(q4Cycle)
+                    .employeeId(devNam.getId())
+                    .departmentId(techDeptId)
+                    .reviewType(TechReviewType.QUARTERLY)
+                    .periodLabel("Q4-2026")
+                    .periodStart(q4Start)
+                    .periodEnd(q4End)
+                    .deliveryScore(java.math.BigDecimal.valueOf(bNam.getDeliveryScore()))
+                    .impactScore(java.math.BigDecimal.valueOf(bNam.getImpactScore()))
+                    .capabilityScore(java.math.BigDecimal.valueOf(bNam.getCapabilityScore()))
+                    .disciplineScore(java.math.BigDecimal.valueOf(bNam.getDisciplineScore()))
+                    .telemetryTotalScore(java.math.BigDecimal.valueOf(bNam.getTelemetryTotalScore()))
+                    .telemetrySnapshotJson(safeJson(bNam))
+                    .selfSummary("Dẫn dắt kỹ thuật dự án HRM AI đồng thời hỗ trợ Backend cho nền tảng E-Commerce B2C.")
+                    .selfAchievements("Hoàn thiện API Payroll Engine, review PR bảo mật RBAC và tích hợp thanh toán VNPay IPN.")
+                    .selfChallenges("Đang cân đối tải công việc 100% giữa 2 dự án song song (70% + 30%).")
+                    .selfGoalsNext("Chuẩn hóa kiến trúc Microservices và nâng năng lực hệ thống phân tán.")
+                    .selfRatingScore(java.math.BigDecimal.valueOf(88.0))
+                    .selfSubmittedAt(now.minusDays(3))
+                    .evaluatorId(creatorId)
+                    .qualCraftScore(java.math.BigDecimal.valueOf(22.5))
+                    .qualOwnershipScore(java.math.BigDecimal.valueOf(23.5))
+                    .qualCollabScore(java.math.BigDecimal.valueOf(22.0))
+                    .qualGrowthScore(java.math.BigDecimal.valueOf(22.0))
+                    .managerQualScore(java.math.BigDecimal.valueOf(90.0))
+                    .managerComment("Đáp ứng xuất sắc vai trò Tech Lead đa dự án; đủ điều kiện thăng bậc Microservices lên SENIOR và xét chức danh Tech Lead.")
+                    .managerFeedbackGoals("Bàn giao bớt tác vụ chi tiết để tập trung tối ưu kiến trúc và kèm cặp Junior.")
+                    .finalScore(java.math.BigDecimal.valueOf(Math.round((0.60 * bNam.getTelemetryTotalScore() + 0.40 * 90.0) * 10.0) / 10.0))
+                    .finalGrade(TechRatingGrade.fromScore(0.60 * bNam.getTelemetryTotalScore() + 0.40 * 90.0))
+                    .recommendPromotion(true)
+                    .recommendedTitle("Tech Lead & Senior Backend Engineer")
+                    .recommendedSalaryIncreasePct(java.math.BigDecimal.valueOf(12.0))
+                    .compensationReason("Gánh tải 100% ở 2 dự án trọng điểm, đóng góp kiến trúc lõi và đạt mức hiệu suất cao liên tiếp 2 quý.")
+                    .compensationStatus(CompensationProposalStatus.PENDING_CEO)
+                    .status(TechReviewStatus.DIRECTOR_APPROVAL_PENDING)
+                    .build();
+
+            techSkillRepository.findBySkillNameIgnoreCase("Microservices Architecture").ifPresent(micro -> {
+                revNam.getSkillPromotionItems().add(TechSkillPromotionItem.builder()
+                        .review(revNam)
+                        .skill(micro)
+                        .fromLevel(ProficiencyLevel.MIDDLE)
+                        .targetLevel(ProficiencyLevel.SENIOR)
+                        .evidenceNote("Thiết kế mô hình tích hợp đa module & IPN thanh toán B2C chịu tải cao.")
+                        .evidenceUrl("https://github.com/company/hrm-ai/pull/48")
+                        .status(TechPromotionItemStatus.APPROVED)
+                        .reviewerNote("Trưởng phòng đồng ý nâng bậc SENIOR, trình Giám đốc/CEO phê duyệt.")
+                        .build());
+            });
+            techPerformanceReviewRepository.save(revNam);
+        }
+
+        // 3b. Dev Lan -> MANAGER_REVIEW_PENDING (đã gửi Tự đánh giá + đề xuất nâng bậc Next.js & React)
+        if (devLan != null && !techPerformanceReviewRepository.existsByEmployeeIdAndReviewTypeAndPeriodStartAndPeriodEnd(
+                devLan.getId(), TechReviewType.QUARTERLY, q4Start, q4End)) {
+            TechTelemetryBreakdownResponse bLan = techTelemetryScoreCalculator.calculateTelemetry(devLan.getId(), q4Start, q4End);
+            TechPerformanceReview revLan = TechPerformanceReview.builder()
+                    .cycle(q4Cycle)
+                    .employeeId(devLan.getId())
+                    .departmentId(techDeptId)
+                    .reviewType(TechReviewType.QUARTERLY)
+                    .periodLabel("Q4-2026")
+                    .periodStart(q4Start)
+                    .periodEnd(q4End)
+                    .deliveryScore(java.math.BigDecimal.valueOf(bLan.getDeliveryScore()))
+                    .impactScore(java.math.BigDecimal.valueOf(bLan.getImpactScore()))
+                    .capabilityScore(java.math.BigDecimal.valueOf(bLan.getCapabilityScore()))
+                    .disciplineScore(java.math.BigDecimal.valueOf(bLan.getDisciplineScore()))
+                    .telemetryTotalScore(java.math.BigDecimal.valueOf(bLan.getTelemetryTotalScore()))
+                    .telemetrySnapshotJson(safeJson(bLan))
+                    .selfSummary("Hoàn thiện hệ thống Dashboard Corporate Sapphire & các màn hình điều hành Phòng Công nghệ.")
+                    .selfAchievements("Xây dựng bộ biểu đồ Recharts, modal xếp chồng đa tầng chuẩn accessibility WCAG.")
+                    .selfChallenges("Chứng chỉ AWS Cloud Practitioner sắp hết hạn (còn 12 ngày), đang lên lịch thi gia hạn.")
+                    .selfGoalsNext("Đạt chứng chỉ Cloud mới trong 30 ngày và nâng cấp chuyên sâu React lên Senior.")
+                    .selfRatingScore(java.math.BigDecimal.valueOf(84.0))
+                    .selfSubmittedAt(now.minusDays(1))
+                    .compensationStatus(CompensationProposalStatus.NONE)
+                    .status(TechReviewStatus.MANAGER_REVIEW_PENDING)
+                    .build();
+
+            techSkillRepository.findBySkillNameIgnoreCase("Next.js").ifPresent(nextSkill -> {
+                revLan.getSkillPromotionItems().add(TechSkillPromotionItem.builder()
+                        .review(revLan)
+                        .skill(nextSkill)
+                        .fromLevel(ProficiencyLevel.JUNIOR)
+                        .targetLevel(ProficiencyLevel.MIDDLE)
+                        .evidenceNote("Xây dựng SSR Storefront và tối ưu Core Web Vitals cho dự án E-Commerce.")
+                        .evidenceUrl("https://github.com/company/hrm-ai/pull/55")
+                        .status(TechPromotionItemStatus.PENDING)
+                        .build());
+            });
+            techSkillRepository.findBySkillNameIgnoreCase("React").ifPresent(reactSkill -> {
+                revLan.getSkillPromotionItems().add(TechSkillPromotionItem.builder()
+                        .review(revLan)
+                        .skill(reactSkill)
+                        .fromLevel(ProficiencyLevel.MIDDLE)
+                        .targetLevel(ProficiencyLevel.SENIOR)
+                        .evidenceNote("Thiết kế kiến trúc state & UI Design System Corporate Sapphire toàn phân hệ.")
+                        .evidenceUrl("https://github.com/company/hrm-ai/pull/49")
+                        .status(TechPromotionItemStatus.PENDING)
+                        .build());
+            });
+            techPerformanceReviewRepository.save(revLan);
+        }
+
+        // 3c. Tester Hung -> SELF_REVIEW_PENDING (kỹ sư chưa gửi tự đánh giá)
+        if (testerHung != null && !techPerformanceReviewRepository.existsByEmployeeIdAndReviewTypeAndPeriodStartAndPeriodEnd(
+                testerHung.getId(), TechReviewType.QUARTERLY, q4Start, q4End)) {
+            TechTelemetryBreakdownResponse bHung = techTelemetryScoreCalculator.calculateTelemetry(testerHung.getId(), q4Start, q4End);
+            techPerformanceReviewRepository.save(TechPerformanceReview.builder()
+                    .cycle(q4Cycle)
+                    .employeeId(testerHung.getId())
+                    .departmentId(techDeptId)
+                    .reviewType(TechReviewType.QUARTERLY)
+                    .periodLabel("Q4-2026")
+                    .periodStart(q4Start)
+                    .periodEnd(q4End)
+                    .deliveryScore(java.math.BigDecimal.valueOf(bHung.getDeliveryScore()))
+                    .impactScore(java.math.BigDecimal.valueOf(bHung.getImpactScore()))
+                    .capabilityScore(java.math.BigDecimal.valueOf(bHung.getCapabilityScore()))
+                    .disciplineScore(java.math.BigDecimal.valueOf(bHung.getDisciplineScore()))
+                    .telemetryTotalScore(java.math.BigDecimal.valueOf(bHung.getTelemetryTotalScore()))
+                    .telemetrySnapshotJson(safeJson(bHung))
+                    .compensationStatus(CompensationProposalStatus.NONE)
+                    .status(TechReviewStatus.SELF_REVIEW_PENDING)
+                    .build());
+        }
+
+        log.info("[Seed] Đã khởi tạo dữ liệu mẫu Đánh giá Hiệu suất Kỹ sư (Q3-2026, Q4-2026) & Chứng chỉ sắp/đã hết hạn.");
+    }
+
+    private String safeJson(Object obj) {
+        if (obj == null) return null;
+        try {
+            return objectMapper.writeValueAsString(obj);
+        } catch (Exception e) {
+            return null;
         }
     }
 }

@@ -903,6 +903,10 @@ public class TechWorklogService {
         }
     }
 
+    public List<TechWorklogResponse> enrichWorklogsWithAudit(List<TechWorklog> worklogs) {
+        return mapToResponsesWithAudit(worklogs);
+    }
+
     private TechWorklogResponse mapToResponse(TechWorklog w) {
         List<TechWorklogResponse> list = mapToResponsesWithAudit(List.of(w));
         return list.isEmpty() ? null : list.get(0);

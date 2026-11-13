@@ -9,6 +9,7 @@ import {
   Clock,
   ExternalLink,
   ShieldCheck,
+  AlertTriangle,
   UserPlus,
 } from 'lucide-react';
 import TechRadarChart from './TechRadarChart';
@@ -17,6 +18,7 @@ import {
   RADAR_DIMENSIONS,
   sortSkillsByLevel,
   formatDateVN,
+  getCertExpiryInfo,
 } from '../techHelpers';
 
 export default function TechProfileModal({
@@ -56,7 +58,6 @@ export default function TechProfileModal({
 
   const sortedSkills = sortSkillsByLevel(profile.skills || []);
   const certificates = profile.certificates || [];
-  const todayStr = new Date().toISOString().split('T')[0];
 
   return createPortal(
     <div
@@ -258,15 +259,19 @@ export default function TechProfileModal({
                 ) : (
                   <div className="space-y-2">
                     {certificates.map((cert) => {
-                      const isExpired = cert.isExpired ?? (cert.expiryDate && cert.expiryDate < todayStr);
-                      const isLifetime = !cert.expiryDate;
+                      const expInfo = getCertExpiryInfo(cert);
+                      const isExpired = expInfo.status === 'EXPIRED';
+                      const isExpiringSoon = expInfo.status === 'EXPIRING_SOON';
+                      const isLifetime = expInfo.status === 'LIFETIME';
 
                       return (
                         <div
                           key={cert.id}
                           className={`p-3 rounded-xl border flex items-start justify-between gap-3 text-xs ${
                             isExpired
-                              ? 'bg-slate-50 border-slate-200 opacity-80'
+                              ? 'bg-rose-50/40 border-rose-200'
+                              : isExpiringSoon
+                              ? 'bg-orange-50/45 border-orange-200'
                               : 'bg-blue-50/40 border-blue-200/80'
                           }`}
                         >
@@ -278,14 +283,21 @@ export default function TechProfileModal({
                                   Vĩnh viễn
                                 </span>
                               )}
-                              {!isLifetime && !isExpired && (
+                              {expInfo.status === 'VALID' && (
                                 <span className="text-[10px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200 whitespace-nowrap">
                                   Còn hiệu lực
                                 </span>
                               )}
+                              {isExpiringSoon && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full border border-orange-200 whitespace-nowrap tabular">
+                                  <Clock size={10} />
+                                  <span>{expInfo.label}</span>
+                                </span>
+                              )}
                               {isExpired && (
-                                <span className="text-[10px] font-semibold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200 whitespace-nowrap">
-                                  Đã hết hạn
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200 whitespace-nowrap tabular">
+                                  <AlertTriangle size={10} />
+                                  <span>{expInfo.label}</span>
                                 </span>
                               )}
                             </div>
@@ -295,7 +307,15 @@ export default function TechProfileModal({
                               {cert.expiryDate && (
                                 <span>
                                   {' '}• Hạn:{' '}
-                                  <span className={isExpired ? 'text-rose-600 font-semibold' : ''}>
+                                  <span
+                                    className={
+                                      isExpired
+                                        ? 'text-rose-600 font-semibold'
+                                        : isExpiringSoon
+                                        ? 'text-orange-700 font-semibold'
+                                        : ''
+                                    }
+                                  >
                                     {formatDateVN(cert.expiryDate)}
                                   </span>
                                 </span>

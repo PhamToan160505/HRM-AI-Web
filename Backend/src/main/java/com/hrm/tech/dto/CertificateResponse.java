@@ -22,5 +22,6 @@ public class CertificateResponse {
     private String credentialUrl;
     private Boolean isExpired;
     private String status; // ACTIVE, EXPIRED, LIFETIME
+    private String expiryStatus; // VALID, EXPIRING_SOON, EXPIRED
+    private Long daysRemaining;
 }
-

@@ -11,17 +11,21 @@ import {
   Layers,
   CheckCircle2,
   Clock,
+  TrendingUp,
 } from 'lucide-react';
 import { MotionConfig, motion, AnimatePresence } from 'framer-motion';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 import api from '../../../services/api';
+import { useAuth } from '../../../context/AuthContext';
 import { useToast } from '../../../components/common/Toast';
 import CeoPortfolioTab from './CeoPortfolioTab';
 import CeoCapacityBenchTab from './CeoCapacityBenchTab';
 import CeoCapabilityTab from './CeoCapabilityTab';
 import CeoTimesheetTab from './CeoTimesheetTab';
+import CeoPerformanceTab from './CeoPerformanceTab';
 import CeoProjectDetailModal from './CeoProjectDetailModal';
 import CeoTechProfileModal from './CeoTechProfileModal';
+import TechReviewDetailModal from '../components/TechReviewDetailModal';
 import { PROJECT_STATUS_CONFIG, computeTimelineHealth, getCurrentMonthStr } from './ceoTechHelpers';
 import {
   isMatchingLiveNotificationNavToken,
@@ -41,9 +45,10 @@ function StatusDonutTooltip({ active, payload }) {
   );
 }
 
-const VALID_TABS = ['projects', 'bench', 'skills', 'timesheet'];
+const VALID_TABS = ['projects', 'bench', 'skills', 'timesheet', 'reviews'];
 
 export default function CeoTechProjectsPage() {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
@@ -80,18 +85,44 @@ export default function CeoTechProjectsPage() {
   worklogQueryRef.current = worklogQuery;
   const [worklogsLoading, setWorklogsLoading] = useState(false);
   const [worklogAnalytics, setWorklogAnalytics] = useState(null);
+  const [expiringCerts, setExpiringCerts] = useState([]);
+  const [reviewCycles, setReviewCycles] = useState([]);
+  const [selectedCycleId, setSelectedCycleId] = useState('');
+  const selectedCycleIdRef = useRef(selectedCycleId);
+  selectedCycleIdRef.current = selectedCycleId;
+  const [reviews, setReviews] = useState([]);
+  const [reviewPageData, setReviewPageData] = useState(null);
+  const [reviewQuery, setReviewQuery] = useState({
+    page: 0,
+    size: 10,
+    status: '',
+    grade: '',
+    keyword: '',
+  });
+  const reviewQueryRef = useRef(reviewQuery);
+  reviewQueryRef.current = reviewQuery;
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewAnalytics, setReviewAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
   const lastFetchTimeRef = useRef(0);
+  const initialLiveFocusReviewIdRef = useRef(
+    initialTabFromQuery === 'reviews' &&
+      isMatchingLiveNotificationNavToken(location.state?.fromNotificationAt)
+      ? searchParams.get('reviewId') || null
+      : null
+  );
 
   // Navigation & filter states
-  const [activeTab, setActiveTab] = useState(initialTabFromQuery); // 'projects' | 'bench' | 'skills' | 'timesheet'
+  const [activeTab, setActiveTab] = useState(initialTabFromQuery); // 'projects' | 'bench' | 'skills' | 'timesheet' | 'reviews'
   const [projectStatusFilter, setProjectStatusFilter] = useState('');
+  const [focusReviewRequest, setFocusReviewRequest] = useState(null);
 
-  // Modal states (Nested support: ProjectDetail -> Engineer TechProfile)
+  // Modal states (Nested support: ProjectDetail -> Engineer TechProfile, ReviewDetail -> Engineer TechProfile)
   const [selectedDetailProject, setSelectedDetailProject] = useState(null);
+  const [selectedReview, setSelectedReview] = useState(null);
   const [selectedProfile, setSelectedProfile] = useState(null);
   const [loadingProfileId, setLoadingProfileId] = useState(null);
 
@@ -120,24 +151,54 @@ export default function CeoTechProjectsPage() {
     }
   }, []);
 
+  const buildReviewParams = useCallback((cycleIdStr, queryObj, focusId = null) => {
+    const q = queryObj || {};
+    return {
+      ...(cycleIdStr ? { cycleId: Number(cycleIdStr) } : {}),
+      page: q.page ?? 0,
+      size: q.size ?? 10,
+      ...(q.status ? { status: q.status } : {}),
+      ...(q.grade ? { grade: q.grade } : {}),
+      ...(q.keyword && q.keyword.trim() ? { keyword: q.keyword.trim() } : {}),
+      ...(focusId ? { focusReviewId: Number(focusId) } : {}),
+    };
+  }, []);
+
+  const applyReviewPageResponse = useCallback((pageDto) => {
+    setReviewPageData(pageDto || null);
+    setReviews(pageDto?.content || []);
+    if (
+      pageDto &&
+      typeof pageDto.number === 'number' &&
+      pageDto.number !== reviewQueryRef.current.page
+    ) {
+      const synced = { ...reviewQueryRef.current, page: pageDto.number };
+      reviewQueryRef.current = synced;
+      setReviewQuery(synced);
+    }
+  }, []);
+
   const loadAllData = useCallback(
-    async ({ manual = false, quiet = false } = {}) => {
+    async ({ manual = false, quiet = false, focusReviewId = null } = {}) => {
       try {
         if (manual) setRefreshing(true);
         else if (!quiet) setLoading(true);
         if (!quiet) setErrorMsg('');
 
         const activeMonth = selectedMonthRef.current || getCurrentMonthStr();
-        const [projRes, benchRes, matrixRes, skillsRes, wlRes, analyticsRes] = await Promise.all([
-          api.get('/api/tech/projects'),
-          api.get('/api/tech/projects/bench'),
-          api.get('/api/tech/skills/matrix'),
-          api.get('/api/tech/skills'),
-          api.get('/api/tech/worklogs/paginated', {
-            params: buildWorklogParams(activeMonth, worklogQueryRef.current),
-          }),
-          api.get('/api/tech/worklogs/analytics', { params: { month: activeMonth } }),
-        ]);
+        const [projRes, benchRes, matrixRes, skillsRes, wlRes, analyticsRes, expiringRes, cyclesRes] =
+          await Promise.all([
+            api.get('/api/tech/projects'),
+            api.get('/api/tech/projects/bench'),
+            api.get('/api/tech/skills/matrix'),
+            api.get('/api/tech/skills'),
+            api.get('/api/tech/worklogs/paginated', {
+              params: buildWorklogParams(activeMonth, worklogQueryRef.current),
+            }),
+            api.get('/api/tech/worklogs/analytics', { params: { month: activeMonth } }),
+            api.get('/api/tech/skills/certificates/expiring'),
+            api.get('/api/tech/reviews/cycles'),
+          ]);
 
         const freshProjects = projRes.data?.data || [];
         setProjects(freshProjects);
@@ -149,6 +210,53 @@ export default function CeoTechProjectsPage() {
         setAvailableSkills(skillsRes.data?.data || []);
         applyWorklogPageResponse(wlRes.data?.data);
         setWorklogAnalytics(analyticsRes.data?.data || null);
+        setExpiringCerts(expiringRes.data?.data || []);
+
+        const freshCycles = cyclesRes.data?.data || [];
+        setReviewCycles(freshCycles);
+
+        let targetCycleId = selectedCycleIdRef.current;
+        if (focusReviewId) {
+          try {
+            const focusedRevRes = await api.get(`/api/tech/reviews/${focusReviewId}`);
+            const revCycleId = focusedRevRes.data?.data?.cycleId;
+            if (revCycleId) {
+              targetCycleId = String(revCycleId);
+            }
+          } catch {
+            // Keep existing or latest cycle fallback
+          }
+        }
+        if (
+          freshCycles.length > 0 &&
+          (!targetCycleId || !freshCycles.some((c) => String(c.id) === String(targetCycleId)))
+        ) {
+          targetCycleId = String(freshCycles[0].id);
+        } else if (freshCycles.length === 0) {
+          targetCycleId = '';
+        }
+
+        if (targetCycleId !== selectedCycleIdRef.current) {
+          selectedCycleIdRef.current = targetCycleId;
+          setSelectedCycleId(targetCycleId);
+        }
+
+        if (freshCycles.length > 0) {
+          const [revPageRes, revAnalyticsRes] = await Promise.all([
+            api.get('/api/tech/reviews/paginated', {
+              params: buildReviewParams(targetCycleId, reviewQueryRef.current, focusReviewId),
+            }),
+            api.get('/api/tech/reviews/analytics', {
+              params: targetCycleId ? { cycleId: Number(targetCycleId) } : {},
+            }),
+          ]);
+          applyReviewPageResponse(revPageRes.data?.data);
+          setReviewAnalytics(revAnalyticsRes.data?.data || null);
+        } else {
+          applyReviewPageResponse(null);
+          setReviewAnalytics(null);
+        }
+
         setLastUpdated(new Date());
         lastFetchTimeRef.current = Date.now();
       } catch (err) {
@@ -161,7 +269,7 @@ export default function CeoTechProjectsPage() {
         setRefreshing(false);
       }
     },
-    [buildWorklogParams, applyWorklogPageResponse]
+    [buildWorklogParams, applyWorklogPageResponse, buildReviewParams, applyReviewPageResponse]
   );
 
   const handleChangeWorklogQuery = useCallback(
@@ -221,6 +329,91 @@ export default function CeoTechProjectsPage() {
     [buildWorklogParams, applyWorklogPageResponse]
   );
 
+  const handleChangeReviewQuery = useCallback(
+    async (nextOrUpdater) => {
+      const nextQuery =
+        typeof nextOrUpdater === 'function'
+          ? nextOrUpdater(reviewQueryRef.current)
+          : nextOrUpdater;
+      reviewQueryRef.current = nextQuery;
+      setReviewQuery(nextQuery);
+      try {
+        setReviewsLoading(true);
+        const revPageRes = await api.get('/api/tech/reviews/paginated', {
+          params: buildReviewParams(selectedCycleIdRef.current, nextQuery),
+        });
+        applyReviewPageResponse(revPageRes.data?.data);
+        lastFetchTimeRef.current = Date.now();
+      } catch (err) {
+        toastRef.current?.show(
+          'Lỗi',
+          err.response?.data?.message || 'Không thể tải danh sách phiếu đánh giá',
+          'error'
+        );
+      } finally {
+        setReviewsLoading(false);
+      }
+    },
+    [buildReviewParams, applyReviewPageResponse]
+  );
+
+  const handleChangeCycle = useCallback(
+    async (nextCycleId) => {
+      const safeId = nextCycleId ? String(nextCycleId) : '';
+      selectedCycleIdRef.current = safeId;
+      setSelectedCycleId(safeId);
+      const resetPageQuery = { ...reviewQueryRef.current, page: 0 };
+      reviewQueryRef.current = resetPageQuery;
+      setReviewQuery(resetPageQuery);
+      try {
+        setReviewsLoading(true);
+        const [revPageRes, revAnalyticsRes] = await Promise.all([
+          api.get('/api/tech/reviews/paginated', {
+            params: buildReviewParams(safeId, resetPageQuery),
+          }),
+          api.get('/api/tech/reviews/analytics', {
+            params: safeId ? { cycleId: Number(safeId) } : {},
+          }),
+        ]);
+        applyReviewPageResponse(revPageRes.data?.data);
+        setReviewAnalytics(revAnalyticsRes.data?.data || null);
+        lastFetchTimeRef.current = Date.now();
+      } catch (err) {
+        toastRef.current?.show(
+          'Lỗi',
+          err.response?.data?.message || 'Không thể tải dữ liệu kỳ đánh giá',
+          'error'
+        );
+      } finally {
+        setReviewsLoading(false);
+      }
+    },
+    [buildReviewParams, applyReviewPageResponse]
+  );
+
+  const handleFocusHandled = useCallback(
+    (handledToken) => {
+      clearLiveNotificationNavToken(handledToken);
+      if (
+        searchParams.has('worklogId') ||
+        searchParams.has('userId') ||
+        searchParams.has('reviewId') ||
+        location.state?.fromNotificationAt
+      ) {
+        const cleaned = new URLSearchParams(searchParams);
+        cleaned.delete('worklogId');
+        cleaned.delete('userId');
+        cleaned.delete('reviewId');
+        const cleanSearch = cleaned.toString();
+        navigate(
+          { pathname: location.pathname, search: cleanSearch ? `?${cleanSearch}` : '' },
+          { replace: true, state: null }
+        );
+      }
+    },
+    [searchParams, location.pathname, location.state, navigate]
+  );
+
   const handleSelectTab = useCallback(
     (tabId) => {
       const nextTab = VALID_TABS.includes(tabId) ? tabId : 'projects';
@@ -240,6 +433,7 @@ export default function CeoTechProjectsPage() {
     const queryMonth = searchParams.get('month');
     const queryWorklogId = searchParams.get('worklogId');
     const queryUserId = searchParams.get('userId');
+    const queryReviewId = searchParams.get('reviewId');
     const fromNotifAt = location.state?.fromNotificationAt;
     const isLiveNotifClick = isMatchingLiveNotificationNavToken(fromNotifAt);
 
@@ -253,16 +447,45 @@ export default function CeoTechProjectsPage() {
     }
 
     if (isLiveNotifClick) {
-      clearLiveNotificationNavToken(fromNotifAt);
-      if (lastFetchTimeRef.current > 0) {
-        loadAllData({ quiet: true });
+      if (queryTab === 'reviews') {
+        const resetRevQuery = {
+          ...reviewQueryRef.current,
+          page: 0,
+          status: '',
+          grade: '',
+          keyword: '',
+        };
+        reviewQueryRef.current = resetRevQuery;
+        setReviewQuery(resetRevQuery);
+        setFocusReviewRequest({
+          reviewId: queryReviewId || null,
+          requestedAt: fromNotifAt,
+        });
+        if (lastFetchTimeRef.current > 0) {
+          loadAllData({ quiet: true, focusReviewId: queryReviewId || null });
+        }
+      } else {
+        clearLiveNotificationNavToken(fromNotifAt);
+        if (lastFetchTimeRef.current > 0) {
+          loadAllData({ quiet: true });
+        }
+        if (queryWorklogId || queryUserId || queryReviewId || fromNotifAt) {
+          const cleaned = new URLSearchParams(searchParams);
+          cleaned.delete('worklogId');
+          cleaned.delete('userId');
+          cleaned.delete('reviewId');
+          const cleanSearch = cleaned.toString();
+          navigate(
+            { pathname: location.pathname, search: cleanSearch ? `?${cleanSearch}` : '' },
+            { replace: true, state: null }
+          );
+        }
       }
-    }
-
-    if (queryWorklogId || queryUserId || fromNotifAt) {
+    } else if (queryWorklogId || queryUserId || queryReviewId || fromNotifAt) {
       const cleaned = new URLSearchParams(searchParams);
       cleaned.delete('worklogId');
       cleaned.delete('userId');
+      cleaned.delete('reviewId');
       const cleanSearch = cleaned.toString();
       navigate(
         { pathname: location.pathname, search: cleanSearch ? `?${cleanSearch}` : '' },
@@ -272,7 +495,7 @@ export default function CeoTechProjectsPage() {
   }, [searchParams, location.pathname, location.state, navigate, loadAllData]);
 
   useEffect(() => {
-    loadAllData();
+    loadAllData({ focusReviewId: initialLiveFocusReviewIdRef.current });
   }, [loadAllData]);
 
   // Đồng bộ Realtime khi có thay đổi Dự án / Worklog / Kỹ năng từ Kỹ sư hoặc Trưởng phòng
@@ -404,13 +627,13 @@ export default function CeoTechProjectsPage() {
     },
     {
       id: 'bench',
-      label: 'Công suất & Ghế chờ Bench',
+      label: 'Công suất & Bench',
       count: telemetry.totalEngineers,
       icon: Activity,
     },
     {
       id: 'skills',
-      label: 'Năng lực & Ghép nối',
+      label: 'Ma trận Năng lực',
       count: matrixData.length,
       icon: Cpu,
     },
@@ -419,6 +642,13 @@ export default function CeoTechProjectsPage() {
       label: 'Giờ công & Hiệu suất',
       count: worklogPageData?.monthTotalCount ?? worklogs.length,
       icon: Clock,
+    },
+    {
+      id: 'reviews',
+      label: 'Đánh giá & Phê duyệt',
+      count: reviewAnalytics?.totalReviews ?? 0,
+      pendingCount: Number(reviewAnalytics?.directorApprovalPendingCount ?? 0),
+      icon: TrendingUp,
     },
   ];
 
@@ -742,7 +972,7 @@ export default function CeoTechProjectsPage() {
             </motion.div>
 
             {/* 3. Segmented Executive Navigation Tabs */}
-            <div className="bg-white rounded-2xl border border-slate-200/90 p-1.5 inline-flex flex-wrap items-center gap-1 shadow-2xs">
+            <div className="w-full bg-white rounded-2xl border border-slate-200/90 p-1.5 flex flex-wrap items-center gap-1 shadow-2xs">
               {tabs.map((tab) => {
                 const IconComp = tab.icon;
                 const isActive = activeTab === tab.id;
@@ -751,7 +981,7 @@ export default function CeoTechProjectsPage() {
                     type="button"
                     key={tab.id}
                     onClick={() => handleSelectTab(tab.id)}
-                    className={`relative px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-colors flex items-center gap-2 cursor-pointer ${
+                    className={`relative flex-1 min-w-fit px-3 py-2 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer ${
                       isActive ? 'text-white' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                     }`}
                   >
@@ -762,16 +992,28 @@ export default function CeoTechProjectsPage() {
                         className="absolute inset-0 bg-[#1E3A8A] rounded-xl shadow-xs"
                       />
                     )}
-                    <span className="relative z-10 flex items-center gap-2">
-                      <IconComp size={16} />
+                    <span className="relative z-10 flex items-center gap-1.5">
+                      <IconComp size={15} className="shrink-0" />
                       <span>{tab.label}</span>
                       <span
-                        className={`text-[11px] px-2 py-0.5 rounded-full tabular ${
+                        className={`text-[11px] px-1.5 py-0.5 rounded-full tabular ${
                           isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
                         }`}
                       >
                         {tab.count}
                       </span>
+                      {tab.pendingCount > 0 && (
+                        <span
+                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full tabular ${
+                            isActive
+                              ? 'bg-orange-500 text-white'
+                              : 'bg-orange-50 text-orange-700 border border-orange-200'
+                          }`}
+                          title="Phiếu đánh giá & thăng cấp chờ CEO phê duyệt"
+                        >
+                          {tab.pendingCount} chờ duyệt
+                        </span>
+                      )}
                     </span>
                   </button>
                 );
@@ -793,6 +1035,8 @@ export default function CeoTechProjectsPage() {
                     statusFilter={projectStatusFilter}
                     onChangeStatusFilter={setProjectStatusFilter}
                     onSelectProject={setSelectedDetailProject}
+                    expiringCerts={expiringCerts}
+                    onInspectEngineer={handleInspectEngineer}
                   />
                 )}
 
@@ -829,23 +1073,57 @@ export default function CeoTechProjectsPage() {
                     onInspectEngineer={handleInspectEngineer}
                   />
                 )}
+
+                {activeTab === 'reviews' && (
+                  <CeoPerformanceTab
+                    cycles={reviewCycles}
+                    selectedCycleId={selectedCycleId}
+                    onChangeCycle={handleChangeCycle}
+                    analytics={reviewAnalytics}
+                    reviews={reviews}
+                    reviewPageData={reviewPageData}
+                    reviewQuery={reviewQuery}
+                    reviewsLoading={reviewsLoading}
+                    onChangeReviewQuery={handleChangeReviewQuery}
+                    expiringCerts={expiringCerts}
+                    currentUserId={user?.userId}
+                    onSelectReview={setSelectedReview}
+                    onInspectEngineer={handleInspectEngineer}
+                    focusReviewRequest={focusReviewRequest}
+                    onFocusHandled={handleFocusHandled}
+                  />
+                )}
               </motion.div>
             </AnimatePresence>
           </>
         )}
 
-        {/* Modals (Read-Only + Nested Support: Project Detail -> Member Tech Profile) */}
+        {/* Modals (Read-Only Portfolio + CEO Performance Escalation Approval + Nested Engineer TechProfile) */}
         <CeoProjectDetailModal
           isOpen={!!selectedDetailProject}
           onClose={() => setSelectedDetailProject(null)}
           project={selectedDetailProject}
           onInspectEngineer={handleInspectEngineer}
+          hasTopModalOpen={!!selectedProfile || !!selectedReview}
+        />
+
+        <TechReviewDetailModal
+          isOpen={!!selectedReview}
+          onClose={() => setSelectedReview(null)}
+          reviewId={selectedReview?.id}
+          initialReview={selectedReview}
+          viewerRole="ceo"
+          currentUserId={user?.userId}
+          readOnlyMode={false}
+          onInspectEngineer={handleInspectEngineer}
+          onSuccess={() => loadAllData({ quiet: true })}
           hasTopModalOpen={!!selectedProfile}
         />
 
         <CeoTechProfileModal
           profile={selectedProfile}
           onClose={() => setSelectedProfile(null)}
+          zIndexClass={selectedReview ? 'z-[9995]' : 'z-[9990]'}
         />
       </div>
     </MotionConfig>

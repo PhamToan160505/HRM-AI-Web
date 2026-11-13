@@ -25,6 +25,7 @@ import {
   Flag,
   ExternalLink,
   Lock,
+  TrendingUp,
 } from 'lucide-react';
 import { MotionConfig, motion, AnimatePresence } from 'framer-motion';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
@@ -32,8 +33,11 @@ import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/common/Toast';
 import MyTechProfileTab from './components/MyTechProfileTab';
+import MyPerformanceCareerTab from './components/MyPerformanceCareerTab';
 import ProjectDetailModal from './components/ProjectDetailModal';
 import WorklogModal from './components/WorklogModal';
+import SelfReviewModal from './components/SelfReviewModal';
+import TechReviewDetailModal from './components/TechReviewDetailModal';
 import TechMonthPicker from './components/TechMonthPicker';
 import {
   PROJECT_STATUS_CONFIG,
@@ -68,7 +72,7 @@ function WorkloadDonutTooltip({ active, payload }) {
   );
 }
 
-const VALID_TABS = ['projects', 'timesheet', 'profile'];
+const VALID_TABS = ['projects', 'timesheet', 'profile', 'reviews'];
 
 export default function MyTechProjectsPage() {
   const { user } = useAuth();
@@ -88,13 +92,15 @@ export default function MyTechProjectsPage() {
       ? queryMonthInit
       : getCurrentMonthStr();
 
-  const [activeTab, setActiveTab] = useState(initialTabFromQuery); // 'projects' | 'timesheet' | 'profile'
+  const [activeTab, setActiveTab] = useState(initialTabFromQuery); // 'projects' | 'timesheet' | 'profile' | 'reviews'
   const [projects, setProjects] = useState([]);
   const [myProfile, setMyProfile] = useState(null);
   const [selectedMonth, setSelectedMonth] = useState(initialMonthFromQuery);
   const selectedMonthRef = useRef(selectedMonth);
   selectedMonthRef.current = selectedMonth;
   const [worklogSummary, setWorklogSummary] = useState(null);
+  const [myPerfOverview, setMyPerfOverview] = useState(null);
+  const [availableSkills, setAvailableSkills] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -103,7 +109,10 @@ export default function MyTechProjectsPage() {
 
   const [keyword, setKeyword] = useState('');
   const [selectedDetailProject, setSelectedDetailProject] = useState(null);
+  const [selfReviewTarget, setSelfReviewTarget] = useState(null);
+  const [selectedReviewDetail, setSelectedReviewDetail] = useState(null);
   const [focusWorklogRequest, setFocusWorklogRequest] = useState(null);
+  const [focusReviewRequest, setFocusReviewRequest] = useState(null);
   const [highlightState, setHighlightState] = useState(null);
   const highlightedWorklogId = highlightState?.id || null;
   const myWorklogTableRef = useRef(null);
@@ -127,10 +136,12 @@ export default function MyTechProjectsPage() {
       if (!quiet) setErrorMsg('');
 
       const activeMonth = selectedMonthRef.current || getCurrentMonthStr();
-      const [projRes, profRes, wlRes] = await Promise.all([
+      const [projRes, profRes, wlRes, perfRes, skillsRes] = await Promise.all([
         api.get('/api/tech/projects/my-projects'),
         api.get('/api/tech/skills/my-profile'),
         api.get('/api/tech/worklogs/my', { params: { month: activeMonth } }),
+        api.get('/api/tech/reviews/my'),
+        api.get('/api/tech/skills'),
       ]);
 
       const freshProjects = projRes.data?.data || [];
@@ -140,6 +151,8 @@ export default function MyTechProjectsPage() {
       );
       setMyProfile(profRes.data?.data || null);
       setWorklogSummary(wlRes.data?.data || null);
+      setMyPerfOverview(perfRes.data?.data || null);
+      setAvailableSkills(skillsRes.data?.data || []);
       setLastUpdated(new Date());
       lastFetchTimeRef.current = Date.now();
     } catch (err) {
@@ -186,11 +199,13 @@ export default function MyTechProjectsPage() {
       if (
         searchParams.has('worklogId') ||
         searchParams.has('userId') ||
+        searchParams.has('reviewId') ||
         location.state?.fromNotificationAt
       ) {
         const cleaned = new URLSearchParams(searchParams);
         cleaned.delete('worklogId');
         cleaned.delete('userId');
+        cleaned.delete('reviewId');
         const cleanSearch = cleaned.toString();
         navigate(
           { pathname: location.pathname, search: cleanSearch ? `?${cleanSearch}` : '' },
@@ -201,11 +216,12 @@ export default function MyTechProjectsPage() {
     [searchParams, location.pathname, location.state, navigate]
   );
 
-  // Đồng bộ URL query (?tab=timesheet&worklogId=...&month=... hoặc ?tab=profile / projects) CHỈ khi bấm "Xem chi tiết" từ Thông báo
+  // Đồng bộ URL query (?tab=timesheet&worklogId=..., ?tab=reviews&reviewId=..., hoặc ?tab=profile / projects) CHỈ khi bấm "Xem chi tiết" từ Thông báo
   useEffect(() => {
     const queryTab = searchParams.get('tab');
     const queryWorklogId = searchParams.get('worklogId');
     const queryUserId = searchParams.get('userId');
+    const queryReviewId = searchParams.get('reviewId');
     const queryMonth = searchParams.get('month');
     const fromNotifAt = location.state?.fromNotificationAt;
     const isLiveNotifClick = isMatchingLiveNotificationNavToken(fromNotifAt);
@@ -229,17 +245,37 @@ export default function MyTechProjectsPage() {
         if (lastFetchTimeRef.current > 0) {
           loadAllData({ quiet: true });
         }
+      } else if (queryTab === 'reviews') {
+        setFocusReviewRequest({
+          reviewId: queryReviewId || null,
+          requestedAt: fromNotifAt,
+        });
+        if (lastFetchTimeRef.current > 0) {
+          loadAllData({ quiet: true });
+        }
       } else {
         clearLiveNotificationNavToken(fromNotifAt);
         if (lastFetchTimeRef.current > 0) {
           loadAllData({ quiet: true });
         }
+        if (queryWorklogId || queryUserId || queryReviewId || fromNotifAt) {
+          const cleaned = new URLSearchParams(searchParams);
+          cleaned.delete('worklogId');
+          cleaned.delete('userId');
+          cleaned.delete('reviewId');
+          const cleanSearch = cleaned.toString();
+          navigate(
+            { pathname: location.pathname, search: cleanSearch ? `?${cleanSearch}` : '' },
+            { replace: true, state: null }
+          );
+        }
       }
-    } else if (queryWorklogId || queryUserId || fromNotifAt) {
+    } else if (queryWorklogId || queryUserId || queryReviewId || fromNotifAt) {
       // Sau F5 hoặc không bấm "Xem chi tiết": không tự cuộn và làm sạch tham số focus cũ trên URL
       const cleaned = new URLSearchParams(searchParams);
       cleaned.delete('worklogId');
       cleaned.delete('userId');
+      cleaned.delete('reviewId');
       const cleanSearch = cleaned.toString();
       navigate(
         { pathname: location.pathname, search: cleanSearch ? `?${cleanSearch}` : '' },
@@ -540,6 +576,13 @@ export default function MyTechProjectsPage() {
       label: 'Hồ sơ Năng lực Kỹ thuật',
       count: telemetry.totalSkills,
       icon: Award,
+    },
+    {
+      id: 'reviews',
+      label: 'Đánh giá & Lộ trình',
+      count: (myPerfOverview?.reviews || []).length,
+      pendingCount: Number(myPerfOverview?.pendingSelfReviewCount ?? 0),
+      icon: TrendingUp,
     },
   ];
 
@@ -862,6 +905,18 @@ export default function MyTechProjectsPage() {
                       >
                         {tab.count}
                       </span>
+                      {tab.pendingCount > 0 && (
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full tabular ${
+                            isActive
+                              ? 'bg-orange-500 text-white'
+                              : 'bg-orange-50 text-orange-700 border border-orange-200'
+                          }`}
+                          title="Phiếu đánh giá kỳ mới đang chờ bạn tự đánh giá"
+                        >
+                          {tab.pendingCount} cần nộp
+                        </span>
+                      )}
                     </span>
                   </button>
                 );
@@ -1494,6 +1549,17 @@ export default function MyTechProjectsPage() {
                     onRefreshProfile={() => loadAllData({ quiet: true })}
                   />
                 )}
+
+                {activeTab === 'reviews' && (
+                  <MyPerformanceCareerTab
+                    overview={myPerfOverview}
+                    onOpenSelfReview={setSelfReviewTarget}
+                    onSelectReviewDetail={setSelectedReviewDetail}
+                    onGoToProfileTab={() => handleSelectTab('profile')}
+                    focusReviewRequest={focusReviewRequest}
+                    onFocusHandled={handleFocusHandled}
+                  />
+                )}
               </motion.div>
             </AnimatePresence>
           </>
@@ -1506,6 +1572,30 @@ export default function MyTechProjectsPage() {
           project={selectedDetailProject}
           canManageMilestones={false}
           canAnalyzeHealth={false}
+          hasTopModalOpen={
+            !!selfReviewTarget || !!selectedReviewDetail || isWorklogModalOpen || !!deleteWorklogTarget
+          }
+        />
+
+        {/* Modal Tự đánh giá & Đề xuất Nâng bậc Kỹ năng */}
+        <SelfReviewModal
+          isOpen={!!selfReviewTarget}
+          onClose={() => setSelfReviewTarget(null)}
+          review={selfReviewTarget}
+          availableSkills={availableSkills}
+          mySkills={myProfile?.skills || []}
+          onSuccess={() => loadAllData({ quiet: true })}
+        />
+
+        {/* Modal Xem chi tiết Phiếu Đánh giá (Chế độ Chỉ xem cho Kỹ sư - Ẩn mọi thông tin lương B-10) */}
+        <TechReviewDetailModal
+          isOpen={!!selectedReviewDetail}
+          onClose={() => setSelectedReviewDetail(null)}
+          reviewId={selectedReviewDetail?.id}
+          initialReview={selectedReviewDetail}
+          viewerRole="nhan_vien"
+          currentUserId={user?.userId}
+          readOnlyMode={true}
         />
 
         {/* Modal Ghi nhận / Chỉnh sửa Giờ công */}

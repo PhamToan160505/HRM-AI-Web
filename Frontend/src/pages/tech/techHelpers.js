@@ -460,4 +460,203 @@ export const matchWorklogFromFocusRequest = (list = [], focusRequest = null, rol
   return list.find((w) => w.approvalStatus === 'PENDING') || list[0] || null;
 };
 
+// ── Feature #8: Performance Review, Certifications & Career Progression ──────────
+
+export const REVIEW_TYPE_CONFIG = {
+  MONTHLY: {
+    label: 'Đánh giá Tháng',
+    shortLabel: 'Theo tháng',
+    badgeClass: 'bg-sky-50 text-sky-700 border-sky-200',
+  },
+  QUARTERLY: {
+    label: 'Đánh giá Quý (Quarterly)',
+    shortLabel: 'Theo quý',
+    badgeClass: 'bg-blue-50 text-[#1E3A8A] border-blue-200',
+  },
+  ANNUAL: {
+    label: 'Đánh giá Năm (Annual)',
+    shortLabel: 'Theo năm',
+    badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  },
+  PROBATION: {
+    label: 'Đánh giá Thử việc (Probation)',
+    shortLabel: 'Thử việc',
+    badgeClass: 'bg-orange-50 text-orange-700 border-orange-200',
+  },
+};
+
+export const REVIEW_TYPE_OPTIONS = Object.entries(REVIEW_TYPE_CONFIG).map(([value, cfg]) => ({
+  value,
+  label: cfg.label,
+  shortLabel: cfg.shortLabel,
+}));
+
+export const REVIEW_STATUS_CONFIG = {
+  SELF_REVIEW_PENDING: {
+    label: 'Chờ Tự đánh giá',
+    shortLabel: 'Chờ NV tự đánh giá',
+    badgeClass: 'bg-slate-100 text-slate-700 border-slate-200',
+  },
+  MANAGER_REVIEW_PENDING: {
+    label: 'Chờ Quản lý chấm',
+    shortLabel: 'Chờ Quản lý chấm',
+    badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
+  },
+  DIRECTOR_APPROVAL_PENDING: {
+    label: 'Chờ GĐ / CEO duyệt',
+    shortLabel: 'Chờ GĐ / CEO duyệt',
+    badgeClass: 'bg-orange-50 text-orange-700 border-orange-200',
+  },
+  APPROVED: {
+    label: 'Đã chốt hoàn tất',
+    shortLabel: 'Đã hoàn tất',
+    badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  },
+  REJECTED_FOR_REVISION: {
+    label: 'Trả lại hiệu chỉnh',
+    shortLabel: 'Cần hiệu chỉnh',
+    badgeClass: 'bg-rose-50 text-rose-700 border-rose-200',
+  },
+};
+
+export const RATING_GRADE_CONFIG = {
+  S: {
+    grade: 'S',
+    label: 'Hạng S (Xuất sắc)',
+    shortLabel: 'S - Xuất sắc',
+    badgeClass: 'bg-[#0F2557] text-white border-[#0F2557] font-extrabold',
+    barColor: '#0F2557',
+  },
+  A: {
+    grade: 'A',
+    label: 'Hạng A (Vượt kỳ vọng)',
+    shortLabel: 'A - Vượt kỳ vọng',
+    badgeClass: 'bg-emerald-600 text-white border-emerald-600 font-extrabold',
+    barColor: '#059669',
+  },
+  B: {
+    grade: 'B',
+    label: 'Hạng B (Đạt chuẩn)',
+    shortLabel: 'B - Đạt chuẩn',
+    badgeClass: 'bg-blue-600 text-white border-blue-600 font-bold',
+    barColor: '#2563EB',
+  },
+  C: {
+    grade: 'C',
+    label: 'Hạng C (Cần cải thiện)',
+    shortLabel: 'C - Cải thiện',
+    badgeClass: 'bg-orange-500 text-white border-orange-500 font-bold',
+    barColor: '#EA580C',
+  },
+  D: {
+    grade: 'D',
+    label: 'Hạng D (Chưa đạt)',
+    shortLabel: 'D - Chưa đạt',
+    badgeClass: 'bg-rose-600 text-white border-rose-600 font-bold',
+    barColor: '#E11D48',
+  },
+};
+
+export const computeProjectedGrade = (score) => {
+  const num = Number(score || 0);
+  if (num >= 90) return 'S';
+  if (num >= 80) return 'A';
+  if (num >= 65) return 'B';
+  if (num >= 50) return 'C';
+  return 'D';
+};
+
+export const COMPENSATION_STATUS_CONFIG = {
+  NONE: {
+    label: 'Không có đề xuất lương',
+    badgeClass: 'bg-slate-100 text-slate-600 border-slate-200',
+  },
+  PENDING_CEO: {
+    label: 'Chờ CEO duyệt Thăng chức / Lương',
+    badgeClass: 'bg-orange-50 text-orange-700 border-orange-200',
+  },
+  APPROVED: {
+    label: 'CEO đã duyệt Đãi ngộ',
+    badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  },
+  REJECTED: {
+    label: 'Không duyệt Đãi ngộ',
+    badgeClass: 'bg-rose-50 text-rose-700 border-rose-200',
+  },
+};
+
+export const PROMOTION_ITEM_STATUS_CONFIG = {
+  PENDING: {
+    label: 'Chờ thẩm định',
+    badgeClass: 'bg-orange-50 text-orange-700 border-orange-200',
+  },
+  APPROVED: {
+    label: 'Đã duyệt nâng bậc',
+    badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  },
+  REJECTED: {
+    label: 'Chưa đạt bậc mục tiêu',
+    badgeClass: 'bg-rose-50 text-rose-700 border-rose-200',
+  },
+};
+
+export const CAREER_EVENT_CONFIG = {
+  REVIEW_COMPLETED: {
+    label: 'Hoàn tất Kỳ Đánh giá',
+    dotClass: 'bg-[#1E3A8A] text-white',
+    badgeClass: 'bg-blue-50 text-[#1E3A8A] border-blue-200',
+  },
+  SKILL_LEVEL_UP: {
+    label: 'Nâng bậc Kỹ năng',
+    dotClass: 'bg-emerald-600 text-white',
+    badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  },
+  TITLE_PROMOTED: {
+    label: 'Thăng Chức danh',
+    dotClass: 'bg-[#0F2557] text-white',
+    badgeClass: 'bg-sky-50 text-sky-800 border-sky-200',
+  },
+  COMPENSATION_ADJUSTED: {
+    label: 'Điều chỉnh Đãi ngộ',
+    dotClass: 'bg-orange-500 text-white',
+    badgeClass: 'bg-orange-50 text-orange-700 border-orange-200',
+  },
+};
+
+export const getCertExpiryInfo = (cert) => {
+  if (!cert || !cert.expiryDate) {
+    return { status: 'LIFETIME', daysRemaining: null, label: 'Vĩnh viễn' };
+  }
+
+  let daysRemaining = cert.daysRemaining;
+  if (daysRemaining === null || daysRemaining === undefined) {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const exp = new Date(cert.expiryDate);
+    exp.setHours(0, 0, 0, 0);
+    daysRemaining = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  }
+
+  const rawStatus = cert.expiryStatus;
+  if (rawStatus === 'EXPIRED' || daysRemaining < 0 || cert.isExpired) {
+    return {
+      status: 'EXPIRED',
+      daysRemaining,
+      label: daysRemaining < 0 ? `Đã hết hạn (${Math.abs(daysRemaining)} ngày)` : 'Đã hết hạn',
+    };
+  }
+  if (rawStatus === 'EXPIRING_SOON' || (daysRemaining >= 0 && daysRemaining <= 30)) {
+    return {
+      status: 'EXPIRING_SOON',
+      daysRemaining,
+      label: daysRemaining === 0 ? 'Hết hạn hôm nay' : `Sắp hết hạn (còn ${daysRemaining} ngày)`,
+    };
+  }
+  return {
+    status: 'VALID',
+    daysRemaining,
+    label: 'Còn hiệu lực',
+  };
+};
+
 

@@ -60,6 +60,10 @@ export function resolveNotificationLink(link, userRole, notificationType = '', n
             searchParams.set('tab', userRole === 'nhan_vien' ? 'profile' : 'skills');
         } else if (typeUpper === 'TECH_SKILL_VERIFIED') {
             searchParams.set('tab', 'profile');
+        } else if (typeUpper === 'TECH_CERTIFICATE_EXPIRING') {
+            searchParams.set('tab', userRole === 'nhan_vien' ? 'profile' : 'projects');
+        } else if (typeUpper.startsWith('TECH_REVIEW')) {
+            searchParams.set('tab', 'reviews');
         } else if (
             typeUpper === 'TECH_PROJECT_ASSIGNED' ||
             typeUpper === 'TECH_PROJECT_UPDATED' ||

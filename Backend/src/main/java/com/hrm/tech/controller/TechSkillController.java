@@ -125,4 +125,23 @@ public class TechSkillController {
         techSkillService.deleteCertificate(userDetails.getUserId(), id);
         return ResponseEntity.ok(ApiResponse.ok(null, "Đã xóa chứng chỉ"));
     }
+
+    @GetMapping("/certificates/expiring")
+    @PreAuthorize("hasAnyRole('CEO', 'GIAM_DOC_PHONG_BAN', 'TRUONG_PHONG', 'ADMIN')")
+    public ResponseEntity<ApiResponse<List<ExpiringCertificateResponse>>> getExpiringCertificates(
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        Long deptId = (userDetails.getRole() == Role.CEO || userDetails.getRole() == Role.ADMIN)
+                ? null
+                : userDetails.getDepartmentId();
+        return ResponseEntity.ok(ApiResponse.ok(techSkillService.getExpiringCertificates(deptId)));
+    }
+
+    @PostMapping("/certificates/{certId}/remind")
+    @PreAuthorize("hasAnyRole('GIAM_DOC_PHONG_BAN', 'TRUONG_PHONG', 'ADMIN')")
+    public ResponseEntity<ApiResponse<Void>> remindCertificateRenewal(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long certId) {
+        techSkillService.remindCertificateRenewal(certId, userDetails.getUserId());
+        return ResponseEntity.ok(ApiResponse.ok(null, "Đã gửi thông báo nhắc gia hạn chứng chỉ tới kỹ sư"));
+    }
 }

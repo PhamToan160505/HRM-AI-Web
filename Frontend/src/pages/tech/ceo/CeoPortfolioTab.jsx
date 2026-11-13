@@ -17,12 +17,14 @@ import {
   ArrowUpRight,
   Flag,
   Clock,
+  Award,
 } from 'lucide-react';
 import {
   PROJECT_STATUS_CONFIG,
   formatDateVN,
   formatHours,
   computeTimelineHealth,
+  getCertExpiryInfo,
 } from './ceoTechHelpers';
 
 export default function CeoPortfolioTab({
@@ -30,6 +32,8 @@ export default function CeoPortfolioTab({
   statusFilter = '',
   onChangeStatusFilter,
   onSelectProject,
+  expiringCerts = [],
+  onInspectEngineer,
 }) {
   const [keyword, setKeyword] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
@@ -233,6 +237,71 @@ export default function CeoPortfolioTab({
             </span>
           </div>
         )
+      )}
+
+      {/* 1b. Tuân thủ Chứng chỉ Quốc tế Toàn phòng (Chỉ xem) */}
+      {expiringCerts.length > 0 && (
+        <div className="bg-white rounded-2xl border border-orange-200/90 shadow-[0_4px_20px_-4px_rgba(234,88,12,0.06)] p-4 sm:p-5 space-y-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-orange-50 border border-orange-200 text-orange-600 flex items-center justify-center shrink-0">
+              <Award size={16} />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">
+                Tuân thủ Chứng chỉ Quốc tế Kỹ sư ({expiringCerts.length})
+              </h3>
+              <p className="text-xs text-slate-500">
+                Danh sách chứng chỉ sắp hết hạn trong 30 ngày hoặc đã hết hạn của nhân sự Công nghệ
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+            {expiringCerts.map((cert) => {
+              const expInfo = getCertExpiryInfo(cert);
+              const isExpired = expInfo.status === 'EXPIRED';
+              return (
+                <div
+                  key={`ceo-radar-cert-${cert.certId}`}
+                  className={`p-3 rounded-xl border space-y-1 text-xs ${
+                    isExpired
+                      ? 'bg-rose-50/45 border-rose-200/90'
+                      : 'bg-orange-50/45 border-orange-200/90'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    {onInspectEngineer ? (
+                      <button
+                        type="button"
+                        onClick={() => onInspectEngineer(cert.userId)}
+                        className="font-bold text-[#1E3A8A] hover:underline truncate cursor-pointer text-left"
+                      >
+                        {cert.hoTen}
+                      </button>
+                    ) : (
+                      <span className="font-bold text-slate-900 truncate">{cert.hoTen}</span>
+                    )}
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap shrink-0 tabular ${
+                        isExpired
+                          ? 'bg-rose-100/80 text-rose-700 border-rose-200'
+                          : 'bg-orange-100/80 text-orange-700 border-orange-200'
+                      }`}
+                    >
+                      {expInfo.label}
+                    </span>
+                  </div>
+                  <p className="font-semibold text-slate-900 truncate" title={cert.certificateName}>
+                    {cert.certificateName}
+                  </p>
+                  <p className="text-[11px] text-slate-600 tabular truncate">
+                    {cert.issuingOrganization} • Hết hạn: {formatDateVN(cert.expiryDate)}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {/* 2. Filter & View Toolbar */}

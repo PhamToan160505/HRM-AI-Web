@@ -31,3 +31,7 @@ Backend/src/main/resources/application.yml
 # Local database backups (may contain personal and payroll data)
 Backend/database/backups/
 *.sql.gz
+
+# Python cache
+__pycache__/
+*.pyc
