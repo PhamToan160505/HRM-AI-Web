@@ -30,6 +30,9 @@ public class TechMilestoneResponse {
     private String createdByName;
     private Boolean isOverdue;
     private Boolean isDueSoon;
+    private Long dodTotalCount;
+    private Long dodCompletedCount;
+    private Long dodPendingRequiredCount;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

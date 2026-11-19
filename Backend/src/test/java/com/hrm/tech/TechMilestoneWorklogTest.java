@@ -53,6 +53,7 @@ class TechMilestoneWorklogTest {
     private final AttendanceRepository attendanceRepository = mock(AttendanceRepository.class);
     private final EmployeeRequestRepository employeeRequestRepository = mock(EmployeeRequestRepository.class);
     private final HolidayRepository holidayRepository = mock(HolidayRepository.class);
+    private final TechMilestoneDodItemRepository dodItemRepository = mock(TechMilestoneDodItemRepository.class);
 
     private TechMilestoneService milestoneService;
     private TechWorklogService worklogService;
@@ -64,7 +65,7 @@ class TechMilestoneWorklogTest {
 
     @BeforeEach
     void setUp() {
-        milestoneService = new TechMilestoneService(milestoneRepository, projectRepository, userRepository);
+        milestoneService = new TechMilestoneService(milestoneRepository, projectRepository, userRepository, dodItemRepository);
         worklogService = new TechWorklogService(
                 worklogRepository,
                 projectRepository,

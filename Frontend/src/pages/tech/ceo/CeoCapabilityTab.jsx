@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   Cpu,
   X,
+  FileSpreadsheet,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -69,6 +70,33 @@ export default function CeoCapabilityTab({
   const [matrixKeyword, setMatrixKeyword] = useState('');
   const [verifiedOnlyView, setVerifiedOnlyView] = useState(false);
   const [benchOnlyView, setBenchOnlyView] = useState(false);
+  const [exportingExcel, setExportingExcel] = useState(false);
+
+  const handleExportSkillsMatrix = async () => {
+    try {
+      setExportingExcel(true);
+      const res = await api.get('/api/tech/reports/skills/export', {
+        responseType: 'blob',
+      });
+      const blob = new Blob([res.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Ma_Tran_Nang_Luc_IT_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast?.show('Thành công', 'Đã xuất file Excel Ma trận Kỹ năng & Chứng chỉ', 'success');
+    } catch (err) {
+      console.error('Lỗi xuất Excel Ma trận Kỹ năng:', err);
+      toast?.show('Lỗi', 'Không thể kết xuất file Excel Ma trận Kỹ năng', 'error');
+    } finally {
+      setExportingExcel(false);
+    }
+  };
 
   // Compute Department Average 6-Axis Radar & Verification Totals
   const capabilitySummary = useMemo(() => {
@@ -548,6 +576,17 @@ export default function CeoCapabilityTab({
             >
               <Clock size={13} />
               <span>Chỉ kỹ sư còn trống Bench</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={exportingExcel}
+              onClick={handleExportSkillsMatrix}
+              className="px-3.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold transition cursor-pointer inline-flex items-center gap-1.5 disabled:opacity-50"
+              title="Xuất file Excel gồm 2 Sheet: Ma trận Năng lực Kỹ thuật và Danh sách Chứng chỉ Kỹ thuật"
+            >
+              <FileSpreadsheet size={13} className="text-emerald-700" />
+              <span>{exportingExcel ? 'Đang xuất Excel...' : 'Xuất Excel Ma trận & Chứng chỉ'}</span>
             </button>
           </div>
         </div>

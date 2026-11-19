@@ -16,7 +16,10 @@ import {
   Sparkles,
   Clock,
   FolderKanban,
+  FileSpreadsheet,
 } from 'lucide-react';
+import api from '../../../services/api';
+import { useToast } from '../../../components/common/Toast';
 import {
   ResponsiveContainer,
   BarChart,
@@ -96,12 +99,48 @@ export default function CeoPerformanceTab({
   focusReviewRequest = null,
   onFocusHandled,
 }) {
+  const toast = useToast();
   const [isCycleMgmtOpen, setIsCycleMgmtOpen] = useState(false);
+  const [exportingCycleExcel, setExportingCycleExcel] = useState(false);
   const reviewTableRef = useRef(null);
   const lastAppliedFocusRef = useRef(0);
   const lastScrolledFocusRef = useRef(0);
   const [highlightState, setHighlightState] = useState(null);
   const highlightedReviewId = highlightState?.id || null;
+
+  const currentCycle = useMemo(
+    () => cycles.find((c) => String(c.id) === String(selectedCycleId)),
+    [cycles, selectedCycleId]
+  );
+
+  const handleExportCycleExcel = async () => {
+    if (!selectedCycleId) return;
+    try {
+      setExportingCycleExcel(true);
+      const res = await api.get('/api/tech/reports/reviews/export', {
+        params: { cycleId: selectedCycleId },
+        responseType: 'blob',
+      });
+      const blob = new Blob([res.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const cycleCode = currentCycle?.cycleCode || selectedCycleId;
+      link.download = `KetQua_DanhGia_HieuSuat_${cycleCode}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast?.show('Thành công', `Đã xuất file Excel kết quả đánh giá kỳ ${currentCycle?.title || cycleCode}`, 'success');
+    } catch (err) {
+      console.error('Lỗi xuất Excel Đánh giá:', err);
+      toast?.show('Lỗi', 'Không thể kết xuất file Excel Kỳ đánh giá', 'error');
+    } finally {
+      setExportingCycleExcel(false);
+    }
+  };
 
   const [keywordInput, setKeywordInput] = useState(reviewQuery?.keyword || '');
   useEffect(() => {
@@ -326,6 +365,19 @@ export default function CeoPerformanceTab({
                 );
               })}
             </select>
+          )}
+
+          {cycles.length > 0 && (
+            <button
+              type="button"
+              disabled={exportingCycleExcel || !selectedCycleId}
+              onClick={handleExportCycleExcel}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-emerald-700 bg-white hover:bg-emerald-50 border border-emerald-200 rounded-xl shadow-2xs transition cursor-pointer disabled:opacity-50"
+              title="Xuất file Excel tổng hợp kết quả đánh giá, xếp loại và đề xuất đãi ngộ"
+            >
+              <FileSpreadsheet size={15} className="text-emerald-700" />
+              <span>{exportingCycleExcel ? 'Đang xuất...' : 'Xuất Excel'}</span>
+            </button>
           )}
 
           {/* Nút xem danh sách toàn bộ kỳ đánh giá đã mở dành cho CEO */}

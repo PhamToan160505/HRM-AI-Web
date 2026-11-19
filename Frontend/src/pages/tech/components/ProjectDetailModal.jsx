@@ -23,10 +23,14 @@ import {
   Flag,
   Plus,
   Trash2,
+  ListChecks,
 } from 'lucide-react';
 import api from '../../../services/api';
 import { useToast } from '../../../components/common/Toast';
 import MilestoneFormModal from './MilestoneFormModal';
+import MilestoneDodModal from './MilestoneDodModal';
+import ProjectArchitectureDocsPanel from './ProjectArchitectureDocsPanel';
+import ProjectEnvironmentsPanel from './ProjectEnvironmentsPanel';
 import ProjectHealthPanel from './ProjectHealthPanel';
 import {
   PROJECT_STATUS_CONFIG,
@@ -62,6 +66,7 @@ export default function ProjectDetailModal({
   const [deleteMilestoneTarget, setDeleteMilestoneTarget] = useState(null);
   const [deletingMilestone, setDeletingMilestone] = useState(false);
   const [completingMilestoneId, setCompletingMilestoneId] = useState(null);
+  const [activeDodMilestone, setActiveDodMilestone] = useState(null);
 
   const fetchFreshDetail = useCallback(async (projectId) => {
     if (!projectId) return;
@@ -140,6 +145,17 @@ export default function ProjectDetailModal({
 
   const handleQuickCompleteMilestone = async (ms) => {
     if (!canManageMilestones || completingMilestoneId) return;
+
+    if (ms.dodPendingRequiredCount > 0) {
+      toast?.show(
+        'Chưa đạt tiêu chuẩn DoD',
+        `Không thể nghiệm thu 100% vì còn ${ms.dodPendingRequiredCount} tiêu chí DoD bắt buộc chưa đạt. Vui lòng mở Checklist DoD để hoàn tất nghiệm thu.`,
+        'warning'
+      );
+      setActiveDodMilestone(ms);
+      return;
+    }
+
     try {
       setCompletingMilestoneId(ms.id);
       await api.put(`/api/tech/projects/${projectData.id}/milestones/${ms.id}`, {
@@ -516,7 +532,30 @@ export default function ProjectDetailModal({
                       </div>
 
                       <div className="flex items-center justify-between gap-2 flex-wrap text-[11px]">
-                        <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => setActiveDodMilestone(ms)}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-semibold border transition cursor-pointer ${
+                              ms.dodPendingRequiredCount > 0
+                                ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                                : (ms.dodTotalCount > 0)
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                                : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                            }`}
+                            title="Xem và cập nhật các tiêu chí nghiệm thu Definition of Done"
+                          >
+                            <ListChecks size={12} />
+                            <span>
+                              Checklist DoD: {ms.dodCompletedCount || 0}/{ms.dodTotalCount || 0}
+                            </span>
+                            {ms.dodPendingRequiredCount > 0 && (
+                              <span className="text-[10px] text-amber-700 font-extrabold">
+                                (Còn {ms.dodPendingRequiredCount} bắt buộc)
+                              </span>
+                            )}
+                          </button>
+
                           {ms.deliverableUrl ? (
                             <a
                               href={ms.deliverableUrl}
@@ -676,6 +715,16 @@ export default function ProjectDetailModal({
                 );
               })}
             </div>
+          </div>
+
+          {/* Phân hệ 1: Tài liệu Kiến trúc, Specs & Runbook */}
+          <div className="pt-1 border-t border-slate-100">
+            <ProjectArchitectureDocsPanel projectId={projectData.id} canManage={canManageMilestones} />
+          </div>
+
+          {/* Phân hệ 3: Môi trường Triển khai & Hạ tầng */}
+          <div className="pt-1 border-t border-slate-100">
+            <ProjectEnvironmentsPanel projectId={projectData.id} canManage={canManageMilestones} />
           </div>
 
           {/* Đội ngũ Kỹ thuật tham gia */}
@@ -918,6 +967,9 @@ export default function ProjectDetailModal({
           initialData={editingMilestone}
           usedWeightByOthers={usedWeightByOthers}
           onSuccess={refreshAfterMilestoneChange}
+          onOpenDod={(ms) => {
+            setActiveDodMilestone(ms);
+          }}
         />
       )}
 
@@ -977,6 +1029,16 @@ export default function ProjectDetailModal({
           </div>,
           document.body
         )}
+
+      {/* DoD Checklist Modal */}
+      <MilestoneDodModal
+        isOpen={Boolean(activeDodMilestone)}
+        onClose={() => setActiveDodMilestone(null)}
+        projectId={projectData?.id}
+        milestone={activeDodMilestone}
+        canManage={canManageMilestones}
+        onDodUpdated={() => fetchFreshDetail(projectData?.id)}
+      />
     </>
   );
 }

@@ -763,6 +763,12 @@ export default function TechProjectListPage() {
     }
   };
 
+  const handleSelectProject = (project) => {
+    if (!project?.id) return;
+    const basePath = location.pathname.split('?')[0].replace(/\/+$/, '');
+    navigate(`${basePath}/${project.id}`);
+  };
+
   // Telemetry KPIs & Real Portfolio Metrics
   const telemetry = useMemo(() => {
     const totalProjects = projects.length;
@@ -1284,7 +1290,7 @@ export default function TechProjectListPage() {
                     projects={projects}
                     statusFilter={projectStatusFilter}
                     onChangeStatusFilter={setProjectStatusFilter}
-                    onSelectProject={setSelectedDetailProject}
+                    onSelectProject={handleSelectProject}
                     onOpenStaffing={!isReadOnly ? (proj) => setStaffingProject(proj) : undefined}
                     onOpenEdit={
                       !isReadOnly
@@ -1348,8 +1354,8 @@ export default function TechProjectListPage() {
                     onChangeMonth={handleMonthChange}
                     onRefresh={() => loadAllData({ quiet: true })}
                     onSelectProjectById={(pid) => {
-                      const found = projects.find((p) => String(p.id) === String(pid));
-                      if (found) setSelectedDetailProject(found);
+                      const basePath = location.pathname.split('?')[0].replace(/\/+$/, '');
+                      navigate(`${basePath}/${pid}`);
                     }}
                     onInspectEngineer={handleInspectEngineer}
                     isReadOnly={isReadOnly}

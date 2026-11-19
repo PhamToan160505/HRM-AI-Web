@@ -22,6 +22,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
+  FileSpreadsheet,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -518,6 +519,46 @@ export default function TimesheetAnalyticsTab({
     }
   };
 
+  // Phân hệ 2: Xuất Báo cáo Excel POI
+  const [exportingExcel, setExportingExcel] = useState(false);
+  const handleExportTimesheetExcel = async () => {
+    try {
+      setExportingExcel(true);
+      const params = {};
+      if (filterProjectId) params.projectId = filterProjectId;
+      if (filterUserId) params.userId = filterUserId;
+      if (selectedMonth) {
+        const [y, m] = selectedMonth.split('-');
+        const start = `${y}-${m}-01`;
+        const lastDay = new Date(Number(y), Number(m), 0).getDate();
+        const end = `${y}-${m}-${String(lastDay).padStart(2, '0')}`;
+        params.startDate = start;
+        params.endDate = end;
+      }
+      const res = await api.get('/api/tech/reports/timesheet/export', {
+        params,
+        responseType: 'blob',
+      });
+      const blob = new Blob([res.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `BaoCao_GioCong_KyThuat_${selectedMonth || 'toan_ky'}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast?.show('Thành công', 'Đã tải xuống file Excel Báo cáo Giờ công Kỹ thuật', 'success');
+    } catch (err) {
+      console.error('Lỗi xuất Excel Timesheet:', err);
+      toast?.show('Lỗi', 'Không thể kết xuất file Excel Giờ công', 'error');
+    } finally {
+      setExportingExcel(false);
+    }
+  };
+
   const chartData = useMemo(() => {
     if (!analytics) return [];
     if (chartMode === 'projects') {
@@ -585,6 +626,17 @@ export default function TimesheetAnalyticsTab({
             onChange={onChangeMonth}
             align="right"
           />
+
+          <button
+            type="button"
+            disabled={exportingExcel}
+            onClick={handleExportTimesheetExcel}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold transition cursor-pointer disabled:opacity-50"
+            title="Xuất chi tiết toàn bộ bảng kê giờ công và đối chiếu công trong tháng ra Excel"
+          >
+            <FileSpreadsheet size={14} className="text-emerald-700" />
+            <span>{exportingExcel ? 'Đang xuất Excel...' : 'Xuất Excel Giờ công'}</span>
+          </button>
         </div>
       </div>
 

@@ -26,6 +26,7 @@ import {
   ExternalLink,
   Lock,
   TrendingUp,
+  Users2,
 } from 'lucide-react';
 import { MotionConfig, motion, AnimatePresence } from 'framer-motion';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
@@ -101,6 +102,7 @@ export default function MyTechProjectsPage() {
   const [worklogSummary, setWorklogSummary] = useState(null);
   const [myPerfOverview, setMyPerfOverview] = useState(null);
   const [availableSkills, setAvailableSkills] = useState([]);
+  const [myMentorshipPrograms, setMyMentorshipPrograms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -136,12 +138,13 @@ export default function MyTechProjectsPage() {
       if (!quiet) setErrorMsg('');
 
       const activeMonth = selectedMonthRef.current || getCurrentMonthStr();
-      const [projRes, profRes, wlRes, perfRes, skillsRes] = await Promise.all([
+      const [projRes, profRes, wlRes, perfRes, skillsRes, mentorRes] = await Promise.all([
         api.get('/api/tech/projects/my-projects'),
         api.get('/api/tech/skills/my-profile'),
         api.get('/api/tech/worklogs/my', { params: { month: activeMonth } }),
         api.get('/api/tech/reviews/my'),
         api.get('/api/tech/skills'),
+        api.get('/api/tech/mentorship/my-programs').catch(() => ({ data: { data: [] } })),
       ]);
 
       const freshProjects = projRes.data?.data || [];
@@ -153,6 +156,7 @@ export default function MyTechProjectsPage() {
       setWorklogSummary(wlRes.data?.data || null);
       setMyPerfOverview(perfRes.data?.data || null);
       setAvailableSkills(skillsRes.data?.data || []);
+      setMyMentorshipPrograms(mentorRes.data?.data || []);
       setLastUpdated(new Date());
       lastFetchTimeRef.current = Date.now();
     } catch (err) {
@@ -819,7 +823,7 @@ export default function MyTechProjectsPage() {
                             dataKey="value"
                             stroke="none"
                             onClick={(entry) => {
-                              if (entry?.project) setSelectedDetailProject(entry.project);
+                              if (entry?.project?.id) navigate(`/employee/my-projects/${entry.project.id}`);
                             }}
                             className="cursor-pointer"
                           >
@@ -849,7 +853,7 @@ export default function MyTechProjectsPage() {
                           <ClickTag
                             key={item.key}
                             {...(item.project
-                              ? { type: 'button', onClick: () => setSelectedDetailProject(item.project) }
+                              ? { type: 'button', onClick: () => navigate(`/employee/my-projects/${item.project.id}`) }
                               : {})}
                             className={`w-full px-3 py-2 rounded-xl border text-left transition flex items-center justify-between gap-2 text-xs ${
                               item.project
@@ -934,6 +938,47 @@ export default function MyTechProjectsPage() {
               >
                 {activeTab === 'projects' && (
                   <div className="space-y-4">
+                    {/* Phân hệ 4: Kèm cặp 1-1 Active Card */}
+                    {myMentorshipPrograms.length > 0 && (
+                      <div className="bg-[#0F2557] rounded-2xl p-4 text-white shadow-sm border border-blue-900/60 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold flex items-center gap-1.5 text-blue-200">
+                            <Users2 size={15} className="text-blue-300" />
+                            <span>Chương trình Kèm cặp 1-1 của bạn ({myMentorshipPrograms.length})</span>
+                          </span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-100">
+                            Engineering Mentorship Active
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          {myMentorshipPrograms.map((p) => {
+                            const isMentor = String(p.mentorId) === String(user?.id);
+                            return (
+                              <div
+                                key={p.id}
+                                className="p-3 bg-white/10 hover:bg-white/15 border border-white/15 rounded-xl space-y-1.5 text-xs transition"
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="font-bold text-white truncate">{p.programTitle}</span>
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-600 text-white shrink-0">
+                                    {isMentor ? 'Bạn là Mentor' : 'Bạn là Mentee'}
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-blue-200/90 truncate">
+                                  {isMentor ? `Kỹ sư: ${p.menteeName}` : `Mentor dẫn dắt: ${p.mentorName}`}
+                                  {p.focusSkillName && ` • Trọng tâm: ${p.focusSkillName}`}
+                                </p>
+                                <div className="flex items-center justify-between text-[10px] text-blue-200/70 pt-0.5 tabular border-t border-white/10">
+                                  <span>Đã check-in: <strong>{p.checkinCount || 0} buổi</strong></span>
+                                  <span>Hạn: {formatDateVN(p.endDate)}</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
                     {projects.length > 0 && (
                       <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div className="relative flex-1 max-w-md">
@@ -1012,13 +1057,13 @@ export default function MyTechProjectsPage() {
                           return (
                             <div
                               key={project.id}
-                              onClick={() => setSelectedDetailProject(project)}
+                              onClick={() => navigate(`/employee/my-projects/${project.id}`)}
                               role="button"
                               tabIndex={0}
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter' || e.key === ' ') {
                                   e.preventDefault();
-                                  setSelectedDetailProject(project);
+                                  navigate(`/employee/my-projects/${project.id}`);
                                 }
                               }}
                               className="bg-white rounded-2xl border border-slate-200/90 hover:border-blue-400 shadow-[0_2px_12px_-4px_rgba(15,23,42,0.05)] hover:shadow-[0_10px_28px_-6px_rgba(37,99,235,0.14)] transition flex flex-col overflow-hidden group cursor-pointer text-left"
@@ -1229,7 +1274,7 @@ export default function MyTechProjectsPage() {
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      setSelectedDetailProject(project);
+                                      navigate(`/employee/my-projects/${project.id}`);
                                     }}
                                     className="px-3 py-1.5 text-xs font-semibold bg-white hover:bg-slate-100 text-[#1E3A8A] border border-blue-200 rounded-xl transition flex items-center gap-1.5 shrink-0 cursor-pointer whitespace-nowrap"
                                   >

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, createContext, useContext } from 'react';
+import React, { useState, useCallback, useMemo, createContext, useContext } from 'react';
 import { createPortal } from 'react-dom';
 import { CheckCircle2, XCircle, AlertTriangle, Info, X } from 'lucide-react';
 
@@ -82,14 +82,17 @@ export function ToastProvider({ children }) {
     }
   }, [dismiss]);
 
-  const toastAPI = {
-    show,
-    dismiss,
-    success: (msg, title = 'Thành công') => show(title, msg, 'success'),
-    error: (msg, title = 'Lỗi') => show(title, msg, 'error'),
-    warning: (msg, title = 'Cảnh báo') => show(title, msg, 'warning'),
-    info: (msg, title = 'Thông báo') => show(title, msg, 'info'),
-  };
+  const toastAPI = useMemo(
+    () => ({
+      show,
+      dismiss,
+      success: (msg, title = 'Thành công') => show(title, msg, 'success'),
+      error: (msg, title = 'Lỗi') => show(title, msg, 'error'),
+      warning: (msg, title = 'Cảnh báo') => show(title, msg, 'warning'),
+      info: (msg, title = 'Thông báo') => show(title, msg, 'info'),
+    }),
+    [show, dismiss]
+  );
 
   return (
     <ToastContext.Provider value={toastAPI}>

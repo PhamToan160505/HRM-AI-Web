@@ -618,6 +618,11 @@ export default function CeoTechProjectsPage() {
     };
   }, [projects, benchUsers]);
 
+  const handleSelectProject = (project) => {
+    if (!project?.id) return;
+    navigate(`/ceo/tech-projects/${project.id}`);
+  };
+
   const tabs = [
     {
       id: 'projects',
@@ -1034,7 +1039,7 @@ export default function CeoTechProjectsPage() {
                     projects={projects}
                     statusFilter={projectStatusFilter}
                     onChangeStatusFilter={setProjectStatusFilter}
-                    onSelectProject={setSelectedDetailProject}
+                    onSelectProject={handleSelectProject}
                     expiringCerts={expiringCerts}
                     onInspectEngineer={handleInspectEngineer}
                   />
@@ -1067,8 +1072,7 @@ export default function CeoTechProjectsPage() {
                     selectedMonth={selectedMonth}
                     onChangeMonth={handleMonthChange}
                     onSelectProjectById={(pid) => {
-                      const found = projects.find((p) => String(p.id) === String(pid));
-                      if (found) setSelectedDetailProject(found);
+                      navigate(`/ceo/tech-projects/${pid}`);
                     }}
                     onInspectEngineer={handleInspectEngineer}
                   />

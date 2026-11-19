@@ -10,6 +10,7 @@ import com.hrm.tech.dto.UpdateMilestoneRequest;
 import com.hrm.tech.entity.MilestoneStatus;
 import com.hrm.tech.entity.TechProject;
 import com.hrm.tech.entity.TechProjectMilestone;
+import com.hrm.tech.repository.TechMilestoneDodItemRepository;
 import com.hrm.tech.repository.TechProjectMilestoneRepository;
 import com.hrm.tech.repository.TechProjectRepository;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +31,7 @@ public class TechMilestoneService {
     private final TechProjectMilestoneRepository milestoneRepository;
     private final TechProjectRepository projectRepository;
     private final UserRepository userRepository;
+    private final TechMilestoneDodItemRepository dodItemRepository;
 
     @Transactional(readOnly = true)
     public ProjectMilestonesSummaryResponse getProjectMilestones(Long projectId) {
@@ -134,12 +136,13 @@ public class TechMilestoneService {
         int completion = req.getCompletionPercent() != null ? req.getCompletionPercent() : milestone.getCompletionPercent();
         MilestoneStatus status = req.getStatus() != null ? req.getStatus() : milestone.getStatus();
 
-        if (status == MilestoneStatus.COMPLETED) {
-            completion = 100;
-            if (milestone.getCompletedAt() == null) {
-                milestone.setCompletedAt(LocalDateTime.now());
+        if (status == MilestoneStatus.COMPLETED || completion == 100) {
+            long uncompletedRequiredDod = dodItemRepository.countByMilestoneIdAndIsRequiredTrueAndIsCompletedFalse(milestoneId);
+            if (uncompletedRequiredDod > 0) {
+                throw AppException.badRequest("Không thể nghiệm thu hoặc hoàn thành 100% mốc tiến độ vì còn "
+                        + uncompletedRequiredDod + " tiêu chí DoD bắt buộc chưa được nghiệm thu!");
             }
-        } else if (req.getStatus() == null && completion == 100) {
+            completion = 100;
             status = MilestoneStatus.COMPLETED;
             if (milestone.getCompletedAt() == null) {
                 milestone.setCompletedAt(LocalDateTime.now());
@@ -234,6 +237,10 @@ public class TechMilestoneService {
                 ? userRepository.findById(m.getCreatedBy()).map(User::getHoTen).orElse(null)
                 : null;
 
+        long dodTotal = dodItemRepository.countByMilestoneId(m.getId());
+        long dodCompleted = dodItemRepository.countByMilestoneIdAndIsCompletedTrue(m.getId());
+        long dodPendingRequired = dodItemRepository.countByMilestoneIdAndIsRequiredTrueAndIsCompletedFalse(m.getId());
+
         return TechMilestoneResponse.builder()
                 .id(m.getId())
                 .projectId(m.getProject().getId())
@@ -251,6 +258,9 @@ public class TechMilestoneService {
                 .createdByName(creatorName)
                 .isOverdue(isMilestoneOverdue(m, today))
                 .isDueSoon(isMilestoneDueSoon(m, today))
+                .dodTotalCount(dodTotal)
+                .dodCompletedCount(dodCompleted)
+                .dodPendingRequiredCount(dodPendingRequired)
                 .createdAt(m.getCreatedAt())
                 .updatedAt(m.getUpdatedAt())
                 .build();

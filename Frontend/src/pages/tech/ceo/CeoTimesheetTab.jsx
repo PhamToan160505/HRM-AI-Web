@@ -13,7 +13,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
+  FileSpreadsheet,
 } from 'lucide-react';
+import api from '../../../services/api';
+import { useToast } from '../../../components/common/Toast';
 import {
   ResponsiveContainer,
   BarChart,
@@ -104,6 +107,8 @@ export default function CeoTimesheetTab({
 }) {
   const isServerPaginated = Boolean(worklogPageData && typeof onChangeWorklogQuery === 'function');
   const worklogTableRef = useRef(null);
+  const toast = useToast();
+  const [exportingExcel, setExportingExcel] = useState(false);
 
   const [chartMode, setChartMode] = useState('projects');
   const [localFilterProjectId, setLocalFilterProjectId] = useState('');
@@ -165,6 +170,45 @@ export default function CeoTimesheetTab({
     onChangeWorklogQuery((prev) => ({ ...(prev || {}), page: 0, size: parsedSize }));
   };
 
+  const handleExportTimesheetExcel = async () => {
+    try {
+      setExportingExcel(true);
+      const params = {};
+      if (selectedMonth) {
+        const [y, m] = selectedMonth.split('-');
+        const start = `${y}-${m}-01`;
+        const lastDay = new Date(Number(y), Number(m), 0).getDate();
+        const end = `${y}-${m}-${String(lastDay).padStart(2, '0')}`;
+        params.startDate = start;
+        params.endDate = end;
+      }
+      if (filterProjectId) {
+        params.projectId = Number(filterProjectId);
+      }
+      const res = await api.get('/api/tech/reports/timesheet/export', {
+        params,
+        responseType: 'blob',
+      });
+      const blob = new Blob([res.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `BaoCao_GioCong_KyThuat_${selectedMonth || 'toan_ky'}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast?.show('Thành công', `Đã xuất file Excel bảng kê giờ công tháng ${selectedMonth}`, 'success');
+    } catch (err) {
+      console.error('Lỗi xuất Excel Timesheet:', err);
+      toast?.show('Lỗi', 'Không thể kết xuất file Excel Giờ công', 'error');
+    } finally {
+      setExportingExcel(false);
+    }
+  };
+
   const chartData = useMemo(() => {
     if (!analytics) return [];
     if (chartMode === 'projects') {
@@ -217,7 +261,7 @@ export default function CeoTimesheetTab({
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap">
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-[#1E3A8A] border border-blue-200 text-[11px] font-bold">
             <ShieldCheck size={13} />
             <span>Chỉ xem</span>
@@ -229,6 +273,16 @@ export default function CeoTimesheetTab({
             onChange={onChangeMonth}
             align="right"
           />
+          <button
+            type="button"
+            disabled={exportingExcel}
+            onClick={handleExportTimesheetExcel}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold transition cursor-pointer disabled:opacity-50"
+            title="Xuất chi tiết toàn bộ bảng kê giờ công và đối chiếu công trong tháng ra Excel"
+          >
+            <FileSpreadsheet size={14} className="text-emerald-700" />
+            <span>{exportingExcel ? 'Đang xuất Excel...' : 'Xuất Excel Giờ công'}</span>
+          </button>
         </div>
       </div>
 

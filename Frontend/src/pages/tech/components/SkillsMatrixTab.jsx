@@ -11,6 +11,8 @@ import {
   ShieldCheck,
   Cpu,
   X,
+  FileSpreadsheet,
+  Users2,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -24,6 +26,7 @@ import {
 import api from '../../../services/api';
 import { useToast } from '../../../components/common/Toast';
 import TechRadarChart from './TechRadarChart';
+import TechMentorshipPanel from './TechMentorshipPanel';
 import {
   PROFICIENCY_CONFIG,
   RADAR_DIMENSIONS,
@@ -82,6 +85,34 @@ export default function SkillsMatrixTab({
   const directoryRef = useRef(null);
   const lastAppliedFocusRef = useRef(0);
   const lastScrolledFocusRef = useRef(0);
+
+  // Phân hệ 4: Mentorship & Phân hệ 2: Báo cáo Export Hub
+  const [skillsSubTab, setSkillsSubTab] = useState('matrix'); // 'matrix' | 'mentorship'
+  const [exportingExcel, setExportingExcel] = useState(false);
+
+  const handleExportSkillsMatrix = async () => {
+    try {
+      setExportingExcel(true);
+      const res = await api.get('/api/tech/reports/skills/export', { responseType: 'blob' });
+      const blob = new Blob([res.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `MaTran_NangLuc_SkillsMatrix_${new Date().toISOString().substring(0, 10)}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast?.show('Thành công', 'Đã xuất file Excel Ma trận Kỹ năng & Chứng chỉ Kỹ thuật', 'success');
+    } catch (err) {
+      console.error('Lỗi xuất Excel Ma trận:', err);
+      toast?.show('Lỗi', 'Không thể kết xuất file Excel Ma trận Kỹ năng', 'error');
+    } finally {
+      setExportingExcel(false);
+    }
+  };
 
   useEffect(() => {
     const reqAt = focusUserRequest?.requestedAt;
@@ -281,7 +312,61 @@ export default function SkillsMatrixTab({
 
   return (
     <div className="space-y-5">
-      {/* 1. Department Capability Analytics Bento */}
+      {/* Sub-tab Navigation: Ma trận Năng lực vs Mentorship 1-1 */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-2.5 rounded-2xl border border-slate-200/90 shadow-2xs">
+        <div className="inline-flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200/80">
+          <button
+            type="button"
+            onClick={() => setSkillsSubTab('matrix')}
+            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+              skillsSubTab === 'matrix'
+                ? 'bg-white text-[#0F2557] shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <ShieldCheck size={14} className={skillsSubTab === 'matrix' ? 'text-blue-600' : ''} />
+            <span>Ma trận Năng lực &amp; Radar</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSkillsSubTab('mentorship')}
+            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+              skillsSubTab === 'mentorship'
+                ? 'bg-white text-[#0F2557] shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Users2 size={14} className={skillsSubTab === 'mentorship' ? 'text-blue-600' : ''} />
+            <span>Chương trình Kèm cặp (Mentorship 1-1)</span>
+          </button>
+        </div>
+
+        {skillsSubTab === 'matrix' && (
+          <button
+            type="button"
+            disabled={exportingExcel}
+            onClick={handleExportSkillsMatrix}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold transition cursor-pointer disabled:opacity-50"
+            title="Xuất file Excel gồm 2 Sheet: Ma trận Năng lực Kỹ thuật và Danh sách Chứng chỉ Kỹ thuật"
+          >
+            <FileSpreadsheet size={14} className="text-emerald-700" />
+            <span>{exportingExcel ? 'Đang xuất Excel...' : 'Xuất Excel Ma trận & Chứng chỉ'}</span>
+          </button>
+        )}
+      </div>
+
+      {skillsSubTab === 'mentorship' ? (
+        <TechMentorshipPanel
+          departmentId={focusUserRequest?.departmentId || 1}
+          isReadOnly={isReadOnly}
+          onInspectEngineer={onInspectEngineer}
+          initialEngineers={matrixData}
+          initialSkills={availableSkills}
+        />
+      ) : (
+        <>
+          {/* 1. Department Capability Analytics Bento */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Left: Average 6-Axis Department Radar */}
         <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200/90 shadow-[0_4px_20px_-4px_rgba(30,58,138,0.05)] p-5 flex flex-col justify-between space-y-3">
@@ -828,6 +913,8 @@ export default function SkillsMatrixTab({
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }

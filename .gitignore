@@ -32,6 +32,10 @@ Backend/src/main/resources/application.yml
 Backend/database/backups/
 *.sql.gz
 
+# Uploads
+uploads/
+Backend/uploads/
+
 # Python cache
 __pycache__/
 *.pyc

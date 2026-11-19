@@ -22,6 +22,7 @@ import {
   ChevronRight,
   Loader2,
   Sparkles,
+  FileSpreadsheet,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -210,6 +211,36 @@ export default function PerformanceCareerTab({
     setKeywordInput('');
     updateFilter({ status: '', grade: '', keyword: '' });
   }, [updateFilter]);
+
+  // Phân hệ 2: Xuất Báo cáo Excel Đánh giá
+  const [exportingCycleExcel, setExportingCycleExcel] = useState(false);
+  const handleExportCycleExcel = async () => {
+    if (!selectedCycle?.id) return;
+    try {
+      setExportingCycleExcel(true);
+      const res = await api.get('/api/tech/reports/reviews/export', {
+        params: { cycleId: selectedCycle.id },
+        responseType: 'blob',
+      });
+      const blob = new Blob([res.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `KetQua_DanhGia_HieuSuat_${selectedCycle.cycleCode || selectedCycle.id}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast?.show('Thành công', `Đã xuất file Excel kết quả đánh giá kỳ ${selectedCycle.title}`, 'success');
+    } catch (err) {
+      console.error('Lỗi xuất Excel Đánh giá:', err);
+      toast?.show('Lỗi', 'Không thể kết xuất file Excel Kỳ đánh giá', 'error');
+    } finally {
+      setExportingCycleExcel(false);
+    }
+  };
 
   // Debounce keyword search
   useEffect(() => {
@@ -584,6 +615,16 @@ export default function PerformanceCareerTab({
 
                 {!isReadOnly && (
                   <div className="flex items-center gap-1.5 pl-2 border-l border-blue-200/80">
+                    <button
+                      type="button"
+                      disabled={exportingCycleExcel}
+                      onClick={handleExportCycleExcel}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-emerald-700 bg-white hover:bg-emerald-50 border border-emerald-200 rounded-lg shadow-2xs transition cursor-pointer disabled:opacity-50"
+                      title="Xuất file Excel tổng hợp kết quả đánh giá, xếp loại và đề xuất đãi ngộ"
+                    >
+                      <FileSpreadsheet size={13} className="text-emerald-700" />
+                      <span>{exportingCycleExcel ? 'Đang xuất...' : 'Xuất Excel'}</span>
+                    </button>
                     <button
                       type="button"
                       onClick={() => setEditingCycle(selectedCycle)}

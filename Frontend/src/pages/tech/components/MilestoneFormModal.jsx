@@ -11,6 +11,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Info,
+  ShieldAlert,
 } from 'lucide-react';
 import api from '../../../services/api';
 import { useToast } from '../../../components/common/Toast';
@@ -29,6 +30,7 @@ export default function MilestoneFormModal({
   initialData = null,
   usedWeightByOthers = 0,
   onSuccess,
+  onOpenDod,
 }) {
   const toast = useToast();
   const formBodyRef = useRef(null);
@@ -42,6 +44,7 @@ export default function MilestoneFormModal({
 
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [qualityGateBlocked, setQualityGateBlocked] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({});
   const [formData, setFormData] = useState({
     title: '',
@@ -177,6 +180,20 @@ export default function MilestoneFormModal({
     }
     setFieldErrors({});
 
+    // Quality Gate Validation for DoD
+    if (
+      isEditing &&
+      initialData?.dodPendingRequiredCount > 0 &&
+      (Number(formData.completionPercent) === 100 || formData.status === 'COMPLETED')
+    ) {
+      const gateMsg = `Không thể nghiệm thu hoặc hoàn thành 100% mốc tiến độ vì còn ${initialData.dodPendingRequiredCount} tiêu chí DoD bắt buộc chưa được nghiệm thu!`;
+      setErrorMessage(gateMsg);
+      toast?.show('Chưa đạt tiêu chuẩn DoD', gateMsg, 'warning');
+      formBodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+      setQualityGateBlocked(true);
+      return;
+    }
+
     try {
       setSubmitting(true);
       const payload = {
@@ -203,19 +220,25 @@ export default function MilestoneFormModal({
       const msg = err.response?.data?.message || 'Không thể lưu mốc tiến độ dự án.';
       setErrorMessage(msg);
       toast?.show('Lỗi', msg, 'error');
+      formBodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+      if (msg.toLowerCase().includes('dod') || msg.toLowerCase().includes('tiêu chí')) {
+        setQualityGateBlocked(true);
+      }
     } finally {
       setSubmitting(false);
     }
   };
 
-  return createPortal(
-    <div
-      data-tech-modal="true"
-      className="fixed inset-0 z-[9995] bg-slate-900/60 backdrop-blur-xs p-4 sm:p-6 flex items-center justify-center overflow-y-auto"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) handleClose();
-      }}
-    >
+  return (
+    <>
+      {createPortal(
+        <div
+          data-tech-modal="true"
+          className="fixed inset-0 z-[9995] bg-slate-900/60 backdrop-blur-xs p-4 sm:p-6 flex items-center justify-center overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) handleClose();
+          }}
+        >
       <motion.div
         role="dialog"
         aria-modal="true"
@@ -411,6 +434,16 @@ export default function MilestoneFormModal({
             )}
           </div>
 
+          {isEditing && initialData?.dodPendingRequiredCount > 0 && (Number(formData.completionPercent) === 100 || formData.status === 'COMPLETED') && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-start gap-2">
+              <AlertCircle size={15} className="shrink-0 mt-0.5 text-amber-600" />
+              <span className="leading-relaxed">
+                <strong>Cảnh báo Quality Gate DoD:</strong> Mốc này còn{' '}
+                <strong className="text-amber-900">{initialData.dodPendingRequiredCount} tiêu chí</strong> bắt buộc chưa được nghiệm thu. Hệ thống Backend sẽ từ chối nghiệm thu 100% cho đến khi các tiêu chí này hoàn thành.
+              </span>
+            </div>
+          )}
+
           <div className="space-y-1.5">
             <label htmlFor="ms-url" className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
               <Link2 size={13} className="text-blue-600" />
@@ -472,8 +505,74 @@ export default function MilestoneFormModal({
           </div>
         </form>
       </motion.div>
-    </div>,
-    document.body
+        </div>,
+        document.body
+      )}
+
+      {/* Quality Gate Blocked Warning Modal */}
+      {qualityGateBlocked &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setQualityGateBlocked(false);
+            }}
+          >
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 border border-slate-200 space-y-4 my-auto"
+            >
+              <div className="flex items-start gap-3.5">
+                <div className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center shrink-0">
+                  <ShieldAlert size={22} />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Chặn Nghiệm thu 100% (Quality Gate)
+                  </h3>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Mốc <strong className="text-slate-900">{formData.title}</strong> hiện còn{' '}
+                    <strong className="text-rose-600 font-bold">{initialData?.dodPendingRequiredCount || 1} tiêu chí DoD bắt buộc</strong>{' '}
+                    chưa được nghiệm thu.
+                  </p>
+                  <p className="text-[11px] text-slate-500 leading-relaxed pt-1">
+                    Theo quy định Quality Gate, mốc tiến độ chỉ được hoàn thành 100% khi toàn bộ tiêu chí bắt buộc (như Test coverage, Code review, Runbook) đã đạt.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setQualityGateBlocked(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition cursor-pointer"
+                >
+                  Đóng cảnh báo
+                </button>
+                {onOpenDod && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQualityGateBlocked(false);
+                      onClose();
+                      onOpenDod(initialData);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-[#0F2557] hover:bg-blue-900 rounded-xl shadow-xs transition cursor-pointer"
+                  >
+                    <span>Mở Checklist DoD</span>
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          </div>,
+          document.body
+        )}
+    </>
   );
 }
 
