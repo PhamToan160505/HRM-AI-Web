@@ -1,19 +1,9 @@
 import React from 'react';
 import { formatCurrencyVND } from '../../utils/currency';
-import Button from '../common/Button';
+import { BatchStatusBadge } from './PayrollBatchTable';
 
-export default function PayrollTable({ payrolls, onApprove, onReject, role }) {
-    const getStatusBadge = (status) => {
-        switch (status) {
-            case 'APPROVED': return <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded text-xs font-semibold">Đã duyệt</span>;
-            case 'MANAGER_APPROVED': return <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded text-xs font-semibold">Trưởng phòng đã duyệt</span>;
-            case 'DIRECTOR_APPROVED': return <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-semibold">Giám đốc đã duyệt</span>;
-            case 'REJECTED': return <span className="px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-semibold">Từ chối</span>;
-            case 'DRAFT': return <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs font-semibold">Bản nháp</span>;
-            default: return <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs font-semibold">{status}</span>;
-        }
-    };
-
+/** Bảng chi tiết phiếu lương của một kỳ lương phòng ban (chỉ xem). */
+export default function PayrollTable({ payrolls }) {
     return (
         <div className="overflow-x-auto">
             <table className="w-full text-left text-sm whitespace-nowrap">
@@ -23,8 +13,8 @@ export default function PayrollTable({ payrolls, onApprove, onReject, role }) {
                         <th className="px-6 py-4 font-semibold">Lương cơ bản</th>
                         <th className="px-6 py-4 font-semibold">Phụ cấp</th>
                         <th className="px-6 py-4 font-semibold">Công chuẩn/Thực tế</th>
-                        <th className="px-6 py-4 font-semibold group relative">
-                            Lương gộp 
+                        <th className="px-6 py-4 font-semibold">
+                            Lương gộp
                             <span className="ml-1 text-xs text-blue-500 cursor-help" title="(Lương CB + Phụ cấp) * (Thực tế/Chuẩn) - Phạt đi muộn + Tăng ca">(?)</span>
                         </th>
                         <th className="px-6 py-4 font-semibold text-red-600">BHXH (8%)</th>
@@ -34,19 +24,19 @@ export default function PayrollTable({ payrolls, onApprove, onReject, role }) {
                         <th className="px-6 py-4 font-semibold text-red-600">Thuế TNCN</th>
                         <th className="px-6 py-4 font-semibold text-blue-600 text-right">Thực nhận</th>
                         <th className="px-6 py-4 font-semibold">Trạng thái</th>
-                        {(role?.toUpperCase() === 'TRUONG_PHONG' || role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN' || role?.toUpperCase() === 'CEO') && <th className="px-6 py-4 font-semibold text-center">Thao tác</th>}
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                     {payrolls.length === 0 ? (
                         <tr>
-                            <td colSpan={(role?.toUpperCase() === 'TRUONG_PHONG' || role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN' || role?.toUpperCase() === 'CEO') ? 10 : 9} className="px-6 py-8 text-center text-gray-500">Không có dữ liệu</td>
+                            <td colSpan={12} className="px-6 py-8 text-center text-gray-500">Không có dữ liệu</td>
                         </tr>
                     ) : (
                         payrolls.map((p) => (
                             <tr key={p.id} className="hover:bg-slate-50">
                                 <td className="px-6 py-4">
                                     <div className="font-medium text-gray-800">{p.employeeName || 'Chưa cập nhật'}</div>
+                                    <div className="text-xs text-gray-400">{[p.maNhanVien, p.chucVu].filter(Boolean).join(' · ')}</div>
                                 </td>
                                 <td className="px-6 py-4 tabular-nums">{formatCurrencyVND(p.baseSalary)}</td>
                                 <td className="px-6 py-4 tabular-nums">{formatCurrencyVND(p.allowance || 0)}</td>
@@ -58,36 +48,7 @@ export default function PayrollTable({ payrolls, onApprove, onReject, role }) {
                                 <td className="px-6 py-4 tabular-nums">{formatCurrencyVND(p.thuNhapTinhThue)}</td>
                                 <td className="px-6 py-4 text-red-600 tabular-nums">-{formatCurrencyVND(p.thuTncn)}</td>
                                 <td className="px-6 py-4 font-bold text-blue-600 tabular-nums text-right">{formatCurrencyVND(p.netSalary)}</td>
-                                <td className="px-6 py-4">
-                                    {getStatusBadge(p.status)}
-                                    {p.status === 'REJECTED' && p.rejectionReason && (
-                                        <div className="text-[10px] text-red-500 mt-1 truncate max-w-[150px]" title={p.rejectionReason}>
-                                            Lý do: {p.rejectionReason}
-                                        </div>
-                                    )}
-                                </td>
-                                {(role?.toUpperCase() === 'TRUONG_PHONG' || role?.toUpperCase() === 'GIAM_DOC_PHONG_BAN' || role?.toUpperCase() === 'CEO') && (
-                                    <td className="px-6 py-4 text-center">
-                                        <div className="flex items-center justify-center gap-2">
-                                            {p.status === 'DRAFT' && (
-                                                <>
-                                                    <button 
-                                                        className="px-3 py-1.5 text-xs font-medium rounded-md bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors" 
-                                                        onClick={() => onApprove(p.id)}
-                                                    >
-                                                        Duyệt
-                                                    </button>
-                                                    <button 
-                                                        className="px-3 py-1.5 text-xs font-medium rounded-md bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors" 
-                                                        onClick={() => onReject(p)}
-                                                    >
-                                                        Từ chối
-                                                    </button>
-                                                </>
-                                            )}
-                                        </div>
-                                    </td>
-                                )}
+                                <td className="px-6 py-4"><BatchStatusBadge status={p.status} /></td>
                             </tr>
                         ))
                     )}

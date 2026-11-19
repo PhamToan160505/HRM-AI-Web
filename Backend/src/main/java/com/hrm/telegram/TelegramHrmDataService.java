@@ -126,7 +126,7 @@ public class TelegramHrmDataService {
             double totalGross = payrolls.stream().mapToDouble(p -> p.getGrossSalary() != null ? p.getGrossSalary() : 0).sum();
             double maxSalary  = payrolls.stream().mapToDouble(p -> p.getNetSalary()   != null ? p.getNetSalary()   : 0).max().orElse(0);
             double avgSalary  = payrolls.stream().mapToDouble(p -> p.getNetSalary()   != null ? p.getNetSalary()   : 0).average().orElse(0);
-            long approved = payrolls.stream().filter(p -> "APPROVED".equals(p.getStatus())).count();
+            long approved = payrolls.stream().filter(p -> "PAID".equals(p.getStatus()) || "APPROVED_BY_CEO".equals(p.getStatus()) || "APPROVED".equals(p.getStatus())).count();
 
             StringBuilder sb = new StringBuilder();
             sb.append(String.format("\uD83D\uDCB0 BẢNG LƯƠNG THÁNG %d/%d\n", month, year));

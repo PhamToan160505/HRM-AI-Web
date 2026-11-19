@@ -147,7 +147,7 @@ public class TelegramAiConversationService {
             var payrolls = payrollRepository.findByMonthAndYear(now.getMonthValue(), now.getYear());
             if (!payrolls.isEmpty()) {
                 double totalNet = payrolls.stream().mapToDouble(p -> p.getNetSalary() != null ? p.getNetSalary() : 0).sum();
-                long approved = payrolls.stream().filter(p -> "APPROVED".equals(p.getStatus())).count();
+                long approved = payrolls.stream().filter(p -> "PAID".equals(p.getStatus()) || "APPROVED_BY_CEO".equals(p.getStatus()) || "APPROVED".equals(p.getStatus())).count();
                 sb.append("- Lương tháng ").append(now.getMonthValue()).append("/").append(now.getYear())
                   .append(": Tổng net=").append(String.format("%,.0f", totalNet))
                   .append(" VNĐ, ").append(approved).append("/").append(payrolls.size()).append(" đã duyệt\n");
@@ -405,7 +405,7 @@ public class TelegramAiConversationService {
                         double gross = payrolls.stream().mapToDouble(p -> p.getGrossSalary() != null ? p.getGrossSalary() : 0).sum();
                         double avg   = payrolls.stream().mapToDouble(p -> p.getNetSalary() != null ? p.getNetSalary() : 0).average().orElse(0);
                         double max   = payrolls.stream().mapToDouble(p -> p.getNetSalary() != null ? p.getNetSalary() : 0).max().orElse(0);
-                        long approved = payrolls.stream().filter(p -> "APPROVED".equals(p.getStatus())).count();
+                        long approved = payrolls.stream().filter(p -> "PAID".equals(p.getStatus()) || "APPROVED_BY_CEO".equals(p.getStatus()) || "APPROVED".equals(p.getStatus())).count();
                         result.put("soNhanVien", payrolls.size());
                         result.put("daDuyet", approved);
                         result.put("tongGross", String.format("%,.0f VND", gross));

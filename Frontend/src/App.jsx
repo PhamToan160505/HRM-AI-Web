@@ -171,6 +171,7 @@ export default function App() {
             <Route path="my-requests" element={<MyRequestsPage />} />
             <Route path="holidays" element={<HolidayPage />} />
             <Route path="payroll" element={<PayrollPage />} />
+            <Route path="my-payroll" element={<PayrollViewPage />} />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="chat" element={<GroupChatPage />} />
             <Route path="face-enroll" element={
@@ -198,6 +199,7 @@ export default function App() {
             <Route path="requests" element={<ManagerRequestsPage />} />
             <Route path="my-requests" element={<MyRequestsPage />} />
             <Route path="payroll" element={<PayrollPage />} />
+            <Route path="my-payroll" element={<PayrollViewPage />} />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="chat" element={<GroupChatPage />} />
             <Route path="face-enroll" element={
@@ -241,6 +243,8 @@ export default function App() {
             <Route path="attendance" element={<EmployeeAttendancePage />} />
             <Route path="requests" element={<MyRequestsPage />} />
             <Route path="payroll" element={<PayrollViewPage />} />
+            {/* Kế toán viên phòng Tài chính - Kế toán (role nhân viên) */}
+            <Route path="finance-payroll" element={<PayrollPage />} />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="chat" element={<GroupChatPage />} />
           </Route>

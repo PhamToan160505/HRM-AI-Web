@@ -162,8 +162,10 @@
     to { opacity: 1; transform: translateY(0); filter: blur(0); }
   }
 
-  .animate-fade-in-up { 
-    animation: fade-in-up 0.8s cubic-bezier(0.32, 0.72, 0, 1) forwards; 
+  .animate-fade-in-up {
+    /* backwards (không phải forwards): sau khi chạy xong không giữ lại transform/filter,
+       nếu không mọi phần tử position:fixed bên trong (modal) sẽ bị neo theo <main> thay vì màn hình. */
+    animation: fade-in-up 0.8s cubic-bezier(0.32, 0.72, 0, 1) backwards;
   }
   .animate-fade-in-down { 
     animation: fade-in-down 0.8s cubic-bezier(0.32, 0.72, 0, 1) forwards; 
