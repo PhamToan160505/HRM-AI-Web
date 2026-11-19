@@ -48,6 +48,8 @@ class AttendanceServiceTest {
     private NotificationService notificationService;
     @Mock
     private DepartmentRepository departmentRepository;
+    @Mock
+    private com.hrm.common.payroll.service.PayrollPeriodLock payrollPeriodLock;
 
     private AttendanceService attendanceService;
 
@@ -66,7 +68,8 @@ class AttendanceServiceTest {
                 userRepository,
                 notificationService,
                 departmentRepository,
-                clock
+                clock,
+                payrollPeriodLock
         );
     }
 

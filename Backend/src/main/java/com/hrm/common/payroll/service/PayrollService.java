@@ -16,9 +16,14 @@ import com.hrm.common.repository.DepartmentRepository;
 import com.hrm.common.repository.UserRepository;
 import com.hrm.exception.AppException;
 import com.hrm.notification.service.NotificationService;
+import com.hrm.request.entity.EmployeeRequest;
+import com.hrm.request.entity.RequestStatus;
+import com.hrm.request.entity.RequestType;
+import com.hrm.request.repository.EmployeeRequestRepository;
 import com.hrm.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,6 +57,8 @@ import java.util.stream.Collectors;
 public class PayrollService {
 
     public static final String LEVEL_DEPARTMENT = "DEPARTMENT";
+    static final int MAX_PAYMENT_REFERENCE = 100;
+    private static final java.time.ZoneId PAYROLL_ZONE = java.time.ZoneId.of("Asia/Ho_Chi_Minh");
 
     public static final String OPEN = "OPEN";
     public static final String ATTENDANCE_CLOSED = "ATTENDANCE_CLOSED";
@@ -81,6 +88,7 @@ public class PayrollService {
     private final NotificationService notificationService;
     private final PayrollReportRepository payrollReportRepository;
     private final FinanceAccess financeAccess;
+    private final EmployeeRequestRepository employeeRequestRepository;
 
     @Value("${payroll.late-free-times:1}")
     private int lateFreeTimes;
@@ -120,6 +128,16 @@ public class PayrollService {
 
     @Value("${payroll.tax.dependent-deduction:6200000}")
     private double dependentDeduction;
+
+    // Hệ số làm thêm giờ theo Điều 98 Bộ luật Lao động 2019
+    @Value("${payroll.overtime-multiplier:1.5}")
+    private double overtimeWeekdayRate;
+
+    @Value("${payroll.overtime-weekend-multiplier:2.0}")
+    private double overtimeWeekendRate;
+
+    @Value("${payroll.overtime-holiday-multiplier:3.0}")
+    private double overtimeHolidayRate;
 
     // ───────────────────────────── Quyền truy cập ─────────────────────────────
 
@@ -224,7 +242,13 @@ public class PayrollService {
         validatePeriod(month, year);
         Long deptId = requireDepartmentLead(user);
 
-        List<User> employees = payrollEmployees(deptId);
+        // BUG-05: chỉ chốt công khi tháng đã kết thúc (tránh khóa bảng công khi nhân viên còn đang đi làm).
+        if (!YearMonth.of(year, month).isBefore(YearMonth.now(PAYROLL_ZONE))) {
+            throw AppException.badRequest("Chỉ được chốt công khi tháng " + month + "/" + year
+                    + " đã kết thúc. Tháng hiện tại vẫn còn ngày làm việc.");
+        }
+
+        List<User> employees = payrollEmployees(deptId, month, year);
         if (employees.isEmpty()) {
             throw AppException.badRequest("Phòng ban chưa có nhân sự để chốt công");
         }
@@ -232,6 +256,12 @@ public class PayrollService {
         if (!pending.isEmpty()) {
             throw AppException.badRequest("Còn đơn ngoại lệ chấm công chưa duyệt của: " + String.join(", ", pending)
                     + ". Vui lòng xử lý hết trước khi chốt công.");
+        }
+        // BUG-04: đơn từ (nghỉ phép, OT...) còn chờ duyệt cũng phải xử lý xong trước khi chốt.
+        List<String> pendingRequests = employeesWithPendingRequests(employees, month, year);
+        if (!pendingRequests.isEmpty()) {
+            throw AppException.badRequest("Còn đơn từ chưa duyệt trong tháng của: " + String.join(", ", pendingRequests)
+                    + ". Vui lòng duyệt hoặc từ chối trước khi chốt công.");
         }
 
         PayrollReport report = findBatch(deptId, month, year).orElse(null);
@@ -245,6 +275,7 @@ public class PayrollService {
                     .month(month)
                     .year(year)
                     .reportLevel(LEVEL_DEPARTMENT)
+                    .periodKey(periodKey(deptId, month, year))
                     .build();
         }
         report.setCreatedBy(user.getUserId());
@@ -252,7 +283,12 @@ public class PayrollService {
         report.setAttendanceClosedBy(user.getUserId());
         report.setAttendanceClosedAt(LocalDateTime.now());
         report.setTotalEmployees(employees.size());
-        report = payrollReportRepository.save(report);
+        try {
+            // Ghi ngay để ràng buộc UNIQUE(period_key) bắt được trường hợp 2 request chốt công cùng lúc (BUG-01).
+            report = payrollReportRepository.saveAndFlush(report);
+        } catch (DataIntegrityViolationException e) {
+            throw AppException.conflict("Công tháng " + month + "/" + year + " của phòng vừa được chốt bởi một thao tác khác. Vui lòng tải lại trang.");
+        }
 
         String deptName = departmentName(deptId);
         notifyUsers(financeAccess.accountants(), "Phòng " + deptName + " đã chốt công",
@@ -326,10 +362,15 @@ public class PayrollService {
                 continue;
             }
 
-            List<User> employees = payrollEmployees(d.getId());
+            List<User> employees = payrollEmployees(d.getId(), month, year);
             List<String> pending = employeesWithPendingExceptions(employees, month, year);
             if (!pending.isEmpty()) {
                 skipped.add(skip(d, "Còn đơn ngoại lệ chưa duyệt: " + String.join(", ", pending)));
+                continue;
+            }
+            List<String> pendingReqs = employeesWithPendingRequests(employees, month, year);
+            if (!pendingReqs.isEmpty()) {
+                skipped.add(skip(d, "Còn đơn từ chưa duyệt: " + String.join(", ", pendingReqs)));
                 continue;
             }
 
@@ -362,7 +403,10 @@ public class PayrollService {
                 payroll.setStatus(DRAFT);
                 payroll.setRejectionReason(null);
                 payrollRepository.save(payroll);
-                if (nz(payroll.getActualDays()) <= 0) {
+                if (!Boolean.TRUE.equals(emp.getActive())) {
+                    warnings.add(Map.of("employeeId", emp.getId(), "hoTen", emp.getHoTen(),
+                            "departmentName", d.getTenPhong(), "reason", "Đã nghỉ việc — chỉ tính lương " + payroll.getActualDays() + " ngày công đã làm"));
+                } else if (nz(payroll.getActualDays()) <= 0) {
                     warnings.add(Map.of("employeeId", emp.getId(), "hoTen", emp.getHoTen(),
                             "departmentName", d.getTenPhong(), "reason", "0 ngày công trong tháng — kiểm tra lại dữ liệu chấm công"));
                 } else if (nz(payroll.getNetSalary()) <= 0) {
@@ -520,6 +564,9 @@ public class PayrollService {
     @Transactional
     public PayrollReport markPaid(Long batchId, String paymentReference, CustomUserDetails user) {
         requireAccountant(user);
+        if (paymentReference != null && paymentReference.trim().length() > MAX_PAYMENT_REFERENCE) {
+            throw AppException.badRequest("Mã chứng từ tối đa " + MAX_PAYMENT_REFERENCE + " ký tự");
+        }
         PayrollReport report = loadBatch(batchId);
         requireStatus(report, APPROVED_BY_CEO);
         report.setStatus(PAID);
@@ -651,6 +698,35 @@ public class PayrollService {
             }
         }
 
+        // ── Làm thêm giờ (BUG-03): tính lại từ đơn OT đã duyệt, không giữ giá trị cũ ──
+        // Mỗi ngày OT = lương 1 ngày × 150% (ngày thường) / 200% (cuối tuần) / 300% (ngày lễ).
+        // Phần trả thêm so với lương bình thường được miễn thuế TNCN.
+        Set<LocalDate> holidayDates = new HashSet<>(holidayRepository.findByNgayLeBetween(startDate, endDate)
+                .stream().map(Holiday::getNgayLe).toList());
+        Set<LocalDate> otDates = new TreeSet<>();
+        for (EmployeeRequest req : employeeRequestRepository.findApprovedRequestsForMonth(emp.getId(), startDate, endDate)) {
+            if (req.getRequestType() != RequestType.OVERTIME || req.getStartDate() == null) continue;
+            LocalDate from = req.getStartDate().isBefore(startDate) ? startDate : req.getStartDate();
+            LocalDate to = req.getEndDate() == null || req.getEndDate().isAfter(endDate) ? endDate : req.getEndDate();
+            for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) otDates.add(d);
+        }
+        double overtimePay = 0.0;
+        double overtimePremium = 0.0;
+        int otWeekday = 0, otWeekend = 0, otHoliday = 0;
+        for (LocalDate d : otDates) {
+            double rate;
+            if (holidayDates.contains(d)) { rate = overtimeHolidayRate; otHoliday++; }
+            else if (d.getDayOfWeek() == DayOfWeek.SATURDAY || d.getDayOfWeek() == DayOfWeek.SUNDAY) { rate = overtimeWeekendRate; otWeekend++; }
+            else { rate = overtimeWeekdayRate; otWeekday++; }
+            overtimePay += dailySalary * rate;
+            overtimePremium += dailySalary * Math.max(rate - 1.0, 0.0);
+        }
+        payroll.setOvertimePay(overtimePay);
+        payroll.setOvertimeReason(otDates.isEmpty() ? null : String.format(
+                "%d ngày OT (ngày thường %d × %.0f%%, cuối tuần %d × %.0f%%, ngày lễ %d × %.0f%%)",
+                otDates.size(), otWeekday, overtimeWeekdayRate * 100, otWeekend, overtimeWeekendRate * 100,
+                otHoliday, overtimeHolidayRate * 100));
+
         payroll.setBaseSalary(baseSalary);
         payroll.setAllowance(allowance);
         payroll.setStandardDays((double) standardDays);
@@ -659,8 +735,7 @@ public class PayrollService {
 
         // 1. Tính lương gộp (gross)
         double ratio = standardDays > 0 ? actualDays / standardDays : 0.0;
-        double grossSalary = (baseSalary + allowance) * ratio - latePenalty
-                + (payroll.getOvertimePay() != null ? payroll.getOvertimePay() : 0.0);
+        double grossSalary = (baseSalary + allowance) * ratio - latePenalty + overtimePay;
         payroll.setGrossSalary(grossSalary);
 
         // 2. Tính Bảo hiểm trên lương cơ bản (baseSalary)
@@ -680,8 +755,8 @@ public class PayrollService {
         payroll.setBhtnAmount(bhtnAmount);
         double totalInsurance = bhxhAmount + bhytAmount + bhtnAmount;
 
-        // 3. Tính thu nhập chịu thuế
-        double thuNhapChiuThue = grossSalary - totalInsurance;
+        // 3. Tính thu nhập chịu thuế (trừ phần tiền OT trả cao hơn lương bình thường — được miễn thuế)
+        double thuNhapChiuThue = Math.max(grossSalary - totalInsurance - overtimePremium, 0.0);
 
         // 4. Tính thu nhập tính thuế
         int soNguoiPhuThuoc = emp.getSoNguoiPhuThuoc() != null ? emp.getSoNguoiPhuThuoc() : 0;
@@ -745,15 +820,16 @@ public class PayrollService {
         boolean ceo = user.getRole() == Role.CEO;
         boolean director = user.getRole() == Role.GIAM_DOC_PHONG_BAN && d.getId().equals(user.getDepartmentId());
 
-        if (lead && (OPEN.equals(status) || ATTENDANCE_REOPENED.equals(status))) actions.add("CLOSE_ATTENDANCE");
+        boolean monthEnded = YearMonth.of(year, month).isBefore(YearMonth.now(PAYROLL_ZONE));
+        if (lead && monthEnded && (OPEN.equals(status) || ATTENDANCE_REOPENED.equals(status))) actions.add("CLOSE_ATTENDANCE");
         if (lead && REOPENABLE.contains(status)) actions.add("REOPEN_ATTENDANCE");
         if (accountant && GENERATABLE.contains(status)) actions.add("GENERATE");
         if (accountant && DRAFT.equals(status)) actions.add("SUBMIT");
-        if (director && PENDING_DIRECTOR.equals(status)) {
+        if (director && PENDING_DIRECTOR.equals(status) && !user.getUserId().equals(r.getSubmittedBy())) {
             actions.add("DIRECTOR_CONFIRM");
             actions.add("DIRECTOR_REJECT");
         }
-        if (chief && PENDING_CHIEF_ACCOUNTANT.equals(status) && !user.getUserId().equals(r.getSubmittedBy())) {
+        if (chief && PENDING_CHIEF_ACCOUNTANT.equals(status) && !alreadyActed(r, user.getUserId())) {
             actions.add("CHIEF_APPROVE");
             actions.add("CHIEF_REJECT");
         }
@@ -772,7 +848,7 @@ public class PayrollService {
                 month,
                 year,
                 status,
-                r == null ? payrollEmployees(d.getId()).size() : r.getTotalEmployees(),
+                r == null ? payrollEmployees(d.getId(), month, year).size() : r.getTotalEmployees(),
                 r == null ? null : r.getTotalGrossSalary(),
                 r == null ? null : r.getTotalNetSalary(),
                 hasDirector,
@@ -805,11 +881,23 @@ public class PayrollService {
                 .stream().filter(Objects::nonNull).toList();
     }
 
-    private List<User> payrollEmployees(Long departmentId) {
+    /**
+     * Nhân sự được tính lương của phòng trong tháng:
+     *  - nhân viên đang làm việc (active), và
+     *  - nhân viên đã nghỉ việc (active = false) nhưng có ngày công trong tháng —
+     *    vẫn được trả lương cho những ngày đã làm.
+     */
+    private List<User> payrollEmployees(Long departmentId, int month, int year) {
+        YearMonth ym = YearMonth.of(year, month);
         return userRepository.findByDepartmentId(departmentId).stream()
-                .filter(u -> Boolean.TRUE.equals(u.getActive()))
                 .filter(u -> PAYROLL_ROLES.contains(u.getRole()))
+                .filter(u -> Boolean.TRUE.equals(u.getActive())
+                        || !attendanceRepository.findByEmployeeIdAndDateBetween(u.getId(), ym.atDay(1), ym.atEndOfMonth()).isEmpty())
                 .toList();
+    }
+
+    static String periodKey(Long departmentId, int month, int year) {
+        return LEVEL_DEPARTMENT + ":" + departmentId + ":" + year + ":" + month;
     }
 
     private List<String> employeesWithPendingExceptions(List<User> employees, int month, int year) {
@@ -818,6 +906,19 @@ public class PayrollService {
                 .filter(e -> attendanceRepository.existsByEmployeeIdAndDateBetweenAndExceptionStatus(
                         e.getId(), ym.atDay(1), ym.atEndOfMonth(), "PENDING"))
                 .map(User::getHoTen)
+                .toList();
+    }
+
+    private List<String> employeesWithPendingRequests(List<User> employees, int month, int year) {
+        if (employees.isEmpty()) return List.of();
+        YearMonth ym = YearMonth.of(year, month);
+        return employeeRequestRepository.findOverlappingByUsersAndStatuses(
+                        employees.stream().map(User::getId).toList(),
+                        List.of(RequestStatus.PENDING, RequestStatus.FORWARDED),
+                        ym.atDay(1), ym.atEndOfMonth())
+                .stream()
+                .map(r -> r.getUser().getHoTen())
+                .distinct()
                 .toList();
     }
 
@@ -863,8 +964,12 @@ public class PayrollService {
         if (!financeAccess.isChiefAccountant(user)) {
             throw AppException.forbidden("Chỉ Kế toán trưởng (Trưởng phòng / Giám đốc phòng Tài chính - Kế toán) được duyệt bước này");
         }
+        // BUG-06: mỗi người chỉ làm 1 bước duyệt trên 1 kỳ lương.
         if (user.getUserId().equals(report.getSubmittedBy())) {
             throw AppException.forbidden("Người gửi bảng lương không được tự kiểm duyệt. Cần một kế toán trưởng khác duyệt.");
+        }
+        if (user.getUserId().equals(report.getDirectorConfirmedBy())) {
+            throw AppException.forbidden("Bạn đã xác nhận bảng lương này ở bước Giám đốc phòng, không được duyệt tiếp bước Kế toán trưởng. Cần một kế toán trưởng khác duyệt.");
         }
     }
 
@@ -872,6 +977,14 @@ public class PayrollService {
         if (user.getRole() != Role.GIAM_DOC_PHONG_BAN || !report.getDepartmentId().equals(user.getDepartmentId())) {
             throw AppException.forbidden("Chỉ Giám đốc của phòng này được xác nhận bảng lương");
         }
+        if (user.getUserId().equals(report.getSubmittedBy())) {
+            throw AppException.forbidden("Bạn đã gửi bảng lương này với vai trò kế toán, không được tự xác nhận ở bước Giám đốc phòng.");
+        }
+    }
+
+    /** Người dùng đã tham gia duyệt/gửi kỳ lương này ở một bước khác chưa (BUG-06). */
+    private static boolean alreadyActed(PayrollReport r, Long userId) {
+        return r != null && (userId.equals(r.getSubmittedBy()) || userId.equals(r.getDirectorConfirmedBy()));
     }
 
     private void requireCeo(CustomUserDetails user) {
@@ -949,6 +1062,10 @@ public class PayrollService {
 
     private static String csv(String v) {
         if (v == null) return "";
+        // OBS-02: chống CSV/formula injection — ô bắt đầu bằng = + - @ tab CR sẽ được Excel hiểu là công thức.
+        if (!v.isEmpty() && "=+-@\t\r".indexOf(v.charAt(0)) >= 0) {
+            v = "'" + v;
+        }
         String s = v.replace("\"", "\"\"");
         return (s.contains(",") || s.contains("\"") || s.contains("\n")) ? "\"" + s + "\"" : s;
     }

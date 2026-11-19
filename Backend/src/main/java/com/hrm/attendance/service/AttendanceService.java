@@ -42,18 +42,22 @@ public class AttendanceService {
     static final LocalTime PUNCH_CLOSE_TIME = LocalTime.of(18, 0);
     private static final LocalTime START_TIME = LocalTime.of(8, 0);
 
+    private final com.hrm.common.payroll.service.PayrollPeriodLock payrollPeriodLock;
+
     public AttendanceService(AttendanceRepository attendanceRepository,
                              FaceEmbeddingRepository faceEmbeddingRepository,
                              UserRepository userRepository,
                              NotificationService notificationService,
                              DepartmentRepository departmentRepository,
-                             Clock attendanceClock) {
+                             Clock attendanceClock,
+                             com.hrm.common.payroll.service.PayrollPeriodLock payrollPeriodLock) {
         this.attendanceRepository = attendanceRepository;
         this.faceEmbeddingRepository = faceEmbeddingRepository;
         this.userRepository = userRepository;
         this.notificationService = notificationService;
         this.departmentRepository = departmentRepository;
         this.attendanceClock = attendanceClock;
+        this.payrollPeriodLock = payrollPeriodLock;
     }
 
     public Attendance punch(Long employeeId, String incomingVectorJson, String location) {
@@ -235,6 +239,8 @@ public class AttendanceService {
     public void approveException(Long attendanceId, String approvalStatus, String loaiNghiPhep, CustomUserDetails userDetails) {
         Attendance record = attendanceRepository.findById(attendanceId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy bản ghi chấm công"));
+        // Không sửa chấm công của tháng phòng đã chốt công (BUG-02).
+        payrollPeriodLock.assertOpen(record.getEmployeeId(), record.getDate());
         
         if ("APPROVED".equals(approvalStatus)) {
             // Cập nhật lại status theo loại nghỉ phép hoặc chỉ đánh dấu là hợp lệ

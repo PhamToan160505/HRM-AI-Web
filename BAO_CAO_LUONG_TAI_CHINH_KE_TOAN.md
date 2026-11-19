@@ -48,7 +48,7 @@ Mỗi **phòng ban, mỗi tháng** là một **kỳ lương** riêng. Các phòn
 
 | Bước | Ai làm | Làm gì | Trạng thái sau |
 |------|--------|--------|----------------|
-| 1 | Trưởng phòng (hoặc GĐ phòng) của phòng đó | Chốt bảng công tháng. **Bị chặn** nếu còn đơn ngoại lệ chấm công chưa duyệt | `ATTENDANCE_CLOSED` |
+| 1 | Trưởng phòng (hoặc GĐ phòng) của phòng đó | Chốt bảng công tháng **đã kết thúc**. **Bị chặn** nếu còn đơn ngoại lệ chấm công hoặc đơn từ (nghỉ phép, OT…) chưa duyệt | `ATTENDANCE_CLOSED` |
 | 2 | Kế toán (bất kỳ ai thuộc phòng TC-KT) | Bấm "Tính lương các phòng đã chốt công". Hệ thống tính cho mọi phòng đã chốt; phòng chưa chốt được liệt kê lý do | `DRAFT` |
 | 3 | Kế toán | Gửi duyệt | `PENDING_DIRECTOR` (phòng không có GĐ thì chuyển thẳng `PENDING_CHIEF_ACCOUNTANT`) |
 | 4 | Giám đốc của phòng đó | Xác nhận lương phòng mình | `PENDING_CHIEF_ACCOUNTANT` |
@@ -61,6 +61,9 @@ Mỗi **phòng ban, mỗi tháng** là một **kỳ lương** riêng. Các phòn
 - **Từ chối:** ở bước 4, 5, 6 đều từ chối được, **bắt buộc ghi lý do**. Bảng lương về trạng thái `REJECTED`, ghi rõ ai từ chối, ở bước nào, lý do gì. Kế toán tính lại rồi gửi lại.
 - **Mở lại công:** Trưởng phòng mở lại được khi bảng lương **chưa gửi duyệt** (`ATTENDANCE_CLOSED`, `DRAFT`, `REJECTED`). Bảng lương nháp bị hủy, chờ chốt công lại. Đã gửi duyệt thì phải nhờ người duyệt từ chối.
 - **Cảnh báo:** khi tính lương, ai có **0 ngày công** hoặc **thực nhận bằng 0** sẽ được liệt kê trong mục "Cần kiểm tra trước khi gửi duyệt".
+- **Khóa bảng công:** phòng đã chốt công tháng nào thì không tạo được đơn lùi ngày, không duyệt được đơn từ hay ngoại lệ chấm công của tháng đó. Muốn sửa phải để Trưởng phòng mở lại công (chỉ được khi chưa gửi duyệt).
+- **Nhân viên nghỉ việc giữa tháng:** vẫn được tính lương những ngày đã làm; kế toán thấy ghi chú "Đã nghỉ việc".
+- **Chống trùng:** mỗi phòng mỗi tháng chỉ có 1 kỳ lương (ràng buộc UNIQUE), bấm chốt công nhiều lần cùng lúc cũng không tạo trùng.
 
 ### 3.3. Thông báo tự động
 
@@ -77,7 +80,7 @@ Mỗi **phòng ban, mỗi tháng** là một **kỳ lương** riêng. Các phòn
 ### 3.4. Quy tắc kiểm soát
 
 - **Tách bạch người tính và người quản lý:** Trưởng phòng không còn tính lương, chỉ chốt công.
-- **Người gửi không tự duyệt:** kế toán trưởng đã tự gửi bảng lương thì không được tự kiểm duyệt bước 5; cần một kế toán trưởng khác.
+- **Mỗi người chỉ làm 1 bước:** người gửi bảng lương không được xác nhận ở bước GĐ hay duyệt ở bước kế toán trưởng; người đã xác nhận ở bước GĐ cũng không được duyệt tiếp bước kế toán trưởng.
 - **Đúng phòng, đúng bước:** GĐ chỉ xác nhận phòng mình; mỗi thao tác chỉ làm được ở đúng trạng thái (sai trạng thái trả về lỗi 409).
 - **Phạm vi xem:** CEO và phòng TC-KT xem toàn công ty; GĐ xem phòng mình; Trưởng phòng xem lương nhân viên và của chính mình (không xem lương GĐ); nhân viên thường không xem được bảng lương phòng.
 - **Khóa sau khi chi:** bảng lương `PAID` không tính lại được.
@@ -129,7 +132,11 @@ Các API cũ của luồng trước (`/generate`, `/manager/*`, `/director/repor
 
 ### 4.3. Công thức tính lương
 
-**Giữ nguyên** công thức cũ (ngày công chuẩn, quy tắc đi trễ, nghỉ phép, gross, bảo hiểm trên lương cơ bản, ngưỡng 14 ngày, thuế TNCN lũy tiến, giảm trừ gia cảnh). Code chỉ được tách ra thành hàm `computePayroll` riêng.
+Giữ nguyên công thức cũ (ngày công chuẩn, quy tắc đi trễ, nghỉ phép, gross, bảo hiểm trên lương cơ bản, ngưỡng 14 ngày, thuế TNCN lũy tiến, giảm trừ gia cảnh), **bổ sung tiền làm thêm giờ**:
+
+- Mỗi ngày OT đã duyệt = lương 1 ngày × **150%** (ngày thường) / **200%** (cuối tuần) / **300%** (ngày lễ), theo Điều 98 BLLĐ 2019. Có thể chỉnh qua cấu hình `payroll.overtime-*`.
+- Phần trả thêm so với lương bình thường **được miễn thuế TNCN**: thu nhập chịu thuế = gross − bảo hiểm − phần OT trả thêm.
+- OT được tính lại từ đơn mỗi lần tính lương, không giữ giá trị cũ.
 
 ### 4.4. Giao diện
 
@@ -185,7 +192,7 @@ Các API cũ của luồng trước (`/generate`, `/manager/*`, `/director/repor
 5. Chốt công bị chặn khi còn đơn ngoại lệ chưa duyệt.
 6. CEO từ chối thì bảng lương về `REJECTED`, lưu bước và lý do.
 
-Toàn bộ test backend: **60/60 pass**. Frontend build thành công.
+Toàn bộ test backend: **77/77 pass**. Frontend build thành công.
 
 ### 6.2. Chạy thật qua API (tháng 11/2026)
 
@@ -234,7 +241,13 @@ Chốt công, tính lương, xem chi tiết, gửi duyệt, CEO chốt, xác nh�
 | `common/payroll/repository/PayrollRepository.java` | Thêm `findByPayrollReportId` |
 | `telegram/TelegramAiConversationService.java`, `TelegramHrmDataService.java` | Đếm lương đã duyệt theo trạng thái mới |
 | `resources/db/migration/V23__payroll_finance_workflow.sql` | **Mới:** migration |
-| `test/.../PayrollWorkflowTest.java` | **Mới:** 6 unit test |
+| `resources/db/migration/V24__payroll_period_unique.sql` | **Mới:** chống trùng kỳ lương |
+| `request/repository/EmployeeRequestRepository.java` | Thêm truy vấn đơn chờ duyệt trong tháng |
+| `exception/GlobalExceptionHandler.java` | Tham số sai kiểu / thiếu trả 400 thay vì 500 |
+| `test/.../PayrollPeriodLockTest.java` | **Mới:** test khóa bảng công |
+| `common/payroll/service/PayrollPeriodLock.java` | **Mới:** khóa bảng công tháng đã chốt |
+| `request/service/EmployeeRequestService.java`, `attendance/service/AttendanceService.java` | Gọi khóa bảng công khi tạo/duyệt đơn và duyệt ngoại lệ |
+| `test/.../PayrollWorkflowTest.java` | **Mới:** 17 unit test |
 
 **Frontend**
 
@@ -248,6 +261,7 @@ Chốt công, tính lương, xem chi tiết, gửi duyệt, CEO chốt, xác nh�
 | `App.jsx` | Route `finance-payroll`, `my-payroll` |
 | `components/layout/AppLayout.jsx` | Menu "Kế toán lương", "Phiếu lương của tôi" |
 | `pages/manager/payroll/PayrollViewPage.jsx` | Đổi tiêu đề "đã chi trả" |
+| `pages/employee/MyRequestsPage.jsx` | Chữ mức OT đổi thành 150% / 200% / 300% |
 | `index.css` | Sửa lỗi modal bị lệch khi cuộn |
 
 **Khác:** `.claude/launch.json` (cấu hình khởi động backend và frontend trong app Claude).

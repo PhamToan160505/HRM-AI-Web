@@ -62,6 +62,21 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Tham số URL sai kiểu (vd: ?month=abc) hoặc thiếu tham số bắt buộc — trước đây rơi vào lỗi 500.
+     */
+    @ExceptionHandler({
+            org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class,
+            org.springframework.web.bind.MissingServletRequestParameterException.class
+    })
+    public ResponseEntity<ApiResponse<Void>> handleBadParameter(Exception ex) {
+        log.warn("Bad request parameter: {}", ex.getMessage());
+        String name = ex instanceof org.springframework.web.method.annotation.MethodArgumentTypeMismatchException m ? m.getName()
+                : ((org.springframework.web.bind.MissingServletRequestParameterException) ex).getParameterName();
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error("Tham số không hợp lệ hoặc bị thiếu: " + name));
+    }
+
+    /**
      * Lỗi tham số không hợp lệ (ví dụ: ngày bắt đầu sau ngày kết thúc).
      */
     @ExceptionHandler(IllegalArgumentException.class)

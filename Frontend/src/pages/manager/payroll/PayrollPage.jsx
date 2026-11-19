@@ -678,6 +678,7 @@ export default function PayrollPage() {
                                 <label className="block text-sm font-semibold text-slate-700 mb-2">Mã chứng từ / số lệnh chuyển khoản</label>
                                 <input
                                     value={paymentReference}
+                                    maxLength={100}
                                     onChange={(e) => setPaymentReference(e.target.value)}
                                     placeholder="Ví dụ: UNC-2026-11-001"
                                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"

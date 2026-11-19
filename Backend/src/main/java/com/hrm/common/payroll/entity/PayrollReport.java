@@ -54,6 +54,10 @@ public class PayrollReport {
     @Column(name = "total_net_salary")
     private Double totalNetSalary;
 
+    /** "DEPARTMENT:{deptId}:{year}:{month}" — UNIQUE, chống tạo trùng kỳ lương. NULL với dữ liệu luồng cũ. */
+    @Column(name = "period_key", length = 64)
+    private String periodKey;
+
     @Column(name = "attendance_closed_by")
     private Long attendanceClosedBy;
 

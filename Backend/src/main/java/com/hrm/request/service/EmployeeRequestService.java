@@ -33,6 +33,7 @@ public class EmployeeRequestService {
     private final AttendanceRepository attendanceRepository;
     private final NotificationService notificationService;
     private final ApplicationEventPublisher eventPublisher;
+    private final com.hrm.common.payroll.service.PayrollPeriodLock payrollPeriodLock;
 
     @org.springframework.beans.factory.annotation.Value("${payroll.normal-leave-days-per-month:1}")
     private int normalLeaveDaysPerMonth;
@@ -105,6 +106,9 @@ public class EmployeeRequestService {
     public EmployeeRequestDto createRequest(Long userId, CreateRequestDto dto) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Không cho tạo đơn rơi vào tháng mà phòng đã chốt công / đã tính lương.
+        payrollPeriodLock.assertOpen(userId, dto.getStartDate(), dto.getEndDate());
 
         EmployeeRequest request = EmployeeRequest.builder()
                 .user(user)
@@ -206,6 +210,9 @@ public class EmployeeRequestService {
         if (request.getStatus() != RequestStatus.PENDING && request.getStatus() != RequestStatus.FORWARDED) {
             throw new RuntimeException("Chỉ có thể duyệt đơn ở trạng thái chờ duyệt hoặc chuyển tiếp (PENDING, FORWARDED)");
         }
+
+        // Đơn được duyệt sẽ ghi vào bảng công -> chặn nếu tháng đó đã chốt công (BUG-02).
+        payrollPeriodLock.assertOpen(request.getUser().getId(), request.getStartDate(), request.getEndDate());
 
         request.setStatus(RequestStatus.APPROVED);
         request.setApprover(manager);

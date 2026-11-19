@@ -93,8 +93,8 @@ function LeaveSalaryImpact({ summary }) {
     {
       label: 'Làm thêm giờ',
       days: summary.overtimeDays,
-      rate: '150%',
-      impact: summary.overtimeDays > 0 ? `+${(summary.overtimeDays * 1.5 * 100).toFixed(0)}% ngày công/ngày OT` : 'Không ảnh hưởng',
+      rate: '150–300%',
+      impact: summary.overtimeDays > 0 ? 'Lương 1 ngày × 150% ngày thường / 200% cuối tuần / 300% ngày lễ' : 'Không ảnh hưởng',
       colorClass: 'text-purple-600',
       bgClass: 'bg-purple-50',
     },

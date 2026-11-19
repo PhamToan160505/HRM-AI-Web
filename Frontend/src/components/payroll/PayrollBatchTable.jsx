@@ -74,7 +74,14 @@ function ActionButtons({ b, onAction, busyKey, className = '' }) {
     );
 }
 
-const closedByText = (b) => b.attendanceClosedByName ? `Chốt công: ${b.attendanceClosedByName}` : 'Trưởng phòng chưa chốt công';
+const monthEnded = (b) => {
+    const now = new Date();
+    return b.year * 12 + b.month < now.getFullYear() * 12 + (now.getMonth() + 1);
+};
+const closedByText = (b) => {
+    if (b.attendanceClosedByName) return `Chốt công: ${b.attendanceClosedByName}`;
+    return monthEnded(b) ? 'Trưởng phòng chưa chốt công' : 'Chốt công được sau khi hết tháng';
+};
 const money = (v) => v != null ? formatCurrencyVND(v) : '—';
 
 export default function PayrollBatchTable({ batches, onAction, busyKey }) {
