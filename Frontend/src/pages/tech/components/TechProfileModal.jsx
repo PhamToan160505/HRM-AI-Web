@@ -13,6 +13,7 @@ import {
   UserPlus,
 } from 'lucide-react';
 import TechRadarChart from './TechRadarChart';
+import CareerTimelineSection from './CareerTimelineSection';
 import {
   PROFICIENCY_CONFIG,
   RADAR_DIMENSIONS,
@@ -345,6 +346,9 @@ export default function TechProfileModal({
               </div>
             </div>
           </div>
+
+          {/* Dòng thời gian Lộ trình Nghề nghiệp (Career Timeline) */}
+          <CareerTimelineSection userId={profile.userId} />
         </div>
 
         {/* Footer */}

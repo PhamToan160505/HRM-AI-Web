@@ -12,6 +12,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import TechRadarChart from '../components/TechRadarChart';
+import CareerTimelineSection from '../components/CareerTimelineSection';
 import {
   PROFICIENCY_CONFIG,
   RADAR_DIMENSIONS,
@@ -332,6 +333,9 @@ export default function CeoTechProfileModal({
               </div>
             </div>
           </div>
+
+          {/* Dòng thời gian Lộ trình Nghề nghiệp (Career Timeline) */}
+          <CareerTimelineSection userId={profile.userId} />
         </div>
 
         {/* Footer */}

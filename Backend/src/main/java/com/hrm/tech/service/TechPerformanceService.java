@@ -526,27 +526,7 @@ public class TechPerformanceService {
                 .map(r -> mapToReviewResponse(r, userMap, currentUser, true, false))
                 .collect(Collectors.toList());
 
-        List<TechCareerEvent> events = careerEventRepository.findByEmployeeIdOrderByEventDateDescIdDesc(currentUserId);
-        Map<Long, User> actorMap = loadUserMap(
-                events.stream().map(TechCareerEvent::getActorId).filter(Objects::nonNull).collect(Collectors.toSet())
-        );
-        List<TechCareerEventResponse> careerTimeline = events.stream()
-                .map(ev -> TechCareerEventResponse.builder()
-                        .id(ev.getId())
-                        .employeeId(ev.getEmployeeId())
-                        .reviewId(ev.getReviewId())
-                        .eventType(ev.getEventType())
-                        .title(ev.getTitle())
-                        .oldValue(ev.getOldValue())
-                        .newValue(ev.getNewValue())
-                        .actorId(ev.getActorId())
-                        .actorName(ev.getActorId() != null && actorMap.get(ev.getActorId()) != null
-                                ? actorMap.get(ev.getActorId()).getHoTen()
-                                : null)
-                        .note(ev.getNote())
-                        .eventDate(ev.getEventDate())
-                        .build())
-                .collect(Collectors.toList());
+        List<TechCareerEventResponse> careerTimeline = buildCareerTimeline(currentUserId);
 
         LocalDate today = LocalDate.now();
         TechTelemetryBreakdownResponse livePreview = telemetryCalculator.calculateTelemetry(
@@ -583,6 +563,39 @@ public class TechPerformanceService {
                         ? latestApproved.getFinalGrade().name() : null)
                 .expiringCertificatesCount(expiringCount)
                 .build();
+    }
+
+    @Transactional(readOnly = true)
+    public List<TechCareerEventResponse> getEmployeeCareerTimeline(Long employeeId, Long actorId) {
+        User actor = loadActor(actorId);
+        if (actor.getRole() == Role.NHAN_VIEN && !employeeId.equals(actorId)) {
+            throw AppException.forbidden("Bạn chỉ có quyền xem dòng thời gian lộ trình nghề nghiệp của chính mình!");
+        }
+        return buildCareerTimeline(employeeId);
+    }
+
+    private List<TechCareerEventResponse> buildCareerTimeline(Long employeeId) {
+        List<TechCareerEvent> events = careerEventRepository.findByEmployeeIdOrderByEventDateDescIdDesc(employeeId);
+        Map<Long, User> actorMap = loadUserMap(
+                events.stream().map(TechCareerEvent::getActorId).filter(Objects::nonNull).collect(Collectors.toSet())
+        );
+        return events.stream()
+                .map(ev -> TechCareerEventResponse.builder()
+                        .id(ev.getId())
+                        .employeeId(ev.getEmployeeId())
+                        .reviewId(ev.getReviewId())
+                        .eventType(ev.getEventType())
+                        .title(ev.getTitle())
+                        .oldValue(ev.getOldValue())
+                        .newValue(ev.getNewValue())
+                        .actorId(ev.getActorId())
+                        .actorName(ev.getActorId() != null && actorMap.get(ev.getActorId()) != null
+                                ? actorMap.get(ev.getActorId()).getHoTen()
+                                : null)
+                        .note(ev.getNote())
+                        .eventDate(ev.getEventDate())
+                        .build())
+                .collect(Collectors.toList());
     }
 
     @Transactional

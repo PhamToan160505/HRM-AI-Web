@@ -447,13 +447,23 @@ class TechAdvancedSuiteTest {
 
         when(mentorshipProgramRepository.findById(601L)).thenReturn(Optional.of(program));
         when(mentorshipProgramRepository.save(any(TechMentorshipProgram.class))).thenAnswer(inv -> inv.getArgument(0));
+        User managerActor = User.builder().id(100L).role(com.hrm.common.entity.Role.TRUONG_PHONG).hoTen("Trưởng phòng").build();
+        when(userRepository.findById(100L)).thenReturn(Optional.of(managerActor));
+        mentorUser.setRole(com.hrm.common.entity.Role.NHAN_VIEN);
+        when(userRepository.findById(102L)).thenReturn(Optional.of(mentorUser));
 
         UpdateTechMentorshipRequest updateReq = UpdateTechMentorshipRequest.builder()
                 .status(TechMentorshipStatus.COMPLETED)
                 .finalAssessment("Hoàn thành xuất sắc toàn bộ tiêu chí")
                 .build();
 
-        TechMentorshipProgramResponse res = mentorshipService.updateProgram(601L, updateReq, 102L);
+        // Chặn NHAN_VIEN / Mentor không được tự gọi API đổi status COMPLETED (Maker-Checker)
+        AppException forbiddenEx = assertThrows(AppException.class,
+                () -> mentorshipService.updateProgram(601L, updateReq, 102L));
+        assertTrue(forbiddenEx.getMessage().contains("Chỉ Trưởng phòng hoặc Giám đốc Phòng ban"));
+
+        // Trưởng phòng phê duyệt Tốt nghiệp thành công
+        TechMentorshipProgramResponse res = mentorshipService.updateProgram(601L, updateReq, 100L);
 
         assertEquals(TechMentorshipStatus.COMPLETED, res.getStatus());
 
@@ -632,6 +642,115 @@ class TechAdvancedSuiteTest {
         mentorshipService.deleteProgram(602L, 100L);
 
         verify(mentorshipProgramRepository, times(1)).delete(program);
+    }
+
+    @Test
+    void testCreateCheckin_ValidationRules_ThrowsAppException() {
+        TechMentorshipProgram program = TechMentorshipProgram.builder()
+                .id(603L)
+                .programTitle("Lộ trình Kèm cặp Test Check-in")
+                .startDate(LocalDate.of(2026, 11, 19))
+                .endDate(LocalDate.of(2027, 2, 19))
+                .status(TechMentorshipStatus.ACTIVE)
+                .build();
+
+        when(mentorshipProgramRepository.findById(603L)).thenReturn(Optional.of(program));
+
+        // 1. Checkin trước ngày bắt đầu chương trình
+        CreateTechCheckinRequest beforeReq = CreateTechCheckinRequest.builder()
+                .checkinDate(LocalDate.of(2026, 11, 10))
+                .topicsCovered("Review kiến trúc")
+                .progressRating(4)
+                .build();
+        AppException exBefore = assertThrows(AppException.class,
+                () -> mentorshipService.createCheckin(603L, beforeReq, 102L));
+        assertTrue(exBefore.getMessage().contains("không được trước ngày bắt đầu chương trình"));
+
+        // 2. Checkin sau ngày kết thúc chương trình
+        CreateTechCheckinRequest afterReq = CreateTechCheckinRequest.builder()
+                .checkinDate(LocalDate.of(2027, 2, 21))
+                .topicsCovered("Review kiến trúc")
+                .progressRating(4)
+                .build();
+        AppException exAfter = assertThrows(AppException.class,
+                () -> mentorshipService.createCheckin(603L, afterReq, 102L));
+        assertTrue(exAfter.getMessage().contains("không được vượt quá ngày kết thúc chương trình"));
+    }
+
+    @Test
+    void testUpdateAndDeleteCheckin_SuccessAndPermissionGuard() {
+        TechMentorshipProgram program = TechMentorshipProgram.builder()
+                .id(604L)
+                .mentorId(102L)
+                .menteeId(101L)
+                .startDate(LocalDate.of(2026, 11, 19))
+                .endDate(LocalDate.of(2027, 2, 19))
+                .status(TechMentorshipStatus.ACTIVE)
+                .build();
+
+        TechMentorshipCheckin existing = TechMentorshipCheckin.builder()
+                .id(705L)
+                .program(program)
+                .checkinDate(LocalDate.of(2026, 11, 21))
+                .topicsCovered("Review Clean Architecture")
+                .progressRating(4)
+                .loggedBy(102L)
+                .build();
+
+        when(mentorshipCheckinRepository.findById(705L)).thenReturn(Optional.of(existing));
+        when(mentorshipCheckinRepository.save(any(TechMentorshipCheckin.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+        when(userRepository.findById(102L)).thenReturn(Optional.of(mentorUser));
+        when(userRepository.findById(101L)).thenReturn(Optional.of(engineerUser));
+
+        // Mentee không phải người tạo & không phải Mentor => bị chặn sửa
+        CreateTechCheckinRequest updateReq = CreateTechCheckinRequest.builder()
+                .checkinDate(LocalDate.of(2026, 11, 22))
+                .topicsCovered("Review Clean Architecture & Kafka")
+                .progressRating(5)
+                .mentorFeedback("Tiến bộ vượt bậc")
+                .build();
+        assertThrows(AppException.class, () -> mentorshipService.updateCheckin(705L, updateReq, 101L));
+
+        // Mentor chỉnh sửa thành công
+        TechMentorshipCheckinResponse updatedRes = mentorshipService.updateCheckin(705L, updateReq, 102L);
+        assertEquals(5, updatedRes.getProgressRating());
+        assertEquals("Review Clean Architecture & Kafka", updatedRes.getTopicsCovered());
+
+        // Mentor xóa thành công
+        mentorshipService.deleteCheckin(705L, 102L);
+        verify(mentorshipCheckinRepository, times(1)).delete(existing);
+    }
+
+    @Test
+    void testProposeGraduation_MentorOnlyAndKeepsStatusActive() {
+        TechMentorshipProgram program = TechMentorshipProgram.builder()
+                .id(605L)
+                .mentorId(102L)
+                .menteeId(101L)
+                .programTitle("Lộ trình bồi dưỡng Spring Boot")
+                .targetGoal("Làm chủ Microservices")
+                .startDate(LocalDate.of(2026, 11, 19))
+                .endDate(LocalDate.of(2027, 2, 19))
+                .status(TechMentorshipStatus.ACTIVE)
+                .build();
+
+        when(mentorshipProgramRepository.findById(605L)).thenReturn(Optional.of(program));
+        when(mentorshipProgramRepository.save(any(TechMentorshipProgram.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ProposeTechGraduationRequest req = ProposeTechGraduationRequest.builder()
+                .mentorSummary("Mentee đã làm chủ Clean Architecture và áp dụng Kafka vào dự án thực tế. Đề xuất duyệt tốt nghiệp.")
+                .build();
+
+        // Mentee không thể tự gửi đề xuất tốt nghiệp thay Mentor
+        assertThrows(AppException.class, () -> mentorshipService.proposeGraduation(605L, req, 101L));
+
+        // Mentor gửi đề xuất thành công; status vẫn giữ nguyên ACTIVE chờ Trưởng phòng duyệt
+        TechMentorshipProgramResponse proposedRes = mentorshipService.proposeGraduation(605L, req, 102L);
+        assertTrue(Boolean.TRUE.equals(proposedRes.getGraduationProposed()));
+        assertEquals(TechMentorshipStatus.ACTIVE, proposedRes.getStatus());
+        assertNotNull(proposedRes.getGraduationProposedAt());
+        assertTrue(proposedRes.getMentorSummary().contains("Clean Architecture"));
     }
 
     // ==========================================

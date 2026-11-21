@@ -621,6 +621,11 @@ export const CAREER_EVENT_CONFIG = {
     dotClass: 'bg-orange-500 text-white',
     badgeClass: 'bg-orange-50 text-orange-700 border-orange-200',
   },
+  MENTORSHIP_COMPLETED: {
+    label: 'Tốt nghiệp Chương trình Kèm cặp 1-1',
+    dotClass: 'bg-violet-600 text-white',
+    badgeClass: 'bg-violet-50 text-violet-700 border-violet-200',
+  },
 };
 
 export const getCertExpiryInfo = (cert) => {

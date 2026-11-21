@@ -146,6 +146,15 @@ public class TechPerformanceController {
         return ResponseEntity.ok(ApiResponse.ok(result, msg));
     }
 
+    @GetMapping("/career-timeline/{employeeId}")
+    @PreAuthorize("hasAnyRole('CEO', 'GIAM_DOC_PHONG_BAN', 'TRUONG_PHONG', 'ADMIN', 'NHAN_VIEN')")
+    public ResponseEntity<ApiResponse<List<TechCareerEventResponse>>> getEmployeeCareerTimeline(
+            @PathVariable Long employeeId,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                performanceService.getEmployeeCareerTimeline(employeeId, userDetails.getUserId())));
+    }
+
     @PutMapping("/{id}/final-decision")
     @PreAuthorize("hasAnyRole('CEO', 'GIAM_DOC_PHONG_BAN', 'ADMIN')")
     public ResponseEntity<ApiResponse<TechPerformanceReviewResponse>> finalDecision(

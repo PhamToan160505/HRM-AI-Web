@@ -30,6 +30,9 @@ public class TechMentorshipProgramResponse {
     private LocalDate endDate;
     private TechMentorshipStatus status;
     private String finalAssessment;
+    private Boolean graduationProposed;
+    private String mentorSummary;
+    private LocalDateTime graduationProposedAt;
     private Long createdBy;
     private LocalDateTime createdAt;
     private Long checkinCount;

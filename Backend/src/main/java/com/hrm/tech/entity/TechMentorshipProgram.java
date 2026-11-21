@@ -56,6 +56,16 @@ public class TechMentorshipProgram {
     @Column(name = "final_assessment", columnDefinition = "TEXT")
     private String finalAssessment;
 
+    @Column(name = "graduation_proposed", nullable = false)
+    @Builder.Default
+    private Boolean graduationProposed = false;
+
+    @Column(name = "mentor_summary", columnDefinition = "TEXT")
+    private String mentorSummary;
+
+    @Column(name = "graduation_proposed_at")
+    private LocalDateTime graduationProposedAt;
+
     @Column(name = "created_by", nullable = false)
     private Long createdBy;
 

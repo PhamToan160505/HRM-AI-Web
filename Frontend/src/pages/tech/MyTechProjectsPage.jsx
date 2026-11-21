@@ -27,6 +27,8 @@ import {
   Lock,
   TrendingUp,
   Users2,
+  MessageSquare,
+  Star,
 } from 'lucide-react';
 import { MotionConfig, motion, AnimatePresence } from 'framer-motion';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
@@ -40,6 +42,9 @@ import WorklogModal from './components/WorklogModal';
 import SelfReviewModal from './components/SelfReviewModal';
 import TechReviewDetailModal from './components/TechReviewDetailModal';
 import TechMonthPicker from './components/TechMonthPicker';
+import MentorshipCheckinModal from './components/MentorshipCheckinModal';
+import MentorshipDetailModal from './components/MentorshipDetailModal';
+import MentorshipGraduationProposalModal from './components/MentorshipGraduationProposalModal';
 import {
   PROJECT_STATUS_CONFIG,
   PROJECT_ROLE_LABELS,
@@ -103,6 +108,9 @@ export default function MyTechProjectsPage() {
   const [myPerfOverview, setMyPerfOverview] = useState(null);
   const [availableSkills, setAvailableSkills] = useState([]);
   const [myMentorshipPrograms, setMyMentorshipPrograms] = useState([]);
+  const [viewingMentorship, setViewingMentorship] = useState(null);
+  const [checkinTarget, setCheckinTarget] = useState(null); // { program, openAdd }
+  const [proposingGraduationTarget, setProposingGraduationTarget] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -952,25 +960,94 @@ export default function MyTechProjectsPage() {
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                           {myMentorshipPrograms.map((p) => {
-                            const isMentor = String(p.mentorId) === String(user?.id);
+                            const currentUid = user?.userId ?? user?.id;
+                            const isMentor = currentUid != null && String(p.mentorId) === String(currentUid);
                             return (
                               <div
                                 key={p.id}
-                                className="p-3 bg-white/10 hover:bg-white/15 border border-white/15 rounded-xl space-y-1.5 text-xs transition"
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => setViewingMentorship(p)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    setViewingMentorship(p);
+                                  }
+                                }}
+                                title="Bấm để xem thông tin chi tiết lộ trình"
+                                className="p-3 bg-white/10 hover:bg-white/15 border border-white/15 hover:border-white/35 rounded-xl space-y-1.5 text-xs transition cursor-pointer group"
                               >
                                 <div className="flex items-center justify-between gap-2">
-                                  <span className="font-bold text-white truncate">{p.programTitle}</span>
-                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-600 text-white shrink-0">
-                                    {isMentor ? 'Bạn là Mentor' : 'Bạn là Mentee'}
-                                  </span>
+                                  <span className="font-bold text-white truncate group-hover:underline">{p.programTitle}</span>
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    {p.graduationProposed && p.status === 'ACTIVE' && (
+                                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/25 text-amber-200 border border-amber-400/40">
+                                        Chờ duyệt Tốt nghiệp
+                                      </span>
+                                    )}
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full text-white ${
+                                      isMentor ? 'bg-emerald-600' : 'bg-blue-600'
+                                    }`}>
+                                      {isMentor ? 'Bạn là Mentor' : 'Bạn là Mentee'}
+                                    </span>
+                                  </div>
                                 </div>
                                 <p className="text-[11px] text-blue-200/90 truncate">
-                                  {isMentor ? `Kỹ sư: ${p.menteeName}` : `Mentor dẫn dắt: ${p.mentorName}`}
+                                  {isMentor ? `Mentee: ${p.menteeName}` : `Mentor dẫn dắt: ${p.mentorName}`}
                                   {p.focusSkillName && ` • Trọng tâm: ${p.focusSkillName}`}
                                 </p>
-                                <div className="flex items-center justify-between text-[10px] text-blue-200/70 pt-0.5 tabular border-t border-white/10">
-                                  <span>Đã check-in: <strong>{p.checkinCount || 0} buổi</strong></span>
+                                <div className="flex items-center justify-between text-[10px] text-blue-200/80 pt-1 tabular border-t border-white/10">
+                                  <div className="flex items-center gap-2.5">
+                                    <span>Đã check-in: <strong className="text-white">{p.checkinCount || 0} buổi</strong></span>
+                                    {p.averageRating ? (
+                                      <span className="inline-flex items-center gap-1 font-bold text-amber-300 bg-amber-500/20 px-1.5 py-0.5 rounded border border-amber-400/30">
+                                        <Star size={10} className="fill-amber-300 text-amber-300" />
+                                        <span>{Number(p.averageRating).toFixed(1)}/5.0</span>
+                                      </span>
+                                    ) : null}
+                                  </div>
                                   <span>Hạn: {formatDateVN(p.endDate)}</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-2 pt-2 border-t border-white/10 flex-wrap">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setCheckinTarget({ program: p, openAdd: false });
+                                    }}
+                                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-200 hover:text-white transition cursor-pointer"
+                                  >
+                                    <MessageSquare size={12} />
+                                    <span>Lịch sử Check-in</span>
+                                  </button>
+                                  {p.status === 'ACTIVE' && (
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setCheckinTarget({ program: p, openAdd: true });
+                                        }}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-white text-[#0F2557] hover:bg-blue-50 rounded-lg text-[11px] font-bold shadow-xs transition cursor-pointer"
+                                      >
+                                        <Plus size={12} />
+                                        <span>Ghi nhận Check-in 1-1</span>
+                                      </button>
+                                      {isMentor && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setProposingGraduationTarget(p);
+                                          }}
+                                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-500 text-white hover:bg-emerald-600 rounded-lg text-[11px] font-bold shadow-xs transition cursor-pointer"
+                                        >
+                                          <Award size={12} />
+                                          <span>{p.graduationProposed ? 'Cập nhật Đề xuất' : 'Đề xuất Tốt nghiệp'}</span>
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             );
@@ -1657,6 +1734,47 @@ export default function MyTechProjectsPage() {
           initialData={editingWorklog}
           onSuccess={() => loadAllData({ quiet: true })}
         />
+
+        {/* Modal Xem Chi tiết Chương trình Kèm cặp 1-1 */}
+        {viewingMentorship && (
+          <MentorshipDetailModal
+            program={
+              myMentorshipPrograms.find((item) => item.id === viewingMentorship.id) || viewingMentorship
+            }
+            onClose={() => setViewingMentorship(null)}
+            onOpenCheckins={(prog, openAdd) => setCheckinTarget({ program: prog, openAdd })}
+            onProposeGraduation={(prog) => setProposingGraduationTarget(prog)}
+            isMentor={
+              (user?.userId ?? user?.id) != null &&
+              String(viewingMentorship.mentorId) === String(user?.userId ?? user?.id)
+            }
+            canCheckin={true}
+          />
+        )}
+
+        {/* Modal Nhật ký & Ghi nhận Check-in 1-1 */}
+        {checkinTarget?.program && (
+          <MentorshipCheckinModal
+            program={checkinTarget.program}
+            initialOpenAddForm={checkinTarget.openAdd}
+            onClose={() => setCheckinTarget(null)}
+            onCheckinAdded={() => loadAllData({ quiet: true })}
+            toast={toast}
+          />
+        )}
+
+        {/* Modal Mentor gửi Nhận xét tổng kết & Đề xuất Tốt nghiệp */}
+        {proposingGraduationTarget && (
+          <MentorshipGraduationProposalModal
+            program={
+              myMentorshipPrograms.find((item) => item.id === proposingGraduationTarget.id) ||
+              proposingGraduationTarget
+            }
+            onClose={() => setProposingGraduationTarget(null)}
+            onProposed={() => loadAllData({ quiet: true })}
+            toast={toast}
+          />
+        )}
 
         {/* Dialog xác nhận xóa bản ghi giờ công */}
         {deleteWorklogTarget &&

@@ -22,6 +22,8 @@ import {
 import api from '../../../services/api';
 import { useToast } from '../../../components/common/Toast';
 import { formatDateVN } from '../techHelpers';
+import MentorshipCheckinModal from './MentorshipCheckinModal';
+import MentorshipDetailModal from './MentorshipDetailModal';
 
 const STATUS_CONFIG = {
   ACTIVE: {
@@ -85,16 +87,7 @@ export default function TechMentorshipPanel({
   const [loadingCreateMatcher, setLoadingCreateMatcher] = useState(false);
 
   // Checkins modal
-  const [activeProgForCheckin, setActiveProgForCheckin] = useState(null);
-  const [checkins, setCheckins] = useState([]);
-  const [loadingCheckins, setLoadingCheckins] = useState(false);
-  const [isAddingCheckin, setIsAddingCheckin] = useState(false);
-  const [checkinDate, setCheckinDate] = useState(new Date().toISOString().substring(0, 10));
-  const [topicsCovered, setTopicsCovered] = useState('');
-  const [progressRating, setProgressRating] = useState(4);
-  const [mentorFeedback, setMentorFeedback] = useState('');
-  const [menteeNotes, setMenteeNotes] = useState('');
-  const [submittingCheckin, setSubmittingCheckin] = useState(false);
+  const [checkinModalState, setCheckinModalState] = useState(null); // { program, openAdd }
 
   // Complete program modal
   const [completingProg, setCompletingProg] = useState(null);
@@ -459,55 +452,8 @@ export default function TechMentorshipPanel({
   };
 
   // Open checkins modal
-  const openCheckins = async (prog) => {
-    setActiveProgForCheckin(prog);
-    setIsAddingCheckin(false);
-    try {
-      setLoadingCheckins(true);
-      const res = await api.get(`/api/tech/mentorship/programs/${prog.id}/checkins`);
-      if (res.data?.data) {
-        setCheckins(res.data.data);
-      }
-    } catch (err) {
-      toast?.show('Lỗi', err.response?.data?.message || 'Không thể tải nhật ký checkin', 'error');
-    } finally {
-      setLoadingCheckins(false);
-    }
-  };
-
-  const handleAddCheckin = async (e) => {
-    e.preventDefault();
-    if (!topicsCovered.trim()) {
-      toast?.show('Thiếu thông tin', 'Vui lòng nhập nội dung ôn tập / trao đổi', 'warning');
-      return;
-    }
-    try {
-      setSubmittingCheckin(true);
-      const payload = {
-        checkinDate,
-        topicsCovered: topicsCovered.trim(),
-        progressRating: Number(progressRating),
-        mentorFeedback: mentorFeedback.trim() || null,
-        menteeNotes: menteeNotes.trim() || null,
-      };
-      const res = await api.post(
-        `/api/tech/mentorship/programs/${activeProgForCheckin.id}/checkins`,
-        payload
-      );
-      if (res.data?.data) {
-        setCheckins((prev) => [res.data.data, ...prev]);
-        toast?.show('Thành công', 'Đã ghi nhận buổi check-in kèm cặp', 'success');
-        setIsAddingCheckin(false);
-        setTopicsCovered('');
-        setMentorFeedback('');
-        setMenteeNotes('');
-        fetchPrograms();
-      }
-    } catch (err) {
-      toast?.show('Lỗi', err.response?.data?.message || 'Không thể lưu check-in', 'error');
-    } finally {
-      setSubmittingCheckin(false);
-    }
+  const openCheckins = (prog, openAdd = false) => {
+    setCheckinModalState({ program: prog, openAdd });
   };
 
   const handleCompleteProgram = async (e) => {
@@ -706,18 +652,30 @@ export default function TechMentorshipPanel({
                     {prog.averageRating ? (
                       <span className="inline-flex items-center gap-1 font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
                         <Star size={11} className="fill-amber-500 text-amber-500" />
-                        <span>{prog.averageRating} / 5</span>
+                        <span>{Number(prog.averageRating).toFixed(1)} / 5.0</span>
                       </span>
                     ) : (
                       <span className="text-slate-400 italic">Chưa đánh giá</span>
                     )}
                   </div>
+
+                  {prog.graduationProposed && prog.status === 'ACTIVE' && (
+                    <div className="p-2 bg-amber-50/80 border border-amber-200 rounded-lg text-[11px] space-y-0.5">
+                      <span className="font-bold text-amber-800 flex items-center gap-1">
+                        <Award size={12} className="text-amber-600 shrink-0" />
+                        <span>Mentor đã đề xuất Tốt nghiệp</span>
+                      </span>
+                      {prog.mentorSummary && (
+                        <p className="text-amber-900/80 line-clamp-2 italic">“{prog.mentorSummary}”</p>
+                      )}
+                    </div>
+                  )}
                 </div>
 
-                <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 flex-wrap">
                   <button
                     type="button"
-                    onClick={() => openCheckins(prog)}
+                    onClick={() => openCheckins(prog, false)}
                     className="inline-flex items-center gap-1 text-xs font-bold text-blue-700 hover:text-blue-900 transition cursor-pointer"
                   >
                     <span>Lịch sử Check-in</span>
@@ -725,17 +683,27 @@ export default function TechMentorshipPanel({
                   </button>
 
                   {!isReadOnly && prog.status === 'ACTIVE' && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCompletingProg(prog);
-                        setFinalAssessment('');
-                      }}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-600 hover:text-white border border-emerald-200 rounded-lg transition cursor-pointer"
-                    >
-                      <Award size={12} />
-                      <span>Tốt nghiệp</span>
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => openCheckins(prog, true)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-600 hover:text-white border border-blue-200 rounded-lg transition cursor-pointer"
+                      >
+                        <Plus size={12} />
+                        <span>Ghi nhận Check-in 1-1</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCompletingProg(prog);
+                          setFinalAssessment('');
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-600 hover:text-white border border-emerald-200 rounded-lg transition cursor-pointer"
+                      >
+                        <Award size={12} />
+                        <span>Tốt nghiệp</span>
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -1240,201 +1208,15 @@ export default function TechMentorshipPanel({
         )}
 
       {/* Modal Lịch sử Check-in & Ghi nhận Buổi mới */}
-      {activeProgForCheckin &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-xs p-4 flex items-center justify-center overflow-y-auto"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) setActiveProgForCheckin(null);
-            }}
-          >
-            <div
-              role="dialog"
-              aria-modal="true"
-              onClick={(e) => e.stopPropagation()}
-              className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[88vh] my-auto animate-in zoom-in-95 duration-150"
-            >
-            <div className="bg-[#0F2557] px-6 py-4.5 text-white flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <MessageSquare size={16} />
-                  <span>Nhật ký Check-in Kèm cặp: {activeProgForCheckin.programTitle}</span>
-                </h3>
-                <p className="text-xs text-blue-200/80">
-                  Mentor: <strong>{activeProgForCheckin.mentorName}</strong> • Mentee: <strong>{activeProgForCheckin.menteeName}</strong>
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveProgForCheckin(null)}
-                className="p-1 text-blue-100/75 hover:text-white rounded-lg transition cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="p-5 flex-1 overflow-y-auto space-y-4">
-              {!isReadOnly && !isAddingCheckin && activeProgForCheckin.status === 'ACTIVE' && (
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => setIsAddingCheckin(true)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-lg text-xs font-bold transition cursor-pointer"
-                  >
-                    <Plus size={13} />
-                    <span>Ghi nhận Buổi Check-in mới</span>
-                  </button>
-                </div>
-              )}
-
-              {/* Add Checkin Form */}
-              {isAddingCheckin && (
-                <form
-                  onSubmit={handleAddCheckin}
-                  className="p-4 bg-blue-50/50 border border-blue-200 rounded-xl space-y-3"
-                >
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold text-blue-900">Ghi nhận Buổi Trao đổi Định kỳ</h4>
-                    <button
-                      type="button"
-                      onClick={() => setIsAddingCheckin(false)}
-                      className="text-xs text-slate-400 hover:text-slate-600 cursor-pointer"
-                    >
-                      Hủy
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[11px] font-semibold text-slate-600 block mb-1">
-                        Ngày họp / Check-in *
-                      </label>
-                      <input
-                        type="date"
-                        required
-                        value={checkinDate}
-                        onChange={(e) => setCheckinDate(e.target.value)}
-                        className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-[11px] font-semibold text-slate-600 block mb-1">
-                        Đánh giá tiến độ (1 - 5 sao) *
-                      </label>
-                      <select
-                        value={progressRating}
-                        onChange={(e) => setProgressRating(e.target.value)}
-                        className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 font-bold"
-                      >
-                        <option value="5">⭐⭐⭐⭐⭐ (5 sao - Vượt tiến độ)</option>
-                        <option value="4">⭐⭐⭐⭐ (4 sao - Tốt, đúng kế hoạch)</option>
-                        <option value="3">⭐⭐⭐ (3 sao - Trung bình, đạt yêu cầu)</option>
-                        <option value="2">⭐⭐ (2 sao - Chậm tiến độ)</option>
-                        <option value="1">⭐ (1 sao - Rất chậm, gặp vướng mắc)</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] font-semibold text-slate-600 block mb-1">
-                      Chủ đề ôn tập / Kiến thức trao đổi *
-                    </label>
-                    <textarea
-                      rows={2}
-                      required
-                      value={topicsCovered}
-                      onChange={(e) => setTopicsCovered(e.target.value)}
-                      placeholder="VD: Review kiến trúc JPA/Hibernate, xử lý LazyLoading và N+1 query issue..."
-                      className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 resize-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] font-semibold text-slate-600 block mb-1">
-                      Nhận xét &amp; Định hướng của Mentor
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={mentorFeedback}
-                      onChange={(e) => setMentorFeedback(e.target.value)}
-                      placeholder="Nhận xét của Mentor về mức độ tiếp thu và bài tập thực hành tiếp theo..."
-                      className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 resize-none"
-                    />
-                  </div>
-
-                  <div className="flex justify-end gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setIsAddingCheckin(false)}
-                      className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg border border-slate-200 transition cursor-pointer"
-                    >
-                      Đóng
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={submittingCheckin}
-                      className="px-4 py-1.5 text-xs font-bold text-white bg-[#0F2557] hover:bg-blue-900 rounded-lg transition cursor-pointer disabled:opacity-50"
-                    >
-                      {submittingCheckin ? 'Đang lưu...' : 'Lưu Check-in'}
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              {/* Checkins List */}
-              {loadingCheckins ? (
-                <div className="py-8 text-center text-xs text-slate-400">Đang tải lịch sử checkin...</div>
-              ) : checkins.length === 0 ? (
-                <div className="py-8 text-center text-xs text-slate-400">Chưa có buổi check-in nào được ghi nhận.</div>
-              ) : (
-                <div className="space-y-3">
-                  {checkins.map((chk) => (
-                    <div
-                      key={chk.id}
-                      className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs"
-                    >
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-slate-900">
-                            Ngày {formatDateVN(chk.checkinDate)}
-                          </span>
-                          <span className="inline-flex items-center gap-1 font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 text-[11px]">
-                            <Star size={11} className="fill-amber-500 text-amber-500" />
-                            <span>{chk.progressRating} / 5</span>
-                          </span>
-                        </div>
-                        <span className="text-[10px] text-slate-400 tabular">
-                          Ghi nhận bởi {chk.loggedByName || 'Kỹ sư'}
-                        </span>
-                      </div>
-
-                      <div className="space-y-1">
-                        <p className="font-semibold text-slate-800">{chk.topicsCovered}</p>
-                        {chk.mentorFeedback && (
-                          <div className="p-2.5 bg-blue-50/60 rounded-lg border border-blue-100 text-[11px] text-blue-950">
-                            <strong>Nhận xét Mentor:</strong> {chk.mentorFeedback}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="px-6 py-3 bg-slate-50 border-t border-slate-200 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setActiveProgForCheckin(null)}
-                className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-bold transition cursor-pointer"
-              >
-                Đóng
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
+      {checkinModalState?.program && (
+        <MentorshipCheckinModal
+          program={checkinModalState.program}
+          initialOpenAddForm={checkinModalState.openAdd}
+          isReadOnly={isReadOnly}
+          onClose={() => setCheckinModalState(null)}
+          onCheckinAdded={() => fetchPrograms()}
+          toast={toast}
+        />
       )}
 
       {/* Modal Tốt nghiệp Mentorship */}
@@ -1475,9 +1257,28 @@ export default function TechMentorshipPanel({
                   Hệ thống sẽ tự động cập nhật một sự kiện Career Event <strong>MENTORSHIP_COMPLETED</strong> vào hồ sơ sự nghiệp của cả Mentor ({completingProg.mentorName}) và Mentee ({completingProg.menteeName}).
                 </p>
 
+                {completingProg.graduationProposed && completingProg.mentorSummary && (
+                  <div className="p-3 bg-amber-50/75 border border-amber-200 rounded-xl space-y-1.5 text-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-bold text-amber-800 text-[11px] flex items-center gap-1">
+                        <Award size={12} className="text-amber-600" />
+                        <span>Đề xuất &amp; Nhận xét từ Mentor ({completingProg.mentorName}):</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setFinalAssessment(completingProg.mentorSummary)}
+                        className="text-[10px] font-bold text-blue-700 hover:underline cursor-pointer shrink-0"
+                      >
+                        Dùng nội dung này
+                      </button>
+                    </div>
+                    <p className="text-slate-700 italic leading-relaxed">{completingProg.mentorSummary}</p>
+                  </div>
+                )}
+
                 <div>
                   <label className="text-[11px] font-semibold text-slate-600 block mb-1">
-                    Đánh giá Tổng kết Tốt nghiệp *
+                    Đánh giá Tổng kết Tốt nghiệp (Quản lý phê duyệt) *
                   </label>
                   <textarea
                     rows={3}
@@ -1512,158 +1313,16 @@ export default function TechMentorshipPanel({
         )}
 
       {/* Modal Xem Chi tiết Chương trình Kèm cặp */}
-      {viewingProg &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-xs p-4 flex items-center justify-center overflow-y-auto"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) setViewingProg(null);
-            }}
-          >
-            <div
-              role="dialog"
-              aria-modal="true"
-              onClick={(e) => e.stopPropagation()}
-              className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col my-auto max-h-[90vh] animate-in zoom-in-95 duration-150"
-            >
-              <div className="bg-[#0F2557] px-6 py-4 text-white flex items-center justify-between">
-                <div>
-                  <h3 className="text-base font-bold text-white flex items-center gap-2">
-                    <Users2 size={16} />
-                    <span>Chi tiết Chương trình Kèm cặp 1-1</span>
-                  </h3>
-                  <p className="text-xs text-blue-200/80">Lộ trình đào tạo, cặp ghép nối và đánh giá tiến độ</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setViewingProg(null)}
-                  className="p-1 text-blue-100/75 hover:text-white rounded-lg transition cursor-pointer"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              <div className="p-5 space-y-4 flex-1 overflow-y-auto">
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${STATUS_CONFIG[viewingProg.status]?.badge || ''}`}>
-                    {STATUS_CONFIG[viewingProg.status]?.label || viewingProg.status}
-                  </span>
-                  {viewingProg.focusSkillName && (
-                    <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-blue-50 text-blue-800 border border-blue-200">
-                      🎯 Kỹ năng: {viewingProg.focusSkillName}
-                    </span>
-                  )}
-                </div>
-
-                <div className="space-y-1">
-                  <h4 className="text-sm font-bold text-slate-900">{viewingProg.programTitle}</h4>
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-700 leading-relaxed">
-                    <strong className="block text-slate-500 text-[11px] mb-0.5">Mục tiêu Đào tạo cụ thể:</strong>
-                    {viewingProg.targetGoal}
-                  </div>
-                </div>
-
-                {/* Grid Mentor & Mentee */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-200/70 space-y-1">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 block">Mentor Dẫn dắt</span>
-                    <strong
-                      className="text-xs text-slate-900 block hover:text-blue-700 hover:underline cursor-pointer"
-                      onClick={() => onInspectEngineer && onInspectEngineer(viewingProg.mentorId)}
-                    >
-                      {viewingProg.mentorName}
-                    </strong>
-                    <span className="text-[11px] text-slate-500 block">{viewingProg.mentorEmail || 'Chưa có email'}</span>
-                  </div>
-
-                  <div className="p-3 bg-emerald-50/50 rounded-xl border border-emerald-200/70 space-y-1">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 block">Kỹ sư Kèm cặp (Mentee)</span>
-                    <strong
-                      className="text-xs text-slate-900 block hover:text-emerald-700 hover:underline cursor-pointer"
-                      onClick={() => onInspectEngineer && onInspectEngineer(viewingProg.menteeId)}
-                    >
-                      {viewingProg.menteeName}
-                    </strong>
-                    <span className="text-[11px] text-slate-500 block">{viewingProg.menteeEmail || 'Chưa có email'}</span>
-                  </div>
-                </div>
-
-                {/* Timeline & Stats */}
-                <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs tabular">
-                  <div>
-                    <span className="text-slate-400 block text-[11px]">Thời gian triển khai:</span>
-                    <strong className="text-slate-800">
-                      {formatDateVN(viewingProg.startDate)} → {formatDateVN(viewingProg.endDate)}
-                    </strong>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[11px]">Tiến độ Check-in:</span>
-                    <strong className="text-slate-800 flex items-center gap-1.5 mt-0.5">
-                      <span>{viewingProg.checkinCount || 0} buổi</span>
-                      {viewingProg.averageRating ? (
-                        <span className="text-amber-600 flex items-center gap-0.5 text-[11px] font-bold bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
-                          <Star size={10} className="fill-amber-500 text-amber-500" />
-                          {viewingProg.averageRating} / 5
-                        </span>
-                      ) : null}
-                    </strong>
-                  </div>
-                </div>
-
-                {/* Final assessment if completed */}
-                {viewingProg.finalAssessment && (
-                  <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-200 space-y-1 text-xs">
-                    <strong className="text-emerald-800 font-bold flex items-center gap-1 text-[11px]">
-                      <Award size={13} className="text-emerald-600" />
-                      <span>Đánh giá Tốt nghiệp Kèm cặp:</span>
-                    </strong>
-                    <p className="text-slate-700 leading-relaxed italic">{viewingProg.finalAssessment}</p>
-                  </div>
-                )}
-              </div>
-
-              <div className="px-6 py-3 bg-slate-50 border-t border-slate-200 flex justify-between items-center">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const p = viewingProg;
-                    setViewingProg(null);
-                    openCheckins(p);
-                  }}
-                  className="px-3 py-1.5 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition cursor-pointer flex items-center gap-1"
-                >
-                  <MessageSquare size={13} />
-                  <span>Xem Lịch sử Check-in</span>
-                </button>
-
-                <div className="flex items-center gap-2">
-                  {!isReadOnly && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const p = viewingProg;
-                        setViewingProg(null);
-                        openEditModal(p);
-                      }}
-                      className="px-3 py-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition cursor-pointer flex items-center gap-1"
-                    >
-                      <Pencil size={12} />
-                      <span>Sửa</span>
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setViewingProg(null)}
-                    className="px-4 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-200 rounded-lg border border-slate-200 transition cursor-pointer"
-                  >
-                    Đóng
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
+      {viewingProg && (
+        <MentorshipDetailModal
+          program={viewingProg}
+          onClose={() => setViewingProg(null)}
+          onOpenCheckins={(p, openAdd) => openCheckins(p, openAdd)}
+          onEdit={!isReadOnly ? (p) => openEditModal(p) : undefined}
+          onInspectEngineer={onInspectEngineer}
+          canCheckin={!isReadOnly}
+        />
+      )}
 
       {/* Modal Chỉnh sửa Chương trình Kèm cặp */}
       {editingProg &&

@@ -119,6 +119,14 @@ public class TechMentorshipService {
         TechMentorshipProgram program = programRepository.findById(programId)
                 .orElseThrow(() -> AppException.notFound("Không tìm thấy chương trình kèm cặp với ID: " + programId));
 
+        User actor = actorId != null ? userRepository.findById(actorId).orElse(null) : null;
+        boolean isAuthorizedManager = actor != null && (actor.getRole() == Role.ADMIN
+                || actor.getRole() == Role.GIAM_DOC_PHONG_BAN
+                || actor.getRole() == Role.TRUONG_PHONG);
+        if (!isAuthorizedManager) {
+            throw AppException.forbidden("Chỉ Trưởng phòng hoặc Giám đốc Phòng ban mới có quyền chỉnh sửa hoặc phê duyệt Tốt nghiệp chương trình kèm cặp!");
+        }
+
         TechMentorshipStatus oldStatus = program.getStatus();
 
         if (req.getProgramTitle() != null && !req.getProgramTitle().trim().isEmpty()) {
@@ -165,6 +173,27 @@ public class TechMentorshipService {
         return mapProgramToResponse(updated);
     }
 
+    @Transactional
+    public TechMentorshipProgramResponse proposeGraduation(Long programId, ProposeTechGraduationRequest req, Long actorId) {
+        TechMentorshipProgram program = programRepository.findById(programId)
+                .orElseThrow(() -> AppException.notFound("Không tìm thấy chương trình kèm cặp với ID: " + programId));
+
+        if (program.getStatus() != TechMentorshipStatus.ACTIVE) {
+            throw AppException.badRequest("Chỉ có thể gửi đề xuất tốt nghiệp cho chương trình kèm cặp đang hoạt động!");
+        }
+        if (actorId == null || !actorId.equals(program.getMentorId())) {
+            throw AppException.forbidden("Chỉ Mentor trực tiếp dẫn dắt chương trình này mới có quyền gửi nhận xét tổng kết và đề xuất Tốt nghiệp!");
+        }
+
+        program.setGraduationProposed(true);
+        program.setMentorSummary(req.getMentorSummary().trim());
+        program.setGraduationProposedAt(LocalDateTime.now());
+
+        TechMentorshipProgram saved = programRepository.save(program);
+        log.info("[Tech Mentorship] Mentor ID {} đã gửi đề xuất Tốt nghiệp cho chương trình ID {}", actorId, programId);
+        return mapProgramToResponse(saved);
+    }
+
     @Transactional(readOnly = true)
     public TechMentorshipProgramResponse getProgramById(Long programId) {
         TechMentorshipProgram program = programRepository.findById(programId)
@@ -202,6 +231,8 @@ public class TechMentorshipService {
         TechMentorshipProgram program = programRepository.findById(programId)
                 .orElseThrow(() -> AppException.notFound("Không tìm thấy chương trình kèm cặp với ID: " + programId));
 
+        validateCheckinDatesAndStatus(program, req.getCheckinDate());
+
         TechMentorshipCheckin checkin = TechMentorshipCheckin.builder()
                 .program(program)
                 .checkinDate(req.getCheckinDate())
@@ -215,6 +246,74 @@ public class TechMentorshipService {
         TechMentorshipCheckin saved = checkinRepository.save(checkin);
         log.info("[Tech Mentorship] Ghi nhận checkin cho chương trình ID {} vào ngày {}", programId, saved.getCheckinDate());
         return mapCheckinToResponse(saved);
+    }
+
+    @Transactional
+    public TechMentorshipCheckinResponse updateCheckin(Long checkinId, CreateTechCheckinRequest req, Long actorId) {
+        TechMentorshipCheckin checkin = checkinRepository.findById(checkinId)
+                .orElseThrow(() -> AppException.notFound("Không tìm thấy buổi check-in với ID: " + checkinId));
+
+        TechMentorshipProgram program = checkin.getProgram();
+        verifyCanModifyCheckin(program, checkin, actorId);
+        validateCheckinDatesAndStatus(program, req.getCheckinDate());
+
+        checkin.setCheckinDate(req.getCheckinDate());
+        checkin.setTopicsCovered(req.getTopicsCovered().trim());
+        checkin.setProgressRating(req.getProgressRating());
+        checkin.setMentorFeedback(req.getMentorFeedback() != null && !req.getMentorFeedback().isBlank()
+                ? req.getMentorFeedback().trim() : null);
+        checkin.setMenteeNotes(req.getMenteeNotes() != null && !req.getMenteeNotes().isBlank()
+                ? req.getMenteeNotes().trim() : null);
+
+        TechMentorshipCheckin updated = checkinRepository.save(checkin);
+        log.info("[Tech Mentorship] Người dùng ID {} đã cập nhật buổi check-in ID {}", actorId, checkinId);
+        return mapCheckinToResponse(updated);
+    }
+
+    @Transactional
+    public void deleteCheckin(Long checkinId, Long actorId) {
+        TechMentorshipCheckin checkin = checkinRepository.findById(checkinId)
+                .orElseThrow(() -> AppException.notFound("Không tìm thấy buổi check-in với ID: " + checkinId));
+
+        TechMentorshipProgram program = checkin.getProgram();
+        if (program.getStatus() != TechMentorshipStatus.ACTIVE) {
+            throw AppException.badRequest("Chỉ có thể xóa buổi check-in khi chương trình kèm cặp đang hoạt động!");
+        }
+        verifyCanModifyCheckin(program, checkin, actorId);
+
+        checkinRepository.delete(checkin);
+        log.info("[Tech Mentorship] Người dùng ID {} đã xóa buổi check-in ID {}", actorId, checkinId);
+    }
+
+    private void validateCheckinDatesAndStatus(TechMentorshipProgram program, java.time.LocalDate checkinDate) {
+        if (program.getStatus() != TechMentorshipStatus.ACTIVE) {
+            throw AppException.badRequest("Chỉ có thể thao tác check-in cho chương trình kèm cặp đang hoạt động!");
+        }
+        java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy");
+        if (program.getStartDate() != null && checkinDate.isBefore(program.getStartDate())) {
+            throw AppException.badRequest("Ngày check-in không được trước ngày bắt đầu chương trình ("
+                    + program.getStartDate().format(formatter) + ")!");
+        }
+        if (program.getEndDate() != null && checkinDate.isAfter(program.getEndDate())) {
+            throw AppException.badRequest("Ngày check-in không được vượt quá ngày kết thúc chương trình ("
+                    + program.getEndDate().format(formatter) + ")!");
+        }
+    }
+
+    private void verifyCanModifyCheckin(TechMentorshipProgram program, TechMentorshipCheckin checkin, Long actorId) {
+        if (actorId == null) {
+            throw AppException.forbidden("Không xác định được người thực hiện thao tác!");
+        }
+        User actor = userRepository.findById(actorId).orElse(null);
+        boolean isManager = actor != null && (actor.getRole() == Role.ADMIN
+                || actor.getRole() == Role.GIAM_DOC_PHONG_BAN
+                || actor.getRole() == Role.TRUONG_PHONG);
+        boolean isCreator = actorId.equals(checkin.getLoggedBy());
+        boolean isMentor = actorId.equals(program.getMentorId());
+
+        if (!isManager && !isCreator && !isMentor) {
+            throw AppException.forbidden("Chỉ Quản lý, Mentor của chương trình hoặc người ghi nhận mới có quyền sửa/xóa buổi check-in này!");
+        }
     }
 
     @Transactional(readOnly = true)
@@ -364,6 +463,9 @@ public class TechMentorshipService {
                 .endDate(p.getEndDate())
                 .status(p.getStatus())
                 .finalAssessment(p.getFinalAssessment())
+                .graduationProposed(Boolean.TRUE.equals(p.getGraduationProposed()))
+                .mentorSummary(p.getMentorSummary())
+                .graduationProposedAt(p.getGraduationProposedAt())
                 .createdBy(p.getCreatedBy())
                 .createdAt(p.getCreatedAt())
                 .checkinCount(checkinCount)
