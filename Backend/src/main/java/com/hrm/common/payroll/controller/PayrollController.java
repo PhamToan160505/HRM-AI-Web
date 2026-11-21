@@ -1,19 +1,27 @@
 package com.hrm.common.payroll.controller;
 
+import com.hrm.common.payroll.dto.PayrollBatchView;
 import com.hrm.common.payroll.entity.Payroll;
-import com.hrm.common.payroll.entity.PayrollReport;
 import com.hrm.common.payroll.service.PayrollService;
 import com.hrm.exception.ApiResponse;
 import com.hrm.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
-import jakarta.validation.constraints.NotBlank;
+
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * API lương theo luồng do phòng Tài chính - Kế toán điều phối.
+ * Quyền chi tiết (đúng phòng, đúng bước) được kiểm tra trong {@link PayrollService};
+ * mỗi kỳ lương trả về danh sách "actions" người dùng hiện tại được làm.
+ */
 @RestController
 @RequestMapping("/api/payroll")
 @RequiredArgsConstructor
@@ -21,137 +29,159 @@ public class PayrollController {
 
     private final PayrollService payrollService;
 
-    @PostMapping("/generate")
-    @PreAuthorize("hasAnyRole('TRUONG_PHONG', 'GIAM_DOC_PHONG_BAN', 'CEO')")
-    public ResponseEntity<ApiResponse<List<Object>>> generatePayroll(
+    @GetMapping("/access")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getAccess(@AuthenticationPrincipal CustomUserDetails user) {
+        return ResponseEntity.ok(ApiResponse.ok(payrollService.getAccess(user)));
+    }
+
+    @GetMapping("/batches")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<List<PayrollBatchView>>> getBatches(
             @RequestParam int month,
             @RequestParam int year,
-            @AuthenticationPrincipal CustomUserDetails userDetails) {
-        
-        List<Object> result = payrollService.generatePayroll(month, year, userDetails.getDepartmentId(), userDetails);
-        return ResponseEntity.ok(ApiResponse.ok(result, "Đã tính lương xong"));
+            @AuthenticationPrincipal CustomUserDetails user) {
+        return ResponseEntity.ok(ApiResponse.ok(payrollService.getBatches(month, year, user), "Lấy danh sách kỳ lương thành công"));
     }
 
-    @PostMapping("/{id}/approve")
-    @PreAuthorize("hasAnyRole('TRUONG_PHONG', 'GIAM_DOC_PHONG_BAN', 'CEO')")
-    public ResponseEntity<ApiResponse<Void>> approvePayroll(@PathVariable Long id) {
-        payrollService.approvePayrollRecord(id);
-        return ResponseEntity.ok(ApiResponse.ok(null, "Duyệt lương thành công"));
-    }
-
-    @PostMapping("/{id}/reject")
-    @PreAuthorize("hasAnyRole('TRUONG_PHONG', 'GIAM_DOC_PHONG_BAN', 'CEO')")
-    public ResponseEntity<ApiResponse<Void>> rejectPayroll(
+    @GetMapping("/batches/{id}/items")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getBatchItems(
             @PathVariable Long id,
-            @RequestBody Map<String, String> request) {
-        String reason = request.get("reason");
-        if (reason == null || reason.trim().isEmpty()) {
-            throw new IllegalArgumentException("Vui lòng nhập lý do từ chối");
-        }
-        payrollService.rejectPayrollRecord(id, reason);
-        return ResponseEntity.ok(ApiResponse.ok(null, "Đã từ chối phiếu lương"));
+            @AuthenticationPrincipal CustomUserDetails user) {
+        return ResponseEntity.ok(ApiResponse.ok(payrollService.getBatchItems(id, user)));
     }
 
-    @PostMapping("/manager/approve-all")
-    @PreAuthorize("hasRole('TRUONG_PHONG')")
-    public ResponseEntity<ApiResponse<Void>> approveAllPayrollManager(
+    // ── 1. Trưởng phòng / GĐ phòng chốt công ──
+
+    @PostMapping("/attendance/close")
+    @PreAuthorize("hasAnyRole('TRUONG_PHONG', 'GIAM_DOC_PHONG_BAN')")
+    public ResponseEntity<ApiResponse<Void>> closeAttendance(
             @RequestParam int month,
             @RequestParam int year,
-            @AuthenticationPrincipal CustomUserDetails userDetails) {
-        payrollService.approveAllPayroll(month, year, userDetails.getDepartmentId());
-        return ResponseEntity.ok(ApiResponse.ok(null, "Duyệt tất cả lương thành công"));
+            @AuthenticationPrincipal CustomUserDetails user) {
+        payrollService.closeAttendance(month, year, user);
+        return ResponseEntity.ok(ApiResponse.ok(null, "Đã chốt công tháng " + month + "/" + year + " và chuyển phòng Tài chính - Kế toán"));
     }
 
-    @PostMapping("/manager/submit-report")
-    @PreAuthorize("hasRole('TRUONG_PHONG')")
-    public ResponseEntity<ApiResponse<Void>> submitManagerReport(
+    @PostMapping("/attendance/reopen")
+    @PreAuthorize("hasAnyRole('TRUONG_PHONG', 'GIAM_DOC_PHONG_BAN')")
+    public ResponseEntity<ApiResponse<Void>> reopenAttendance(
             @RequestParam int month,
             @RequestParam int year,
-            @RequestParam(required = false, defaultValue = "false") boolean force,
-            @AuthenticationPrincipal CustomUserDetails userDetails) {
-        try {
-            payrollService.submitManagerReport(month, year, userDetails.getDepartmentId(), userDetails.getUserId(), force);
-            return ResponseEntity.ok(ApiResponse.ok(null, "Đã gửi báo cáo lương lên Giám đốc phòng ban"));
-        } catch (RuntimeException e) {
-            if (e.getMessage() != null && e.getMessage().startsWith("WARNING_OVERWRITE:")) {
-                return ResponseEntity.status(409).body(ApiResponse.error(e.getMessage().replace("WARNING_OVERWRITE:", "").trim()));
-            }
-            throw e;
-        }
+            @AuthenticationPrincipal CustomUserDetails user) {
+        payrollService.reopenAttendance(month, year, user);
+        return ResponseEntity.ok(ApiResponse.ok(null, "Đã mở lại công tháng " + month + "/" + year));
     }
 
-    @GetMapping("/director/reports")
+    // ── 2. Kế toán tính lương và gửi duyệt ──
+
+    @PostMapping("/finance/generate")
+    @PreAuthorize("@financeAccess.isAccountant(principal)")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> generate(
+            @RequestParam int month,
+            @RequestParam int year,
+            @RequestParam(required = false) Long departmentId,
+            @AuthenticationPrincipal CustomUserDetails user) {
+        return ResponseEntity.ok(ApiResponse.ok(payrollService.generatePayroll(month, year, departmentId, user), "Đã tính lương"));
+    }
+
+    @PostMapping("/finance/batches/{id}/submit")
+    @PreAuthorize("@financeAccess.isAccountant(principal)")
+    public ResponseEntity<ApiResponse<Void>> submit(@PathVariable Long id, @AuthenticationPrincipal CustomUserDetails user) {
+        payrollService.submitForApproval(id, user);
+        return ResponseEntity.ok(ApiResponse.ok(null, "Đã gửi bảng lương đi duyệt"));
+    }
+
+    // ── 3. Giám đốc phòng ban xác nhận ──
+
+    @PostMapping("/director/batches/{id}/confirm")
     @PreAuthorize("hasRole('GIAM_DOC_PHONG_BAN')")
-    public ResponseEntity<ApiResponse<List<PayrollReport>>> getManagerReports(
-            @RequestParam int month,
-            @RequestParam int year,
-            @AuthenticationPrincipal CustomUserDetails userDetails) {
-        List<PayrollReport> reports = payrollService.getManagerReportsForDirector(month, year, userDetails.getDepartmentId());
-        return ResponseEntity.ok(ApiResponse.ok(reports, "Lấy danh sách báo cáo thành công"));
+    public ResponseEntity<ApiResponse<Void>> directorConfirm(@PathVariable Long id, @AuthenticationPrincipal CustomUserDetails user) {
+        payrollService.directorConfirm(id, user);
+        return ResponseEntity.ok(ApiResponse.ok(null, "Đã xác nhận bảng lương phòng ban"));
     }
 
-    @PostMapping("/director/approve-report/{id}")
+    @PostMapping("/director/batches/{id}/reject")
     @PreAuthorize("hasRole('GIAM_DOC_PHONG_BAN')")
-    public ResponseEntity<ApiResponse<Void>> approveManagerReport(
-            @PathVariable Long id) {
-        payrollService.approveManagerReport(id);
-        return ResponseEntity.ok(ApiResponse.ok(null, "Đã duyệt báo cáo của Trưởng phòng"));
+    public ResponseEntity<ApiResponse<Void>> directorReject(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> body,
+            @AuthenticationPrincipal CustomUserDetails user) {
+        payrollService.directorReject(id, body.get("reason"), user);
+        return ResponseEntity.ok(ApiResponse.ok(null, "Đã trả bảng lương về phòng Tài chính - Kế toán"));
     }
 
-    @PostMapping("/director/submit-report")
-    @PreAuthorize("hasRole('GIAM_DOC_PHONG_BAN')")
-    public ResponseEntity<ApiResponse<Void>> submitDirectorReport(
-            @RequestParam int month,
-            @RequestParam int year,
-            @AuthenticationPrincipal CustomUserDetails userDetails) {
-        payrollService.submitDirectorReport(month, year, userDetails.getDepartmentId(), userDetails.getUserId());
-        return ResponseEntity.ok(ApiResponse.ok(null, "Đã gửi báo cáo tổng hợp lên Tổng Giám đốc"));
+    // ── 4. Kế toán trưởng kiểm tra ──
+
+    @PostMapping("/chief/batches/{id}/approve")
+    @PreAuthorize("@financeAccess.isChiefAccountant(principal)")
+    public ResponseEntity<ApiResponse<Void>> chiefApprove(@PathVariable Long id, @AuthenticationPrincipal CustomUserDetails user) {
+        payrollService.chiefApprove(id, user);
+        return ResponseEntity.ok(ApiResponse.ok(null, "Đã kiểm tra và gửi Tổng Giám đốc"));
     }
+
+    @PostMapping("/chief/batches/{id}/reject")
+    @PreAuthorize("@financeAccess.isChiefAccountant(principal)")
+    public ResponseEntity<ApiResponse<Void>> chiefReject(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> body,
+            @AuthenticationPrincipal CustomUserDetails user) {
+        payrollService.chiefReject(id, body.get("reason"), user);
+        return ResponseEntity.ok(ApiResponse.ok(null, "Đã trả bảng lương cho kế toán tính lại"));
+    }
+
+    // ── 5. CEO chốt ──
+
+    @PostMapping("/ceo/batches/{id}/approve")
+    @PreAuthorize("hasRole('CEO')")
+    public ResponseEntity<ApiResponse<Void>> ceoApprove(@PathVariable Long id, @AuthenticationPrincipal CustomUserDetails user) {
+        payrollService.ceoApprove(id, user);
+        return ResponseEntity.ok(ApiResponse.ok(null, "Đã chốt bảng lương"));
+    }
+
+    @PostMapping("/ceo/batches/{id}/reject")
+    @PreAuthorize("hasRole('CEO')")
+    public ResponseEntity<ApiResponse<Void>> ceoReject(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> body,
+            @AuthenticationPrincipal CustomUserDetails user) {
+        payrollService.ceoReject(id, body.get("reason"), user);
+        return ResponseEntity.ok(ApiResponse.ok(null, "Đã từ chối bảng lương"));
+    }
+
+    // ── 6. Kế toán chi trả ──
+
+    @PostMapping("/finance/batches/{id}/pay")
+    @PreAuthorize("@financeAccess.isAccountant(principal)")
+    public ResponseEntity<ApiResponse<Void>> markPaid(
+            @PathVariable Long id,
+            @RequestBody(required = false) Map<String, String> body,
+            @AuthenticationPrincipal CustomUserDetails user) {
+        payrollService.markPaid(id, body != null ? body.get("paymentReference") : null, user);
+        return ResponseEntity.ok(ApiResponse.ok(null, "Đã ghi nhận chi trả lương và gửi phiếu lương cho nhân viên"));
+    }
+
+    @GetMapping("/finance/batches/{id}/bank-file")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<byte[]> bankFile(@PathVariable Long id, @AuthenticationPrincipal CustomUserDetails user) {
+        String csv = payrollService.buildBankTransferCsv(id, user);
+        byte[] bom = {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF}; // để Excel đọc đúng tiếng Việt
+        byte[] body = csv.getBytes(StandardCharsets.UTF_8);
+        byte[] out = new byte[bom.length + body.length];
+        System.arraycopy(bom, 0, out, 0, bom.length);
+        System.arraycopy(body, 0, out, bom.length, body.length);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"chi-luong-" + id + ".csv\"")
+                .contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))
+                .body(out);
+    }
+
+    // ── Phiếu lương cá nhân ──
 
     @GetMapping("/me")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<ApiResponse<List<Payroll>>> getMyPayroll(
-            @AuthenticationPrincipal CustomUserDetails userDetails) {
-        return ResponseEntity.ok(ApiResponse.ok(payrollService.getMyPayroll(userDetails.getUserId()), "Lấy phiếu lương thành công"));
-    }
-
-    @GetMapping("/department")
-    @PreAuthorize("hasAnyRole('TRUONG_PHONG', 'GIAM_DOC_PHONG_BAN', 'CEO')")
-    public ResponseEntity<ApiResponse<List<Payroll>>> getDepartmentPayroll(
-            @RequestParam int month,
-            @RequestParam int year,
-            @AuthenticationPrincipal CustomUserDetails userDetails) {
-        
-        return ResponseEntity.ok(ApiResponse.ok(payrollService.getDepartmentPayroll(month, year, userDetails), "Lấy lương thành công"));
-    }
-
-    @GetMapping("/ceo/reports")
-    @PreAuthorize("hasRole('CEO')")
-    public ResponseEntity<ApiResponse<List<PayrollReport>>> getDirectorReportsForCeo(
-            @RequestParam int month,
-            @RequestParam int year) {
-        List<PayrollReport> reports = payrollService.getDirectorReportsForCeo(month, year);
-        return ResponseEntity.ok(ApiResponse.ok(reports, "Lấy danh sách báo cáo tổng hợp thành công"));
-    }
-
-    @PostMapping("/ceo/approve-report/{id}")
-    @PreAuthorize("hasRole('CEO')")
-    public ResponseEntity<ApiResponse<Void>> approveDirectorReportByCeo(
-            @PathVariable Long id) {
-        payrollService.approveDirectorReportByCeo(id);
-        return ResponseEntity.ok(ApiResponse.ok(null, "Đã duyệt báo cáo bảng lương thành công"));
-    }
-
-    @PostMapping("/ceo/reject-report/{id}")
-    @PreAuthorize("hasRole('CEO')")
-    public ResponseEntity<ApiResponse<Void>> rejectDirectorReportByCeo(
-            @PathVariable Long id,
-            @RequestBody Map<String, String> request) {
-        String reason = request.get("reason");
-        if (reason == null || reason.trim().isEmpty()) {
-            throw new IllegalArgumentException("Vui lòng nhập lý do từ chối");
-        }
-        payrollService.rejectDirectorReportByCeo(id, reason);
-        return ResponseEntity.ok(ApiResponse.ok(null, "Đã từ chối báo cáo bảng lương"));
+    public ResponseEntity<ApiResponse<List<Payroll>>> getMyPayroll(@AuthenticationPrincipal CustomUserDetails user) {
+        return ResponseEntity.ok(ApiResponse.ok(payrollService.getMyPayroll(user.getUserId()), "Lấy phiếu lương thành công"));
     }
 }

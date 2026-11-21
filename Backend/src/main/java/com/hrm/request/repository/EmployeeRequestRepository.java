@@ -31,4 +31,11 @@ public interface EmployeeRequestRepository extends JpaRepository<EmployeeRequest
 
     @Query("SELECT r FROM EmployeeRequest r JOIN FETCH r.user ORDER BY r.createdAt DESC")
     List<EmployeeRequest> findAllWithUser();
+
+    /** Đơn của các nhân viên có ngày nằm trong khoảng [startDate, endDate] và đang ở các trạng thái cho trước (dùng khi chốt công). */
+    @Query("SELECT r FROM EmployeeRequest r JOIN FETCH r.user WHERE r.user.id IN :userIds AND r.status IN :statuses AND r.startDate <= :endDate AND r.endDate >= :startDate")
+    List<EmployeeRequest> findOverlappingByUsersAndStatuses(@Param("userIds") List<Long> userIds,
+                                                            @Param("statuses") List<com.hrm.request.entity.RequestStatus> statuses,
+                                                            @Param("startDate") LocalDate startDate,
+                                                            @Param("endDate") LocalDate endDate);
 }

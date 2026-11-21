@@ -39,6 +39,7 @@ public class EmployeeRequestService {
     private final AttendanceRepository attendanceRepository;
     private final NotificationService notificationService;
     private final ApplicationEventPublisher eventPublisher;
+    private final com.hrm.common.payroll.service.PayrollPeriodLock payrollPeriodLock;
 
     @org.springframework.beans.factory.annotation.Value("${payroll.normal-leave-days-per-month:1}")
     private int normalLeaveDaysPerMonth;
@@ -124,6 +125,9 @@ public class EmployeeRequestService {
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> AppException.notFound("Không tìm thấy tài khoản người dùng"));
+
+        // Không cho tạo đơn rơi vào tháng mà phòng đã chốt công / đã tính lương.
+        payrollPeriodLock.assertOpen(userId, dto.getStartDate(), dto.getEndDate());
 
         EmployeeRequest request = EmployeeRequest.builder()
                 .user(user)
@@ -236,6 +240,9 @@ public class EmployeeRequestService {
                 || request.getEndDate().isBefore(request.getStartDate())) {
             throw AppException.badRequest("Khoảng thời gian của đơn yêu cầu không hợp lệ");
         }
+
+        // Đơn được duyệt sẽ ghi vào bảng công -> chặn nếu tháng đó đã chốt công (BUG-02).
+        payrollPeriodLock.assertOpen(request.getUser().getId(), request.getStartDate(), request.getEndDate());
 
         request.setStatus(RequestStatus.APPROVED);
         request.setApprover(manager);

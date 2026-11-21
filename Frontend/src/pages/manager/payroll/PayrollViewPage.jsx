@@ -40,7 +40,7 @@ export default function PayrollViewPage() {
 
             <Card>
                 <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 rounded-t-xl">
-                    <h2 className="text-lg font-bold text-gray-800">Danh sách phiếu lương đã duyệt</h2>
+                    <h2 className="text-lg font-bold text-gray-800">Danh sách phiếu lương đã chi trả</h2>
                 </div>
                 
                 <div className="overflow-x-auto">

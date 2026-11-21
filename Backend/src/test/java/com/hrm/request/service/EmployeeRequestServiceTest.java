@@ -4,6 +4,7 @@ import com.hrm.attendance.entity.Attendance;
 import com.hrm.attendance.repository.AttendanceRepository;
 import com.hrm.common.entity.Role;
 import com.hrm.common.entity.User;
+import com.hrm.common.payroll.service.PayrollPeriodLock;
 import com.hrm.common.repository.UserRepository;
 import com.hrm.exception.AppException;
 import com.hrm.notification.service.NotificationService;
@@ -46,6 +47,8 @@ class EmployeeRequestServiceTest {
     private NotificationService notificationService;
     @Mock
     private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private PayrollPeriodLock payrollPeriodLock;
 
     private EmployeeRequestService service;
 
@@ -61,7 +64,8 @@ class EmployeeRequestServiceTest {
                 userRepository,
                 attendanceRepository,
                 notificationService,
-                eventPublisher
+                eventPublisher,
+                payrollPeriodLock
         );
 
         employee = User.builder()

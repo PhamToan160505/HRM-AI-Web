@@ -19,12 +19,20 @@ import {
   FileText,
   UserRoundCheck,
   FolderGit2,
+  Wallet,
+  Calculator,
 } from 'lucide-react';
 import logoImg from '../../assets/logo.jpg';
 import { useAuth } from '../../context/AuthContext';
 import NotificationBell from '../common/NotificationBell';
 import api from '../../services/api';
 import ChatWidget from '../chat/ChatWidget';
+
+// Tạm nhận diện phòng Tài chính - Kế toán theo tên (backend cũng làm vậy qua FinanceAccess).
+// Backend mới là nơi kiểm tra quyền thật sự; ở đây chỉ để hiện menu.
+const FINANCE_DEPARTMENT_NAME = 'tài chính - kế toán';
+const isFinanceDepartment = (tenPhong) =>
+  !!tenPhong && tenPhong.trim().replace(/\s+/g, ' ').toLowerCase() === FINANCE_DEPARTMENT_NAME;
 
 const roleLabels = {
   ceo: 'Tổng Giám Đốc',
@@ -99,6 +107,8 @@ function SidebarContent({ role, tenPhong, onClose, hasUnreadChat }) {
     tenPhong?.toLowerCase().includes('kỹ thuật') || tenPhong?.toLowerCase().includes('công nghệ');
   if (isTechDept) directorNav.splice(2, 0,
     { to: '/director/tech-projects', icon: FolderGit2, label: 'Dự án công nghệ' });
+  directorNav.splice(directorNav.findIndex(i => i.to === '/director/payroll') + 1, 0,
+    { to: '/director/my-payroll', icon: Wallet, label: 'Phiếu lương của tôi' });
   if (tenPhong === 'Nhân sự') directorNav.splice(2, 0,
     { to: '/director/lifecycle', icon: UserRoundCheck, label: 'Nhân viên mới' });
   const managerNav = [
@@ -114,6 +124,11 @@ function SidebarContent({ role, tenPhong, onClose, hasUnreadChat }) {
   ];
   if (isTechDept) managerNav.splice(2, 0,
     { to: '/manager/tech-projects', icon: FolderGit2, label: 'Dự án công nghệ' });
+  managerNav.splice(managerNav.findIndex(i => i.to === '/manager/payroll') + 1, 0,
+    { to: '/manager/my-payroll', icon: Wallet, label: 'Phiếu lương của tôi' });
+  if (isFinanceDepartment(tenPhong)) {
+    managerNav.find(i => i.to === '/manager/payroll').label = 'Kế toán lương';
+  }
   if (tenPhong === 'Nhân sự') managerNav.splice(2, 0,
     { to: '/manager/lifecycle', icon: UserRoundCheck, label: 'Nhân viên mới' });
   const employeeNav = [
@@ -125,6 +140,8 @@ function SidebarContent({ role, tenPhong, onClose, hasUnreadChat }) {
   ];
   if (isTechDept) employeeNav.splice(1, 0,
     { to: '/employee/my-projects', icon: FolderGit2, label: 'Dự án của tôi' });
+  if (isFinanceDepartment(tenPhong)) employeeNav.splice(3, 0,
+    { to: '/employee/finance-payroll', icon: Calculator, label: 'Kế toán lương' });
 
   const navItems =
     role === 'admin' ? adminNav

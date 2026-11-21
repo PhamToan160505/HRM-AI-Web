@@ -80,9 +80,18 @@ public class Payroll {
     @Column(name = "net_salary")
     private Double netSalary;
 
-    // DRAFT, APPROVED, REJECTED
+    // DRAFT, PENDING_DIRECTOR, PENDING_CHIEF_ACCOUNTANT, PENDING_CEO, APPROVED_BY_CEO, PAID, REJECTED
+    // (APPROVED và các trạng thái MANAGER_* là dữ liệu của luồng cũ)
     @Column(name = "status", nullable = false)
     private String status;
+
+    /** Kỳ lương phòng ban chứa phiếu này (payroll_reports.id, report_level = DEPARTMENT). */
+    @Column(name = "payroll_report_id")
+    private Long payrollReportId;
+
+    /** Phòng ban của nhân viên tại thời điểm tính lương. */
+    @Column(name = "department_id")
+    private Long departmentId;
 
     @Column(name = "rejection_reason", columnDefinition = "TEXT")
     private String rejectionReason;
