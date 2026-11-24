@@ -31,7 +31,30 @@ public class JobRequisitionService {
     private final ApprovalService approvalService;
     private final HiringSeatService hiringSeatService;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hrm.tech.repository.TechProjectRepository techProjectRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hrm.recruitment.repository.JobPostingRepository jobPostingRepository;
+
     private void enrichRequisition(JobRequisition req) {
+        if (req.getTechProjectId() != null && techProjectRepository != null) {
+            techProjectRepository.findById(req.getTechProjectId()).ifPresent(tp -> {
+                req.setTechProjectCode(tp.getProjectCode());
+                req.setTechProjectName(tp.getProjectName());
+            });
+        }
+        if (req.getId() != null && jobPostingRepository != null) {
+            jobPostingRepository.findByJobRequisitionIdOrderByCreatedAtDesc(req.getId()).stream()
+                    .filter(jp -> jp.getStatus() != com.hrm.recruitment.entity.JobPostingStatus.CANCELLED
+                            && jp.getStatus() != com.hrm.recruitment.entity.JobPostingStatus.EXPIRED)
+                    .findFirst()
+                    .ifPresent(active -> {
+                        req.setHasActiveCampaign(true);
+                        req.setActivePostingId(active.getId());
+                        req.setActivePostingStatus(active.getStatus() != null ? active.getStatus().name() : null);
+                    });
+        }
         userRepository.findById(req.getRequesterId()).ifPresent(user -> {
             req.setRequesterName(user.getHoTen());
             String roleName = switch (user.getRole()) {
@@ -110,6 +133,18 @@ public class JobRequisitionService {
             RequisitionRequest request,
             String requestId,
             String idempotencyKey) {
+        return createRequisitionWithTechContext(requesterId, request, null, null, null, requestId, idempotencyKey);
+    }
+
+    @org.springframework.transaction.annotation.Transactional
+    public JobRequisition createRequisitionWithTechContext(
+            Long requesterId,
+            RequisitionRequest request,
+            Long techProjectId,
+            String requiredTechSkillsJson,
+            String urgencyLevel,
+            String requestId,
+            String idempotencyKey) {
         User requester = userRepository.findById(requesterId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy người yêu cầu"));
 
@@ -129,6 +164,9 @@ public class JobRequisitionService {
                 .budget(request.budget())
                 .capBac(request.capBac())
                 .hinhThucLamViec(request.hinhThucLamViec())
+                .techProjectId(techProjectId)
+                .requiredTechSkillsJson(requiredTechSkillsJson)
+                .urgencyLevel(urgencyLevel != null && !urgencyLevel.isBlank() ? urgencyLevel : "NORMAL")
                 .status(JobRequisitionStatus.DRAFT)
                 .requesterId(requesterId)
                 .build();

@@ -60,22 +60,8 @@ export default function TechCycleManagementModal({
     if (!isOpen) return;
     document.body.style.overflow = 'hidden';
 
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && !deleting) {
-        e.stopPropagation();
-        if (deletingTarget) {
-          setDeletingTarget(null);
-        } else if (blockedDeleteTarget) {
-          setBlockedDeleteTarget(null);
-        } else {
-          onClose();
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown, true);
 
     return () => {
-      window.removeEventListener('keydown', handleKeyDown, true);
       setTimeout(() => {
         const remaining = document.querySelectorAll('[data-tech-modal="true"]');
         if (remaining.length === 0) {
@@ -163,9 +149,6 @@ export default function TechCycleManagementModal({
     <div
       data-tech-modal="true"
       className="fixed inset-0 z-[9992] bg-slate-900/60 backdrop-blur-xs p-3 sm:p-5 flex items-center justify-center overflow-y-auto"
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !deleting) onClose();
-      }}
     >
       <motion.div
         role="dialog"
@@ -463,9 +446,6 @@ export default function TechCycleManagementModal({
           <div
             data-tech-modal="true"
             className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
-            onClick={(e) => {
-              if (e.target === e.currentTarget && !deleting) setDeletingTarget(null);
-            }}
           >
             <motion.div
               role="dialog"
@@ -522,9 +502,6 @@ export default function TechCycleManagementModal({
           <div
             data-tech-modal="true"
             className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
-            onClick={(e) => {
-              if (e.target === e.currentTarget && !closingCycle) setBlockedDeleteTarget(null);
-            }}
           >
             <motion.div
               role="dialog"

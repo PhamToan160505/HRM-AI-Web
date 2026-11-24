@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   Clock,
   TrendingUp,
+  ArrowLeftRight,
 } from 'lucide-react';
 import { MotionConfig, motion, AnimatePresence } from 'framer-motion';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
@@ -26,6 +27,7 @@ import CeoPerformanceTab from './CeoPerformanceTab';
 import CeoProjectDetailModal from './CeoProjectDetailModal';
 import CeoTechProfileModal from './CeoTechProfileModal';
 import TechReviewDetailModal from '../components/TechReviewDetailModal';
+import CrossDeptHandoffPanel from '../components/CrossDeptHandoffPanel';
 import { PROJECT_STATUS_CONFIG, computeTimelineHealth, getCurrentMonthStr } from './ceoTechHelpers';
 import {
   isMatchingLiveNotificationNavToken,
@@ -67,6 +69,7 @@ export default function CeoTechProjectsPage() {
 
   // Data states
   const [projects, setProjects] = useState([]);
+  const [isSlaModalOpen, setIsSlaModalOpen] = useState(false);
   const [benchUsers, setBenchUsers] = useState([]);
   const [matrixData, setMatrixData] = useState([]);
   const [availableSkills, setAvailableSkills] = useState([]);
@@ -696,6 +699,15 @@ export default function CeoTechProjectsPage() {
 
             <button
               type="button"
+              onClick={() => setIsSlaModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white hover:bg-blue-50 text-[#1E3A8A] border border-blue-200 text-xs font-bold transition cursor-pointer"
+            >
+              <ArrowLeftRight size={14} />
+              <span>SLA Phối hợp CN ↔ NS</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => loadAllData({ manual: true })}
               disabled={refreshing || loading}
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-semibold transition cursor-pointer disabled:opacity-60"
@@ -1128,6 +1140,15 @@ export default function CeoTechProjectsPage() {
           profile={selectedProfile}
           onClose={() => setSelectedProfile(null)}
           zIndexClass={selectedReview ? 'z-[9995]' : 'z-[9990]'}
+        />
+
+        <CrossDeptHandoffPanel
+          isModal={true}
+          isOpen={isSlaModalOpen}
+          onClose={() => setIsSlaModalOpen(false)}
+          isReadOnly={true}
+          direction="ALL"
+          title="Giám sát SLA Phối hợp Công nghệ ↔ Nhân sự (Chỉ xem)"
         />
       </div>
     </MotionConfig>

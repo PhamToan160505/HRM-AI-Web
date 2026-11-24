@@ -29,6 +29,8 @@ import {
   Users2,
   MessageSquare,
   Star,
+  Video,
+  Briefcase,
 } from 'lucide-react';
 import { MotionConfig, motion, AnimatePresence } from 'framer-motion';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
@@ -108,6 +110,12 @@ export default function MyTechProjectsPage() {
   const [myPerfOverview, setMyPerfOverview] = useState(null);
   const [availableSkills, setAvailableSkills] = useState([]);
   const [myMentorshipPrograms, setMyMentorshipPrograms] = useState([]);
+  const [myTechInterviews, setMyTechInterviews] = useState([]);
+  const [interviewActionBusyId, setInterviewActionBusyId] = useState(null);
+  const [interviewFeedbackTarget, setInterviewFeedbackTarget] = useState(null);
+  const [interviewFeedbackForm, setInterviewFeedbackForm] = useState({ score: '80', recommendation: 'PASS', comments: '' });
+  const [interviewCompleteTarget, setInterviewCompleteTarget] = useState(null);
+  const [interviewConclusionText, setInterviewConclusionText] = useState('');
   const [viewingMentorship, setViewingMentorship] = useState(null);
   const [checkinTarget, setCheckinTarget] = useState(null); // { program, openAdd }
   const [proposingGraduationTarget, setProposingGraduationTarget] = useState(null);
@@ -146,13 +154,14 @@ export default function MyTechProjectsPage() {
       if (!quiet) setErrorMsg('');
 
       const activeMonth = selectedMonthRef.current || getCurrentMonthStr();
-      const [projRes, profRes, wlRes, perfRes, skillsRes, mentorRes] = await Promise.all([
+      const [projRes, profRes, wlRes, perfRes, skillsRes, mentorRes, interviewsRes] = await Promise.all([
         api.get('/api/tech/projects/my-projects'),
         api.get('/api/tech/skills/my-profile'),
         api.get('/api/tech/worklogs/my', { params: { month: activeMonth } }),
         api.get('/api/tech/reviews/my'),
         api.get('/api/tech/skills'),
         api.get('/api/tech/mentorship/my-programs').catch(() => ({ data: { data: [] } })),
+        api.get('/api/tech-hr/my-interviews').catch(() => ({ data: { data: [] } })),
       ]);
 
       const freshProjects = projRes.data?.data || [];
@@ -165,6 +174,7 @@ export default function MyTechProjectsPage() {
       setMyPerfOverview(perfRes.data?.data || null);
       setAvailableSkills(skillsRes.data?.data || []);
       setMyMentorshipPrograms(mentorRes.data?.data || []);
+      setMyTechInterviews(interviewsRes.data?.data || []);
       setLastUpdated(new Date());
       lastFetchTimeRef.current = Date.now();
     } catch (err) {
@@ -312,7 +322,7 @@ export default function MyTechProjectsPage() {
 
     const handleRealtimeNotification = (e) => {
       const notifType = String(e?.detail?.loai || '').toUpperCase();
-      if (notifType.startsWith('TECH_')) {
+      if (notifType.startsWith('TECH_') || notifType.startsWith('RECRUITMENT_')) {
         scheduleQuietRefresh();
       }
     };
@@ -329,12 +339,14 @@ export default function MyTechProjectsPage() {
 
     window.addEventListener('hrm:notification', handleRealtimeNotification);
     window.addEventListener('hrm:tech-sync', handleTechSync);
+    window.addEventListener('hrm:recruitment-sync', handleTechSync);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       if (timerId) clearTimeout(timerId);
       window.removeEventListener('hrm:notification', handleRealtimeNotification);
       window.removeEventListener('hrm:tech-sync', handleTechSync);
+      window.removeEventListener('hrm:recruitment-sync', handleTechSync);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [loadAllData]);
@@ -342,15 +354,7 @@ export default function MyTechProjectsPage() {
   useEffect(() => {
     if (!deleteWorklogTarget) return;
     document.body.style.overflow = 'hidden';
-    const handleEsc = (e) => {
-      if (e.key === 'Escape' && !deletingWorklog) {
-        e.stopPropagation();
-        setDeleteWorklogTarget(null);
-      }
-    };
-    window.addEventListener('keydown', handleEsc, true);
     return () => {
-      window.removeEventListener('keydown', handleEsc, true);
       setTimeout(() => {
         const remaining = document.querySelectorAll('[data-tech-modal="true"]');
         if (remaining.length === 0) {
@@ -359,6 +363,69 @@ export default function MyTechProjectsPage() {
       }, 50);
     };
   }, [deleteWorklogTarget, deletingWorklog]);
+
+  const handleRespondTechInterview = async (interviewId, decision) => {
+    setInterviewActionBusyId(interviewId);
+    try {
+      await api.post(`/api/recruitment/interviews/${interviewId}/invitation`, { decision });
+      toastRef.current?.show(
+        'Thành công',
+        decision === 'ACCEPTED' ? 'Đã chấp nhận lời mời tham gia phỏng vấn.' : 'Đã từ chối lời mời phỏng vấn.',
+        'success'
+      );
+      await loadAllData({ quiet: true });
+    } catch (err) {
+      toastRef.current?.show('Lỗi', err.response?.data?.message || 'Không thể phản hồi lời mời phỏng vấn.', 'error');
+    } finally {
+      setInterviewActionBusyId(null);
+    }
+  };
+
+  const handleSubmitTechInterviewFeedback = async () => {
+    if (!interviewFeedbackTarget) return;
+    if (!interviewFeedbackForm.comments.trim()) {
+      toastRef.current?.show('Thiếu nhận xét', 'Vui lòng nhập nhận xét chuyên môn về ứng viên.', 'warning');
+      return;
+    }
+    setInterviewActionBusyId(interviewFeedbackTarget.interviewId);
+    try {
+      await api.put(`/api/recruitment/interviews/${interviewFeedbackTarget.interviewId}/feedback`, {
+        criteriaScores: { overall: Number(interviewFeedbackForm.score || 0) },
+        overallScore: Number(interviewFeedbackForm.score || 0),
+        recommendation: interviewFeedbackForm.recommendation,
+        comments: interviewFeedbackForm.comments.trim(),
+      });
+      toastRef.current?.show('Đã lưu đánh giá', 'Phiếu chấm điểm & nhận xét phỏng vấn đã được gửi về Phòng Nhân sự.', 'success');
+      setInterviewFeedbackTarget(null);
+      await loadAllData({ quiet: true });
+    } catch (err) {
+      toastRef.current?.show('Lỗi', err.response?.data?.message || 'Không thể gửi phiếu đánh giá phỏng vấn.', 'error');
+    } finally {
+      setInterviewActionBusyId(null);
+    }
+  };
+
+  const handleCompleteTechInterview = async () => {
+    if (!interviewCompleteTarget) return;
+    if (!interviewConclusionText.trim()) {
+      toastRef.current?.show('Thiếu kết luận', 'Vui lòng nhập kết luận tổng hợp của người chủ trì.', 'warning');
+      return;
+    }
+    setInterviewActionBusyId(interviewCompleteTarget.interviewId);
+    try {
+      await api.post(`/api/recruitment/interviews/${interviewCompleteTarget.interviewId}/complete`, {
+        conclusion: interviewConclusionText.trim(),
+      });
+      toastRef.current?.show('Đã hoàn tất phỏng vấn', 'Kết luận buổi phỏng vấn đã được đồng bộ cho Phòng Nhân sự.', 'success');
+      setInterviewCompleteTarget(null);
+      setInterviewConclusionText('');
+      await loadAllData({ quiet: true });
+    } catch (err) {
+      toastRef.current?.show('Lỗi', err.response?.data?.message || 'Không thể hoàn tất buổi phỏng vấn.', 'error');
+    } finally {
+      setInterviewActionBusyId(null);
+    }
+  };
 
   const handleConfirmDeleteWorklog = async () => {
     if (!deleteWorklogTarget || deletingWorklog) return;
@@ -1049,6 +1116,196 @@ export default function MyTechProjectsPage() {
                                     </div>
                                   )}
                                 </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Module 2 (HR ↔ Tech): Lịch Phỏng vấn Kỹ thuật được HR mời */}
+                    {myTechInterviews.length > 0 && (
+                      <div className="bg-white rounded-2xl p-4 border border-blue-200/90 shadow-2xs space-y-3">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-xl bg-blue-50 text-[#1E3A8A] border border-blue-200 flex items-center justify-center shrink-0">
+                              <Briefcase size={15} />
+                            </div>
+                            <div>
+                              <h3 className="text-xs font-extrabold text-slate-900">
+                                Lịch Phỏng vấn Kỹ thuật được Phòng Nhân sự mời ({myTechInterviews.length})
+                              </h3>
+                              <p className="text-[11px] text-slate-500">
+                                Tham gia hội đồng chuyên môn đánh giá ứng viên tuyển dụng cho Phòng Công nghệ
+                              </p>
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-blue-50 text-[#1E3A8A] border border-blue-200">
+                            HR ↔ Tech Interview Sync
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                          {myTechInterviews.map((iv) => {
+                            const isBusy = interviewActionBusyId === iv.interviewId;
+                            const isDone = iv.status === 'DONE' || iv.status === 'COMPLETED';
+                            const isScheduled = iv.status === 'SCHEDULED';
+                            const invLabel =
+                              iv.invitationStatus === 'ACCEPTED'
+                                ? 'Đã chấp nhận'
+                                : iv.invitationStatus === 'DECLINED'
+                                ? 'Đã từ chối'
+                                : 'Chờ xác nhận';
+                            return (
+                              <div
+                                key={iv.interviewId}
+                                className="p-3.5 rounded-xl bg-slate-50/80 border border-slate-200/90 space-y-2.5 text-xs"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <p className="font-bold text-slate-900 truncate">
+                                      Ứng viên: {iv.candidateName || 'Ứng viên'}
+                                    </p>
+                                    <p className="text-[11px] text-slate-600 truncate">
+                                      {iv.jobTitle || 'Vị trí kỹ thuật'} • Vòng {iv.roundNumber || 1} ({iv.interviewMode || 'ONLINE'})
+                                    </p>
+                                  </div>
+                                  <span
+                                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${
+                                      isDone
+                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                        : iv.feedbackSubmitted
+                                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                        : 'bg-amber-50 text-amber-800 border-amber-200'
+                                    }`}
+                                  >
+                                    {isDone ? 'Đã hoàn tất' : iv.feedbackSubmitted ? 'Đã chấm điểm' : 'Chờ chấm điểm'}
+                                  </span>
+                                </div>
+
+                                <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 pt-1 border-t border-slate-200/70 tabular">
+                                  <span className="inline-flex items-center gap-1">
+                                    <Calendar size={12} className="text-blue-600" />
+                                    {iv.scheduledStart
+                                      ? new Date(iv.scheduledStart).toLocaleString('vi-VN', {
+                                          day: '2-digit',
+                                          month: '2-digit',
+                                          year: 'numeric',
+                                          hour: '2-digit',
+                                          minute: '2-digit',
+                                        })
+                                      : 'Chưa chốt giờ'}
+                                  </span>
+                                  <span className="font-semibold text-slate-700">
+                                    Vai trò: {iv.participantRole === 'LEAD' ? 'Chủ trì kỹ thuật' : 'Thành viên chuyên môn'}
+                                  </span>
+                                </div>
+
+                                <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+                                  {iv.meetingUrl ? (
+                                    <a
+                                      href={iv.meetingUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 hover:underline"
+                                    >
+                                      <Video size={12} />
+                                      <span>Vào phòng phỏng vấn trực tuyến</span>
+                                      <ExternalLink size={11} />
+                                    </a>
+                                  ) : iv.location ? (
+                                    <span className="text-[11px] text-slate-600">Địa điểm: {iv.location}</span>
+                                  ) : (
+                                    <span className="text-[11px] text-slate-400">Chưa gắn link họp</span>
+                                  )}
+                                  <span
+                                    className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                                      iv.invitationStatus === 'ACCEPTED'
+                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                        : iv.invitationStatus === 'DECLINED'
+                                        ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                        : 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                    }`}
+                                  >
+                                    Lời mời: {invLabel}
+                                  </span>
+                                </div>
+
+                                {isScheduled && iv.invitationStatus === 'PENDING' && (
+                                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200/70">
+                                    <button
+                                      type="button"
+                                      disabled={isBusy}
+                                      onClick={() => handleRespondTechInterview(iv.interviewId, 'ACCEPTED')}
+                                      className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold transition cursor-pointer disabled:opacity-50"
+                                    >
+                                      <CheckCircle2 size={13} />
+                                      <span>Chấp nhận lời mời</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={isBusy}
+                                      onClick={() => handleRespondTechInterview(iv.interviewId, 'DECLINED')}
+                                      className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 text-[11px] font-bold transition cursor-pointer disabled:opacity-50"
+                                    >
+                                      <X size={13} />
+                                      <span>Từ chối</span>
+                                    </button>
+                                  </div>
+                                )}
+
+                                {isScheduled && iv.invitationStatus === 'ACCEPTED' && (() => {
+                                  const canCompleteNow = Boolean(iv.allRequiredFeedbackDone);
+                                  const reqCount = Number(iv.requiredFeedbackCount || 0);
+                                  const doneCount = Number(iv.submittedFeedbackCount || 0);
+                                  return (
+                                    <div className="space-y-2 pt-2 border-t border-slate-200/70">
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <button
+                                          type="button"
+                                          disabled={isBusy}
+                                          onClick={() => {
+                                            setInterviewFeedbackForm({ score: '80', recommendation: 'PASS', comments: '' });
+                                            setInterviewFeedbackTarget(iv);
+                                          }}
+                                          className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold transition cursor-pointer disabled:opacity-50"
+                                        >
+                                          <MessageSquare size={13} />
+                                          <span>{iv.feedbackSubmitted ? 'Cập nhật chấm điểm' : 'Chấm điểm & Nhận xét'}</span>
+                                        </button>
+                                        {iv.participantRole === 'LEAD' && iv.feedbackSubmitted && (
+                                          <button
+                                            type="button"
+                                            disabled={isBusy || !canCompleteNow}
+                                            title={
+                                              !canCompleteNow
+                                                ? `Chưa đủ phiếu feedback hội đồng (${doneCount}/${reqCount})${iv.pendingFeedbackNames ? ` — Chưa gửi: ${iv.pendingFeedbackNames}` : ''}`
+                                                : undefined
+                                            }
+                                            onClick={() => {
+                                              setInterviewConclusionText('');
+                                              setInterviewCompleteTarget(iv);
+                                            }}
+                                            className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition ${
+                                              canCompleteNow
+                                                ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer disabled:opacity-50'
+                                                : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                                            }`}
+                                          >
+                                            {canCompleteNow ? <CheckCircle2 size={13} /> : <Lock size={12} />}
+                                            <span>Hoàn tất phỏng vấn</span>
+                                          </button>
+                                        )}
+                                      </div>
+                                      {iv.participantRole === 'LEAD' && iv.feedbackSubmitted && !canCompleteNow && (
+                                        <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 leading-relaxed">
+                                          Chờ đủ phiếu đánh giá hội đồng ({doneCount}/{reqCount}) để mở khóa nút &ldquo;Hoàn tất phỏng vấn&rdquo;
+                                          {iv.pendingFeedbackNames ? `: còn thiếu ${iv.pendingFeedbackNames}.` : '.'}
+                                        </p>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                               </div>
                             );
                           })}
@@ -1776,17 +2033,209 @@ export default function MyTechProjectsPage() {
           />
         )}
 
+        {/* Modal Kỹ sư chấm điểm & nhận xét phỏng vấn (Module 2 HR ↔ Tech) */}
+        {interviewFeedbackTarget &&
+          createPortal(
+            <div
+              data-tech-modal="true"
+              className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
+            >
+              <motion.div
+                role="dialog"
+                aria-modal="true"
+                initial={{ opacity: 0, scale: 0.96, y: 8 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 overflow-hidden"
+              >
+                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50/70">
+                  <div>
+                    <h3 className="text-sm font-extrabold text-slate-900">Phiếu đánh giá chuyên môn Phỏng vấn</h3>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Ứng viên: <strong className="text-slate-700">{interviewFeedbackTarget.candidateName}</strong> • {interviewFeedbackTarget.jobTitle} (Vòng {interviewFeedbackTarget.roundNumber || 1})
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setInterviewFeedbackTarget(null)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition cursor-pointer"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+
+                <div className="p-5 space-y-4">
+                  {interviewFeedbackTarget.scheduledStart &&
+                    Date.now() < new Date(interviewFeedbackTarget.scheduledStart).getTime() && (
+                      <div className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-[11px] text-amber-900">
+                        <AlertTriangle size={14} className="text-amber-600 shrink-0 mt-0.5" />
+                        <span>
+                          <strong>Lưu ý kiểm toán:</strong> Lịch phỏng vấn dự kiến lúc{' '}
+                          <strong>
+                            {new Date(interviewFeedbackTarget.scheduledStart).toLocaleString('vi-VN', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              day: '2-digit',
+                              month: '2-digit',
+                              year: 'numeric',
+                            })}
+                          </strong>
+                          . Bạn đang gửi phiếu đánh giá trước giờ hẹn — hệ thống sẽ lưu dấu vết thời điểm gửi.
+                        </span>
+                      </div>
+                    )}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Điểm chuyên môn (0–100) *</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={interviewFeedbackForm.score}
+                        onChange={(e) => setInterviewFeedbackForm((prev) => ({ ...prev, score: e.target.value }))}
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Khuyến nghị tuyển dụng *</label>
+                      <select
+                        value={interviewFeedbackForm.recommendation}
+                        onChange={(e) => setInterviewFeedbackForm((prev) => ({ ...prev, recommendation: e.target.value }))}
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 bg-white"
+                      >
+                        <option value="PASS">Đạt (PASS)</option>
+                        <option value="HOLD">Cần cân nhắc (HOLD)</option>
+                        <option value="FAIL">Không đạt (FAIL)</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Nhận xét kỹ thuật chi tiết *</label>
+                    <textarea
+                      rows={4}
+                      value={interviewFeedbackForm.comments}
+                      onChange={(e) => setInterviewFeedbackForm((prev) => ({ ...prev, comments: e.target.value }))}
+                      placeholder="Đánh giá kiến thức nền tảng, giải quyết vấn đề, tư duy thiết kế hệ thống và mức độ phù hợp team..."
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-slate-100 bg-slate-50/50">
+                  <button
+                    type="button"
+                    disabled={interviewActionBusyId === interviewFeedbackTarget.interviewId}
+                    onClick={() => setInterviewFeedbackTarget(null)}
+                    className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="button"
+                    disabled={interviewActionBusyId === interviewFeedbackTarget.interviewId || !interviewFeedbackForm.comments.trim()}
+                    onClick={handleSubmitTechInterviewFeedback}
+                    className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition cursor-pointer disabled:opacity-50"
+                  >
+                    {interviewActionBusyId === interviewFeedbackTarget.interviewId ? 'Đang gửi...' : 'Gửi phiếu đánh giá'}
+                  </button>
+                </div>
+              </motion.div>
+            </div>,
+            document.body
+          )}
+
+        {/* Modal Chủ trì Kỹ thuật hoàn tất buổi phỏng vấn */}
+        {interviewCompleteTarget &&
+          createPortal(
+            <div
+              data-tech-modal="true"
+              className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
+            >
+              <motion.div
+                role="dialog"
+                aria-modal="true"
+                initial={{ opacity: 0, scale: 0.96, y: 8 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 overflow-hidden"
+              >
+                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-emerald-50/60">
+                  <div>
+                    <h3 className="text-sm font-extrabold text-slate-900">Hoàn tất &amp; Kết luận buổi phỏng vấn</h3>
+                    <p className="text-[11px] text-slate-600 mt-0.5">
+                      Ứng viên: <strong>{interviewCompleteTarget.candidateName}</strong> • {interviewCompleteTarget.jobTitle} (Vòng {interviewCompleteTarget.roundNumber || 1})
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setInterviewCompleteTarget(null)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition cursor-pointer"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+
+                <div className="p-5 space-y-3">
+                  {interviewCompleteTarget.scheduledStart &&
+                    Date.now() < new Date(interviewCompleteTarget.scheduledStart).getTime() && (
+                      <div className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-[11px] text-amber-900">
+                        <AlertTriangle size={14} className="text-amber-600 shrink-0 mt-0.5" />
+                        <span>
+                          <strong>Cảnh báo hoàn tất sớm:</strong> Lịch phỏng vấn dự kiến lúc{' '}
+                          <strong>
+                            {new Date(interviewCompleteTarget.scheduledStart).toLocaleString('vi-VN', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              day: '2-digit',
+                              month: '2-digit',
+                              year: 'numeric',
+                            })}
+                          </strong>
+                          . Chỉ xác nhận hoàn tất nếu buổi phỏng vấn đã thực sự diễn ra sớm hơn lịch; hệ thống sẽ gắn dấu vết kiểm toán.
+                        </span>
+                      </div>
+                    )}
+                  <label className="block text-xs font-bold text-slate-700">Kết luận tổng hợp của người chủ trì *</label>
+                  <textarea
+                    rows={4}
+                    value={interviewConclusionText}
+                    onChange={(e) => setInterviewConclusionText(e.target.value)}
+                    placeholder="VD: Ứng viên nắm chắc Java Core, Spring Boot và xử lý giao dịch thực tế tốt. Đề xuất chuyển sang Vòng 2."
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-slate-100 bg-slate-50/50">
+                  <button
+                    type="button"
+                    disabled={interviewActionBusyId === interviewCompleteTarget.interviewId}
+                    onClick={() => setInterviewCompleteTarget(null)}
+                    className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="button"
+                    disabled={interviewActionBusyId === interviewCompleteTarget.interviewId || !interviewConclusionText.trim()}
+                    onClick={handleCompleteTechInterview}
+                    className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition cursor-pointer disabled:opacity-50"
+                  >
+                    {interviewActionBusyId === interviewCompleteTarget.interviewId ? 'Đang lưu...' : 'Xác nhận hoàn tất'}
+                  </button>
+                </div>
+              </motion.div>
+            </div>,
+            document.body
+          )}
+
         {/* Dialog xác nhận xóa bản ghi giờ công */}
         {deleteWorklogTarget &&
           createPortal(
             <div
               data-tech-modal="true"
               className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
-              onClick={(e) => {
-                if (e.target === e.currentTarget && !deletingWorklog) {
-                  setDeleteWorklogTarget(null);
-                }
-              }}
             >
               <motion.div
                 role="dialog"

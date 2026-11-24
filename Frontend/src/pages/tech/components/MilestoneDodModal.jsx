@@ -148,9 +148,6 @@ export default function MilestoneDodModal({
       {createPortal(
         <div
           className="fixed inset-0 z-[9990] bg-slate-900/60 backdrop-blur-xs p-4 sm:p-6 flex items-center justify-center overflow-y-auto"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) onClose();
-          }}
         >
       <motion.div
         role="dialog"
@@ -434,11 +431,6 @@ export default function MilestoneDodModal({
     createPortal(
       <div
         className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in"
-        onClick={(e) => {
-          if (e.target === e.currentTarget && !deletingItem) {
-            setDeleteItemTarget(null);
-          }
-        }}
       >
         <motion.div
           role="dialog"

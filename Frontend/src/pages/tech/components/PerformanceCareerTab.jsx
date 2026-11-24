@@ -1286,7 +1286,6 @@ export default function PerformanceCareerTab({
           <div
             data-tech-modal="true"
             className="fixed inset-0 z-[9999] bg-slate-900/70 backdrop-blur-xs p-4 flex items-center justify-center animate-in fade-in duration-150"
-            onClick={() => !closingCycle && setBlockedDeleteTarget(null)}
           >
             <div
               className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-amber-200 space-y-4"
@@ -1352,7 +1351,6 @@ export default function PerformanceCareerTab({
           <div
             data-tech-modal="true"
             className="fixed inset-0 z-[9999] bg-slate-900/70 backdrop-blur-xs p-4 flex items-center justify-center animate-in fade-in duration-150"
-            onClick={() => !deleting && setDeletingCycleTarget(null)}
           >
             <div
               className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-rose-200 space-y-4"

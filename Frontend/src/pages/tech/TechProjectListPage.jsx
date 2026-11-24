@@ -17,6 +17,7 @@ import {
   Briefcase,
   Clock,
   TrendingUp,
+  ArrowLeftRight,
 } from 'lucide-react';
 import { MotionConfig, motion, AnimatePresence } from 'framer-motion';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
@@ -40,6 +41,8 @@ import TechProfileModal from './components/TechProfileModal';
 import ProjectSelectModal from './components/ProjectSelectModal';
 import CreateEvaluationCycleModal from './components/CreateEvaluationCycleModal';
 import TechReviewDetailModal from './components/TechReviewDetailModal';
+import CrossDeptHandoffPanel from './components/CrossDeptHandoffPanel';
+import TechGapRequisitionModal from './components/TechGapRequisitionModal';
 
 function StatusDonutTooltip({ active, payload }) {
   if (!active || !payload || !payload.length) return null;
@@ -157,6 +160,16 @@ export default function TechProjectListPage() {
   const [selectedDetailProject, setSelectedDetailProject] = useState(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
+  const [isHandoffOpen, setIsHandoffOpen] = useState(false);
+  const [openHandoffCount, setOpenHandoffCount] = useState(0);
+  const [gapReqModalState, setGapReqModalState] = useState({ isOpen: false, project: null, skills: [], reason: '' });
+
+  useEffect(() => {
+    api
+      .get('/api/tech-hr/handoff-tasks', { params: { direction: 'INCOMING', status: 'OPEN' } })
+      .then((res) => setOpenHandoffCount((res.data?.data || []).length))
+      .catch(() => {});
+  }, []);
   const [staffingProject, setStaffingProject] = useState(null);
   const [staffingInitialUserId, setStaffingInitialUserId] = useState(null);
   const [staffingInitialAllocation, setStaffingInitialAllocation] = useState(null);
@@ -638,16 +651,8 @@ export default function TechProjectListPage() {
     if (!deleteConfirm.isOpen) return;
     document.body.style.overflow = 'hidden';
 
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && !deleting) {
-        e.stopPropagation();
-        setDeleteConfirm({ isOpen: false, projectId: null, projectName: '' });
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown, true);
 
     return () => {
-      window.removeEventListener('keydown', handleKeyDown, true);
       setTimeout(() => {
         const remaining = document.querySelectorAll('[data-tech-modal="true"]');
         if (remaining.length === 0) {
@@ -926,6 +931,20 @@ export default function TechProjectListPage() {
                 {lastUpdated.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
               </span>
             )}
+
+            <button
+              type="button"
+              onClick={() => setIsHandoffOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#0F2557] border border-blue-200 text-xs font-bold transition cursor-pointer"
+            >
+              <ArrowLeftRight size={14} className="text-blue-600" />
+              <span>Phối hợp HR</span>
+              {openHandoffCount > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-extrabold tabular">
+                  {openHandoffCount}
+                </span>
+              )}
+            </button>
 
             <button
               type="button"
@@ -1322,6 +1341,18 @@ export default function TechProjectListPage() {
                     benchUsers={benchUsers}
                     onInspectEngineer={handleInspectEngineer}
                     onQuickAssign={!isReadOnly ? handleOpenProjectSelectFromBench : undefined}
+                    onGoToMentorship={() => setActiveTab('skills')}
+                    onRequestHiring={
+                      !isReadOnly
+                        ? () =>
+                            setGapReqModalState({
+                              isOpen: true,
+                              project: null,
+                              skills: [],
+                              reason: 'Công suất đội ngũ Phòng Công nghệ đạt mức cao, cần bổ sung nhân sự từ HR.',
+                            })
+                        : undefined
+                    }
                     isReadOnly={isReadOnly}
                   />
                 )}
@@ -1337,6 +1368,17 @@ export default function TechProjectListPage() {
                     verifyingId={verifyingId}
                     focusUserRequest={focusUserRequest}
                     onFocusHandled={handleFocusHandled}
+                    onRequestHiring={
+                      !isReadOnly
+                        ? (skills, reason) =>
+                            setGapReqModalState({
+                              isOpen: true,
+                              project: null,
+                              skills: skills || [],
+                              reason: reason || '',
+                            })
+                        : undefined
+                    }
                   />
                 )}
 
@@ -1541,11 +1583,6 @@ export default function TechProjectListPage() {
             <div
               data-tech-modal="true"
               className="fixed inset-0 z-[10000] flex items-center justify-center p-4"
-              onClick={(e) => {
-                if (e.target === e.currentTarget && !deleting) {
-                  setDeleteConfirm({ isOpen: false, projectId: null, projectName: '' });
-                }
-              }}
             >
               <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs" />
               <motion.div
@@ -1602,6 +1639,31 @@ export default function TechProjectListPage() {
             </div>,
             document.body
           )}
+
+        {/* Modal Trung tâm Phối hợp Liên phòng Công nghệ <-> Nhân sự */}
+        <CrossDeptHandoffPanel
+          isModal={true}
+          isOpen={isHandoffOpen}
+          onClose={() => setIsHandoffOpen(false)}
+          isReadOnly={isReadOnly}
+          onTasksUpdated={() => {
+            api
+              .get('/api/tech-hr/handoff-tasks', { params: { direction: 'INCOMING', status: 'OPEN' } })
+              .then((res) => setOpenHandoffCount((res.data?.data || []).length))
+              .catch(() => {});
+          }}
+        />
+
+        {/* Modal Đề xuất Tuyển dụng sang HR từ Skill Gap / Bench */}
+        <TechGapRequisitionModal
+          isOpen={gapReqModalState.isOpen}
+          onClose={() => setGapReqModalState({ isOpen: false, project: null, skills: [], reason: '' })}
+          project={gapReqModalState.project}
+          projects={projects}
+          availableSkills={availableSkills}
+          initialSkills={gapReqModalState.skills}
+          initialReason={gapReqModalState.reason}
+        />
       </div>
     </MotionConfig>
   );

@@ -37,6 +37,8 @@ import ProjectHealthPanel from './components/ProjectHealthPanel';
 import ProjectFormModal from './components/ProjectFormModal';
 import StaffingModal from './components/StaffingModal';
 import TechProfileModal from './components/TechProfileModal';
+import ProjectHiringStatusCard from './components/ProjectHiringStatusCard';
+import TechGapRequisitionModal from './components/TechGapRequisitionModal';
 import {
   PROJECT_STATUS_CONFIG,
   PROJECT_ROLE_LABELS,
@@ -69,6 +71,13 @@ export default function TechProjectDetailPage() {
   const [deletingMilestone, setDeletingMilestone] = useState(false);
   const [completingMilestoneId, setCompletingMilestoneId] = useState(null);
   const [activeDodMilestone, setActiveDodMilestone] = useState(null);
+  const [isHiringModalOpen, setIsHiringModalOpen] = useState(false);
+  const [hiringRefreshKey, setHiringRefreshKey] = useState(0);
+  const [availableSkills, setAvailableSkills] = useState([]);
+
+  useEffect(() => {
+    api.get('/api/tech/skills').then((r) => setAvailableSkills(r.data?.data || [])).catch(() => {});
+  }, []);
 
   // Role permissions
   const isCeo = user?.role === 'ceo';
@@ -717,6 +726,16 @@ export default function TechProjectDetailPage() {
         <ProjectEnvironmentsPanel projectId={projectData.id} canManage={canManage} />
       </div>
 
+      {/* Liên kết Phòng Công nghệ <-> Phòng Nhân sự: Tiến độ Tuyển dụng Dự án */}
+      {(canManage || isCeo) && (
+        <ProjectHiringStatusCard
+          project={projectData}
+          isReadOnly={!canManage}
+          onRequestHiring={() => setIsHiringModalOpen(true)}
+          refreshKey={hiringRefreshKey}
+        />
+      )}
+
       {/* Đội ngũ Kỹ thuật tham gia */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-6 space-y-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -1048,11 +1067,6 @@ export default function TechProjectDetailPage() {
           <div
             data-tech-modal="true"
             className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto"
-            onClick={(e) => {
-              if (e.target === e.currentTarget && !deletingMilestone) {
-                setDeleteMilestoneTarget(null);
-              }
-            }}
           >
             <motion.div
               role="dialog"
@@ -1143,6 +1157,17 @@ export default function TechProjectDetailPage() {
         profile={selectedProfile}
         isReadOnly={!canManage}
       />
+
+      {/* Modal Đề xuất Tuyển dụng sang HR gắn với dự án */}
+      {canManage && (
+        <TechGapRequisitionModal
+          isOpen={isHiringModalOpen}
+          onClose={() => setIsHiringModalOpen(false)}
+          project={projectData}
+          availableSkills={availableSkills}
+          onSuccess={() => setHiringRefreshKey((k) => k + 1)}
+        />
+      )}
     </div>
   );
 }

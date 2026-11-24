@@ -45,6 +45,9 @@ public class EmployeeLifecycleService {
     private final UserRepository userRepository;
     private final DepartmentRepository departmentRepository;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
+
     @Transactional
     public Long consumeContractActivated(String eventId, String eventType, int schemaVersion, String payloadJson) {
         if (schemaVersion != 1 || !"CONTRACT_ACTIVATED".equals(eventType)) {
@@ -164,6 +167,18 @@ public class EmployeeLifecycleService {
                 eventId + ":employee-created");
         appendOutbox("PREBOARDING_CREATED", "lifecycle", "EMPLOYEE", employeeId,
                 Map.of("employee_id", employeeId, "application_id", applicationId));
+        if (eventPublisher != null) {
+            eventPublisher.publishEvent(new com.hrm.techhr.event.TechHrDomainEvents.PreboardingCreatedEvent(
+                    employeeId,
+                    checklistId,
+                    application.getJobPosting().getDepartmentId(),
+                    application.getFullName(),
+                    application.getEmail(),
+                    application.getJobPosting().getTitle(),
+                    offer.getExpectedStartDate(),
+                    offer.getProbationMonths()
+            ));
+        }
         finishInbox(eventId, employeeId);
         return employeeId;
     }
@@ -205,21 +220,32 @@ public class EmployeeLifecycleService {
     @Transactional
     public EmployeeView completeChecklistItem(Long employeeId, Long itemId, Long actorId) {
         requireHr(actorId);
+        List<String> codes = jdbcTemplate.queryForList("""
+                SELECT pi.item_code
+                FROM preboarding_items pi
+                JOIN preboarding_checklists pc ON pc.id = pi.checklist_id
+                WHERE pi.id = ? AND pc.employee_id = ?
+                """, String.class, itemId, employeeId);
+        if (!codes.isEmpty() && codes.get(0) != null && codes.get(0).toUpperCase().startsWith("TECH_")) {
+            throw AppException.forbidden(
+                    "Đầu mục kỹ thuật (TECH_*) do Trưởng phòng/Giám đốc Công nghệ xác nhận hoàn tất và tự động đồng bộ sang Phòng Nhân sự");
+        }
+        LocalDateTime nowVn = LocalDateTime.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
         int updated = jdbcTemplate.update("""
                 UPDATE preboarding_items pi
                 JOIN preboarding_checklists pc ON pc.id = pi.checklist_id
                 JOIN employees e ON e.id = pc.employee_id
-                SET pi.status = 'COMPLETED', pi.completed_by = ?, pi.completed_at = NOW(6)
+                SET pi.status = 'COMPLETED', pi.completed_by = ?, pi.completed_at = ?
                 WHERE pi.id = ? AND e.id = ? AND e.status = 'PRE_BOARDING' AND pi.status = 'PENDING'
-                """, actorId, itemId, employeeId);
+                """, actorId, nowVn, itemId, employeeId);
         if (updated == 0) throw AppException.conflict("Mục checklist không thể hoàn tất");
         jdbcTemplate.update("""
                 UPDATE preboarding_checklists pc
-                SET pc.status = 'COMPLETED', pc.completed_at = NOW(6)
+                SET pc.status = 'COMPLETED', pc.completed_at = ?
                 WHERE pc.employee_id = ? AND NOT EXISTS (
                     SELECT 1 FROM preboarding_items pi
                     WHERE pi.checklist_id = pc.id AND pi.required_item = b'1' AND pi.status = 'PENDING')
-                """, employeeId);
+                """, nowVn, employeeId);
         appendLifecycle(employeeId, "CHECKLIST_ITEM_COMPLETED", actorId, "CHECKLIST_ITEM", itemId,
                 "Hoàn tất một mục pre-boarding", UUID.randomUUID() + ":checklist");
         return findView(employeeId);
@@ -279,7 +305,19 @@ public class EmployeeLifecycleService {
                 "join_date", actualJoinDate.toString()));
         appendOutbox("ENSURE_ACCOUNT_ACTIVE", "lifecycle", "EMPLOYEE", employeeId,
                 Map.of("employee_id", employeeId));
-        return findView(employeeId);
+        EmployeeView joinedView = findView(employeeId);
+        if (eventPublisher != null && joinedView != null) {
+            eventPublisher.publishEvent(new com.hrm.techhr.event.TechHrDomainEvents.EmployeeJoinedEvent(
+                    employeeId,
+                    joinedView.departmentId(),
+                    joinedView.fullName(),
+                    joinedView.email(),
+                    actualJoinDate,
+                    joinedView.probationStatus(),
+                    actorId
+            ));
+        }
+        return joinedView;
     }
 
     @Transactional
@@ -323,7 +361,12 @@ public class EmployeeLifecycleService {
                        e.created_at
                 FROM employees e
                 JOIN persons p ON p.id = e.person_id
-                JOIN employment_records er ON er.employee_id = e.id
+                JOIN employment_records er ON er.id = (
+                    SELECT er2.id FROM employment_records er2
+                    WHERE er2.employee_id = e.id
+                    ORDER BY CASE er2.record_status WHEN 'CURRENT' THEN 0 WHEN 'SCHEDULED' THEN 1 ELSE 2 END, er2.id DESC
+                    LIMIT 1
+                )
                 LEFT JOIN account_creation_requests acr ON acr.employee_id = e.id
                 """;
     }

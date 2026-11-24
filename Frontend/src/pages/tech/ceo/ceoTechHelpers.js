@@ -295,12 +295,12 @@ export const formatHours = (hours) => {
 };
 
 export const formatCurrencyVND = (amount) => {
-  if (amount === null || amount === undefined) return 'Chưa cấu hình';
-  return new Intl.NumberFormat('vi-VN', {
-    style: 'currency',
-    currency: 'VND',
+  if (amount === null || amount === undefined || amount === '') return 'Chưa cấu hình';
+  const num = Number(amount);
+  if (Number.isNaN(num)) return 'Chưa cấu hình';
+  return `${new Intl.NumberFormat('vi-VN', {
     maximumFractionDigits: 0,
-  }).format(amount);
+  }).format(Math.round(num))} VNĐ`;
 };
 
 export const getCurrentMonthStr = () => {

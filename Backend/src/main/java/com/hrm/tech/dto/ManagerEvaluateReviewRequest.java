@@ -73,6 +73,9 @@ public class ManagerEvaluateReviewRequest {
     @Size(max = 500, message = "Giải trình ngoại lệ tối đa 500 ký tự")
     private String exceptionJustification;
 
+    // Dành riêng cho phiếu đánh giá loại PROBATION (true = Đạt thử việc, false = Không đạt thử việc)
+    private Boolean probationPassed;
+
     // B-10: Chỉ Giám đốc hoặc CEO mới được truyền lương đề xuất tham chiếu
     @DecimalMin(value = "0.0", message = "Lương cơ bản đề xuất không được âm")
     private Double recommendedNewBaseSalary;

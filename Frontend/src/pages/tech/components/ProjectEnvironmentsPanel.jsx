@@ -720,11 +720,6 @@ export default function ProjectEnvironmentsPanel({
         createPortal(
           <div
             className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-xs p-4 flex items-center justify-center overflow-y-auto"
-            onClick={(e) => {
-              if (e.target === e.currentTarget && !submittingEditEnv) {
-                setEditingEnv(null);
-              }
-            }}
           >
             <form
               role="dialog"
@@ -867,11 +862,6 @@ export default function ProjectEnvironmentsPanel({
         createPortal(
           <div
             className="fixed inset-0 z-[10000] bg-slate-900/60 backdrop-blur-xs p-4 flex items-center justify-center overflow-y-auto"
-            onClick={(e) => {
-              if (e.target === e.currentTarget && !deletingEnv) {
-                setDeleteEnvTarget(null);
-              }
-            }}
           >
             <div
               role="dialog"

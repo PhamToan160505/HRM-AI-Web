@@ -68,6 +68,16 @@ public class JobRequisition {
     @Column(columnDefinition = "TEXT")
     private String rejectionReason; // Lý do từ chối (nếu có)
 
+    @Column(name = "tech_project_id")
+    private Long techProjectId; // Liên kết tới Dự án Công nghệ gốc (nếu tạo từ Phòng Công nghệ)
+
+    @Column(name = "required_tech_skills_json", columnDefinition = "JSON")
+    private String requiredTechSkillsJson; // JSON mảng [{skillId, skillName, minLevel}]
+
+    @Column(name = "urgency_level", nullable = false, length = 20)
+    @Builder.Default
+    private String urgencyLevel = "NORMAL"; // NORMAL | HIGH | CRITICAL
+
     @CreationTimestamp
     private LocalDateTime createdAt;
 
@@ -79,4 +89,19 @@ public class JobRequisition {
 
     @Transient
     private String requesterPosition;
+
+    @Transient
+    private String techProjectCode;
+
+    @Transient
+    private String techProjectName;
+
+    @Transient
+    private boolean hasActiveCampaign;
+
+    @Transient
+    private Long activePostingId;
+
+    @Transient
+    private String activePostingStatus;
 }

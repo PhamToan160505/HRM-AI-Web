@@ -52,6 +52,9 @@ export const NotificationProvider = ({ children }) => {
         },
         (techSync) => {
           window.dispatchEvent(new CustomEvent('hrm:tech-sync', { detail: techSync }));
+        },
+        (recruitmentSync) => {
+          window.dispatchEvent(new CustomEvent('hrm:recruitment-sync', { detail: recruitmentSync }));
         }
       );
     }

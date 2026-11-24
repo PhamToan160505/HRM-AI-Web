@@ -36,4 +36,5 @@ public interface JobPostingRepository extends JpaRepository<JobPosting, Long> {
     long countByStatus(JobPostingStatus status);
     long countByStatusAndDepartmentId(JobPostingStatus status, Long departmentId);
     java.util.List<JobPosting> findByStatus(JobPostingStatus status);
+    java.util.List<JobPosting> findByJobRequisitionIdOrderByCreatedAtDesc(Long jobRequisitionId);
 }

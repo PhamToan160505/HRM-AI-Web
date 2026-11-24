@@ -365,12 +365,35 @@ export const formatHours = (hours) => {
 };
 
 export const formatCurrencyVND = (amount) => {
-  if (amount === null || amount === undefined) return 'Chưa cấu hình';
-  return new Intl.NumberFormat('vi-VN', {
-    style: 'currency',
-    currency: 'VND',
+  if (amount === null || amount === undefined || amount === '') return 'Chưa cấu hình';
+  const num = Number(amount);
+  if (Number.isNaN(num)) return 'Chưa cấu hình';
+  return `${new Intl.NumberFormat('vi-VN', {
     maximumFractionDigits: 0,
-  }).format(amount);
+  }).format(Math.round(num))} VNĐ`;
+};
+
+export const formatVndInput = (value) => {
+  if (value === null || value === undefined || value === '') return '';
+  if (typeof value === 'number') {
+    if (Number.isNaN(value)) return '';
+    return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(Math.max(0, Math.round(value)));
+  }
+  const digits = String(value).replace(/\D/g, '');
+  if (!digits) return '';
+  const normalized = digits.replace(/^0+(?=\d)/, '');
+  return normalized.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+};
+
+export const parseVndInput = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'number') {
+    return Number.isNaN(value) ? null : Math.max(0, Math.round(value));
+  }
+  const digits = String(value).replace(/\D/g, '');
+  if (!digits) return null;
+  const num = Number(digits);
+  return Number.isNaN(num) ? null : num;
 };
 
 export const getCurrentMonthStr = () => {

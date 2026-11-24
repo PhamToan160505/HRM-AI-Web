@@ -46,6 +46,23 @@ public class RecruitmentTransitionService {
     private final JobPostingRepository jobPostingRepository;
     private final ApplicationTransitionLogRepository transitionLogRepository;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hrm.notification.service.NotificationService notificationService;
+
+    private void broadcastRecruitmentUpdate(String entityType, Long entityId, String action, String toStatus) {
+        if (notificationService == null) return;
+        try {
+            notificationService.broadcastTopic("/topic/recruitment-updates", java.util.Map.of(
+                    "entityType", entityType,
+                    "entityId", entityId != null ? entityId : 0L,
+                    "action", action != null ? action : "UPDATED",
+                    "toStatus", toStatus != null ? toStatus : "",
+                    "timestamp", System.currentTimeMillis()
+            ));
+        } catch (Exception ignored) {
+        }
+    }
+
     @Transactional
     public Application transitionApplication(
             Application application,
@@ -66,6 +83,7 @@ public class RecruitmentTransitionService {
         Application saved = applicationRepository.save(application);
         appendLog(RecruitmentEntityType.APPLICATION, saved.getId(), actorId, actorRole, action,
                 from.name(), to.name(), comment, requestId, key);
+        broadcastRecruitmentUpdate("APPLICATION", saved.getId(), action.name(), to.name());
         return saved;
     }
 
@@ -89,6 +107,7 @@ public class RecruitmentTransitionService {
         JobRequisition saved = jobRequisitionRepository.save(requisition);
         appendLog(RecruitmentEntityType.JOB_REQUISITION, saved.getId(), actorId, actorRole, action,
                 from.name(), to.name(), comment, requestId, key);
+        broadcastRecruitmentUpdate("JOB_REQUISITION", saved.getId(), action.name(), to.name());
         return saved;
     }
 
@@ -117,6 +136,7 @@ public class RecruitmentTransitionService {
         JobPosting saved = jobPostingRepository.save(posting);
         appendLog(RecruitmentEntityType.JOB_POSTING, saved.getId(), actorId, actorRole, action,
                 from.name(), to.name(), comment, requestId, key);
+        broadcastRecruitmentUpdate("JOB_POSTING", saved.getId(), action.name(), to.name());
         return saved;
     }
 

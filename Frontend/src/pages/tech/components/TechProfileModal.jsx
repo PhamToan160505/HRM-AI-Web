@@ -36,16 +36,8 @@ export default function TechProfileModal({
     if (!profile) return;
     document.body.style.overflow = 'hidden';
 
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && !hasTopModalOpen) {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown, true);
 
     return () => {
-      window.removeEventListener('keydown', handleKeyDown, true);
       setTimeout(() => {
         const remaining = document.querySelectorAll('[data-tech-modal="true"]');
         if (remaining.length === 0) {
@@ -64,9 +56,6 @@ export default function TechProfileModal({
     <div
       data-tech-modal="true"
       className={`fixed inset-0 ${zIndexClass} overflow-y-auto bg-slate-900/55 backdrop-blur-xs p-4 sm:p-6 flex items-center justify-center`}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
     >
       <motion.div
         role="dialog"

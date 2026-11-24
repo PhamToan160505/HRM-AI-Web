@@ -214,6 +214,16 @@ public class JobPostingService {
                     org.springframework.http.HttpStatus.CONFLICT,
                     "Chỉ có thể tạo chiến dịch từ yêu cầu tuyển dụng đã được duyệt");
         }
+        boolean alreadyHasActiveCampaign = jobPostingRepository
+                .findByJobRequisitionIdOrderByCreatedAtDesc(requisition.getId())
+                .stream()
+                .anyMatch(jp -> jp.getStatus() != JobPostingStatus.CANCELLED
+                        && jp.getStatus() != JobPostingStatus.EXPIRED);
+        if (alreadyHasActiveCampaign) {
+            throw new com.hrm.exception.AppException(
+                    org.springframework.http.HttpStatus.CONFLICT,
+                    "Yêu cầu tuyển dụng này đã có chiến dịch đang hoạt động; không thể tạo trùng chiến dịch");
+        }
         validateRequisitionDepartment(requisition, request.departmentId());
 
         String slug = toSlug(request.title()) + "-" + System.currentTimeMillis();

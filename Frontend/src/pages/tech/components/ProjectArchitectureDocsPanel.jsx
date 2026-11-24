@@ -1065,11 +1065,6 @@ export default function ProjectArchitectureDocsPanel({
         createPortal(
           <div
             className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in"
-            onClick={(e) => {
-              if (e.target === e.currentTarget && !deletingDoc) {
-                setDeleteDocTarget(null);
-              }
-            }}
           >
             <div
               role="dialog"

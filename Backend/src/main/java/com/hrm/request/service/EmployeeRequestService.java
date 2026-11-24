@@ -302,6 +302,29 @@ public class EmployeeRequestService {
                 resolvePersonalRequestPath(request.getUser().getRole())
         );
 
+        // Module 5a: Cảnh báo tác động dự án khi duyệt đơn nghỉ dài ngày (>= 3 ngày) cho kỹ sư Công nghệ
+        if (request.getRequestType() != RequestType.OVERTIME
+                && request.getRequestType() != RequestType.SPECIAL_WFH_LEAVE
+                && request.getStartDate() != null && request.getEndDate() != null) {
+            long leaveDays = java.time.temporal.ChronoUnit.DAYS.between(request.getStartDate(), request.getEndDate()) + 1;
+            if (leaveDays >= 3 && eventPublisher != null) {
+                try {
+                    eventPublisher.publishEvent(new com.hrm.techhr.event.TechHrDomainEvents.LongLeaveApprovedEvent(
+                            saved.getId(),
+                            request.getUser().getId(),
+                            request.getUser().getHoTen(),
+                            request.getUser().getDepartmentId(),
+                            request.getRequestType().name(),
+                            request.getStartDate(),
+                            request.getEndDate(),
+                            leaveDays,
+                            managerId
+                    ));
+                } catch (Exception ignored) {
+                }
+            }
+        }
+
         return mapToDto(saved);
     }
 

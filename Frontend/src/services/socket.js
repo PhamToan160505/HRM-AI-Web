@@ -6,10 +6,11 @@ let currentToken = null;
 let messageHandlers = {
   onNotification: null,
   onTechSync: null,
+  onRecruitmentSync: null,
 };
 
-export function connectSocket(token, onNotification, onTechSync) {
-  messageHandlers = { onNotification, onTechSync };
+export function connectSocket(token, onNotification, onTechSync, onRecruitmentSync) {
+  messageHandlers = { onNotification, onTechSync, onRecruitmentSync };
 
   if (stompClient?.active && currentToken === token) {
     return stompClient;
@@ -49,6 +50,14 @@ export function connectSocket(token, onNotification, onTechSync) {
           console.error('Error parsing tech sync payload:', err);
         }
       });
+
+      client.subscribe(`/topic/recruitment-updates`, (message) => {
+        try {
+          messageHandlers.onRecruitmentSync?.(JSON.parse(message.body));
+        } catch (err) {
+          console.error('Error parsing recruitment sync payload:', err);
+        }
+      });
     },
     onStompError: (frame) => {
       console.error('Broker reported error: ' + frame.headers['message']);
@@ -65,7 +74,7 @@ export function disconnectSocket() {
   const client = stompClient;
   stompClient = null;
   currentToken = null;
-  messageHandlers = { onNotification: null, onTechSync: null };
+  messageHandlers = { onNotification: null, onTechSync: null, onRecruitmentSync: null };
   if (client) {
     client.deactivate();
   }

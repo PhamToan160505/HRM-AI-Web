@@ -23,6 +23,7 @@ import { useToast } from '../../../components/common/Toast';
 import api from '../../../services/api';
 import { Filter, ChevronLeft, ChevronRight, History } from 'lucide-react';
 import ApprovalTimelineModal from './components/ApprovalTimelineModal';
+import useRealtimeSync from '../../../hooks/useRealtimeSync';
 
 const ROLES_MAP = {
   NHAN_VIEN: 'Nhân viên',
@@ -40,6 +41,21 @@ const STATUS_MAP = {
   REJECTED: { label: 'Từ chối', color: 'bg-red-100 text-red-800' },
   CANCELLED: { label: 'Đã hủy', color: 'bg-slate-100 text-slate-700' },
   FULFILLED: { label: 'Đã tuyển đủ', color: 'bg-indigo-100 text-indigo-800' },
+};
+
+const URGENCY_BADGE_MAP = {
+  CRITICAL: { label: 'Khẩn cấp (CRITICAL)', color: 'bg-rose-100 text-rose-800 border-rose-200' },
+  HIGH: { label: 'Ưu tiên cao (HIGH)', color: 'bg-amber-100 text-amber-800 border-amber-200' },
+};
+
+const parseTechSkills = (jsonStr) => {
+  if (!jsonStr) return [];
+  try {
+    const parsed = JSON.parse(jsonStr);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 };
 
 export default function JobRequisitionPage() {
@@ -79,6 +95,14 @@ export default function JobRequisitionPage() {
   useEffect(() => {
     fetchRequisitions();
   }, [activeTab, page, filterDept, filterRole, filterStatus]);
+
+  useRealtimeSync(
+    () => fetchRequisitions(),
+    {
+      events: ['hrm:recruitment-sync', 'hrm:tech-sync', 'hrm:notification'],
+      paused: actionModal.isOpen,
+    }
+  );
 
   const fetchRequisitions = async () => {
     setIsLoading(true);
@@ -299,12 +323,25 @@ export default function JobRequisitionPage() {
                       <div className="mt-1.5 flex items-center text-sm text-gray-600">
                         <span className="font-medium mr-1">Người gửi:</span> {req.requesterName} - <span className="italic ml-1 text-slate-500">{req.requesterPosition}</span>
                       </div>
-                      <div className="mt-2.5 flex items-center gap-4">
+                      <div className="mt-2.5 flex flex-wrap items-center gap-2.5">
                         <div className="flex items-center text-sm text-blue-700 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md">
                           <span className="font-semibold">
                             Phòng: {departments.find((department) => Number(department.id) === Number(req.departmentId))?.tenPhong || 'Chưa xác định'}
                           </span>
                         </div>
+                        {(req.techProjectCode || req.techProjectId) && (
+                          <div
+                            className="flex items-center text-xs font-bold text-indigo-800 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md"
+                            title={req.techProjectName || 'Dự án Phòng Công nghệ'}
+                          >
+                            🔗 Từ Dự án CN: {req.techProjectCode || `#${req.techProjectId}`}
+                          </div>
+                        )}
+                        {req.urgencyLevel && URGENCY_BADGE_MAP[req.urgencyLevel] && (
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-md border ${URGENCY_BADGE_MAP[req.urgencyLevel].color}`}>
+                            {URGENCY_BADGE_MAP[req.urgencyLevel].label}
+                          </span>
+                        )}
                         <div className="flex items-center text-sm text-gray-600 bg-slate-100 px-2 py-0.5 rounded-md">
                           <svg className="flex-shrink-0 mr-1.5 h-4 w-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -315,6 +352,19 @@ export default function JobRequisitionPage() {
                           <span className="font-medium mr-1">Lý do:</span> {req.reason}
                         </div>
                       </div>
+                      {parseTechSkills(req.requiredTechSkillsJson).length > 0 && (
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          <span className="text-[11px] font-semibold text-slate-500">Kỹ năng kỹ thuật chuẩn:</span>
+                          {parseTechSkills(req.requiredTechSkillsJson).map((sk, idx) => (
+                            <span
+                              key={`${req.id}-sk-${idx}`}
+                              className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200"
+                            >
+                              {sk.skillName || sk.name}{sk.minLevel ? ` (${sk.minLevel})` : ''}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <div className="mt-4 flex-shrink-0 sm:mt-0 sm:ml-5 flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 items-end sm:items-center">
                       <span className={`px-3 py-1 inline-flex text-xs leading-5 font-bold rounded-full border ${STATUS_MAP[req.status]?.color || 'bg-gray-100 text-gray-800'}`}>
@@ -368,15 +418,29 @@ export default function JobRequisitionPage() {
                           </button>
                         )}
                         {req.status === 'APPROVED' && user?.role === 'truong_phong' && user?.tenPhong === 'Nhân sự' && (
-                          <button
-                            onClick={() => navigate('../campaigns/new', { state: { reqData: req } })}
-                            className="text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-md text-sm font-medium shadow-sm transition-colors flex items-center gap-1"
-                          >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                            </svg>
-                            Tạo chiến dịch
-                          </button>
+                          req.hasActiveCampaign ? (
+                            <button
+                              type="button"
+                              onClick={() => navigate('../campaigns')}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors cursor-pointer"
+                              title="Chiến dịch tuyển dụng đã được tạo — bấm để xem danh sách chiến dịch"
+                            >
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              Đã tạo chiến dịch
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => navigate('../campaigns/new', { state: { reqData: req } })}
+                              className="text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-md text-sm font-medium shadow-sm transition-colors flex items-center gap-1 cursor-pointer"
+                            >
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                              </svg>
+                              Tạo chiến dịch
+                            </button>
+                          )
                         )}
                       </div>
                     </div>

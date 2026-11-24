@@ -73,6 +73,7 @@ public class TechPerformanceReviewResponse {
     private String calibrationReason;
     private Double finalScore;
     private TechRatingGrade finalGrade;
+    private Boolean probationPassed;
 
     // Đề xuất Thăng chức & Đãi ngộ (Tuân thủ B-10 nghiêm ngặt!)
     private Boolean recommendPromotion;

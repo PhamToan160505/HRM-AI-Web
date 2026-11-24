@@ -13,6 +13,7 @@ import {
   X,
   FileSpreadsheet,
   Users2,
+  Briefcase,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -62,6 +63,7 @@ export default function SkillsMatrixTab({
   onInspectEngineer,
   onOpenProjectSelect,
   onVerifySkill,
+  onRequestHiring,
   verifyingId = null,
   focusUserRequest = null,
   onFocusHandled,
@@ -585,15 +587,42 @@ export default function SkillsMatrixTab({
         {/* Match Results */}
         {matchResults && (
           <div className="pt-4 border-t border-white/10 space-y-3">
-            <div className="flex items-center justify-between text-xs text-blue-100/80 tabular">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-blue-100/80 tabular">
               <span>
                 Phát hiện <strong className="text-white">{matchResults.length} kỹ sư</strong> đáp ứng cấu hình công nghệ đã chọn:
               </span>
+              {!isReadOnly && onRequestHiring && selectedSkillIds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const mappedSkills = selectedSkillIds.map((sid) => {
+                      const sk = availableSkills.find((s) => String(s.id) === String(sid));
+                      return {
+                        skillId: Number(sid),
+                        skillName: sk?.skillName || sk?.name || `Skill #${sid}`,
+                        minLevel: minLevel || 'MIDDLE',
+                      };
+                    });
+                    const skillNamesStr = mappedSkills.map((s) => `${s.skillName} (${s.minLevel})`).join(', ');
+                    const reason =
+                      matchResults.length === 0
+                        ? `Thiếu hụt năng lực nội bộ (Skill Gap): 0 kỹ sư đáp ứng tổ hợp ${skillNamesStr}. Đề xuất Phòng Nhân sự mở tuyển mới.`
+                        : `Cần bổ sung thêm nhân lực đáp ứng tổ hợp ${skillNamesStr} (hiện nội bộ chỉ có ${matchResults.length} kỹ sư khớp).`;
+                    onRequestHiring(mappedSkills, reason);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white text-xs font-bold shadow-xs transition cursor-pointer"
+                >
+                  <Briefcase size={13} />
+                  <span>Đề xuất Tuyển dụng sang HR</span>
+                </button>
+              )}
             </div>
 
             {matchResults.length === 0 ? (
-              <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-center text-xs text-blue-100/75">
-                Hiện chưa có kỹ sư nào đáp ứng đầy đủ tổ hợp tiêu chí này. Hãy thử hạ cấp bậc hoặc mở rộng ra toàn phòng.
+              <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-center space-y-2.5 text-xs text-blue-100/80">
+                <p>
+                  Hiện chưa có kỹ sư nào đáp ứng đầy đủ tổ hợp tiêu chí này. Bạn có thể hạ cấp bậc, mở rộng ra toàn phòng hoặc gửi thẳng yêu cầu tuyển dụng cho Phòng Nhân sự.
+                </p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">

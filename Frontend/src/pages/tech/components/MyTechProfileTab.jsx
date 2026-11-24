@@ -88,16 +88,8 @@ export default function MyTechProfileTab({ externalProfile = null, onRefreshProf
     if (!deleteConfirm.isOpen) return;
     document.body.style.overflow = 'hidden';
 
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && !deleting) {
-        e.stopPropagation();
-        setDeleteConfirm((prev) => ({ ...prev, isOpen: false }));
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown, true);
 
     return () => {
-      window.removeEventListener('keydown', handleKeyDown, true);
       setTimeout(() => {
         const remaining = document.querySelectorAll('[data-tech-modal="true"]');
         if (remaining.length === 0) {
@@ -610,11 +602,6 @@ export default function MyTechProfileTab({ externalProfile = null, onRefreshProf
           <div
             data-tech-modal="true"
             className="fixed inset-0 z-[10000] flex items-center justify-center p-4"
-            onClick={(e) => {
-              if (e.target === e.currentTarget && !deleting) {
-                setDeleteConfirm((prev) => ({ ...prev, isOpen: false }));
-              }
-            }}
           >
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs" />
 

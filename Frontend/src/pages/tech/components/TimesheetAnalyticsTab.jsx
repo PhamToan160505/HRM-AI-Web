@@ -211,15 +211,7 @@ export default function TimesheetAnalyticsTab({
   useEffect(() => {
     if (!rejectModal.isOpen) return;
     document.body.style.overflow = 'hidden';
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        closeRejectModal();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown, true);
     return () => {
-      window.removeEventListener('keydown', handleKeyDown, true);
       setTimeout(() => {
         const remaining = document.querySelectorAll('[data-tech-modal="true"]');
         if (remaining.length === 0) {
@@ -1266,9 +1258,6 @@ export default function TimesheetAnalyticsTab({
           <div
             data-tech-modal="true"
             className="fixed inset-0 z-[9995] bg-slate-900/60 backdrop-blur-xs p-4 flex items-center justify-center"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) closeRejectModal();
-            }}
           >
             <motion.div
               role="dialog"

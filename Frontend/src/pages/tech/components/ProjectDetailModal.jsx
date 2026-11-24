@@ -114,29 +114,6 @@ export default function ProjectDetailModal({
 
   const effectiveTopModalOpen = hasTopModalOpen || isMilestoneFormOpen || !!deleteMilestoneTarget;
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && !effectiveTopModalOpen) {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, effectiveTopModalOpen, onClose]);
-
-  useEffect(() => {
-    if (!deleteMilestoneTarget) return;
-    const handleDeleteEsc = (e) => {
-      if (e.key === 'Escape' && !deletingMilestone) {
-        e.stopPropagation();
-        setDeleteMilestoneTarget(null);
-      }
-    };
-    window.addEventListener('keydown', handleDeleteEsc, true);
-    return () => window.removeEventListener('keydown', handleDeleteEsc, true);
-  }, [deleteMilestoneTarget, deletingMilestone]);
-
   const refreshAfterMilestoneChange = async () => {
     if (!projectData?.id) return;
     await fetchFreshDetail(projectData.id);
@@ -224,9 +201,6 @@ export default function ProjectDetailModal({
         <div
           data-tech-modal="true"
           className="fixed inset-0 z-[9980] bg-slate-900/55 backdrop-blur-xs p-4 sm:p-6 flex items-center justify-center overflow-y-auto"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) onClose();
-          }}
         >
       <motion.div
         role="dialog"
@@ -979,11 +953,6 @@ export default function ProjectDetailModal({
           <div
             data-tech-modal="true"
             className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
-            onClick={(e) => {
-              if (e.target === e.currentTarget && !deletingMilestone) {
-                setDeleteMilestoneTarget(null);
-              }
-            }}
           >
             <motion.div
               role="dialog"

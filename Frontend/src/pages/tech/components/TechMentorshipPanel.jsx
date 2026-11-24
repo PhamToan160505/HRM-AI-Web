@@ -717,9 +717,6 @@ export default function TechMentorshipPanel({
         createPortal(
           <div
             className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-xs p-4 flex items-center justify-center overflow-y-auto"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) setIsMatcherOpen(false);
-            }}
           >
             <div
               role="dialog"
@@ -873,11 +870,6 @@ export default function TechMentorshipPanel({
         createPortal(
           <div
             className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-xs p-4 flex items-center justify-center overflow-y-auto"
-            onClick={(e) => {
-              if (e.target === e.currentTarget && !submittingProgram) {
-                setIsCreateOpen(false);
-              }
-            }}
           >
             <form
               role="dialog"
@@ -1224,11 +1216,6 @@ export default function TechMentorshipPanel({
         createPortal(
           <div
             className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-xs p-4 flex items-center justify-center overflow-y-auto"
-            onClick={(e) => {
-              if (e.target === e.currentTarget && !submittingComplete) {
-                setCompletingProg(null);
-              }
-            }}
           >
             <form
               role="dialog"
@@ -1329,9 +1316,6 @@ export default function TechMentorshipPanel({
         createPortal(
           <div
             className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-xs p-4 flex items-center justify-center overflow-y-auto"
-            onClick={(e) => {
-              if (e.target === e.currentTarget && !submittingEdit) setEditingProg(null);
-            }}
           >
             <form
               role="dialog"
@@ -1475,9 +1459,6 @@ export default function TechMentorshipPanel({
         createPortal(
           <div
             className="fixed inset-0 z-[10000] bg-slate-900/60 backdrop-blur-xs p-4 flex items-center justify-center overflow-y-auto"
-            onClick={(e) => {
-              if (e.target === e.currentTarget && !submittingDelete) setDeletingProg(null);
-            }}
           >
             <div
               role="alertdialog"

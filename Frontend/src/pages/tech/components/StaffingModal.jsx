@@ -83,22 +83,6 @@ export default function StaffingModal({
     };
   }, [isOpen, initialUserId, initialAllocation]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        if (removeConfirm.isOpen) {
-          if (!removing) setRemoveConfirm({ isOpen: false, memberId: null, memberName: '' });
-        } else {
-          handleClose();
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown, true);
-    return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [isOpen, removeConfirm.isOpen, removing, handleClose]);
-
   const fetchCandidates = async () => {
     try {
       setLoadingCandidates(true);
@@ -207,9 +191,6 @@ export default function StaffingModal({
     <div
       data-tech-modal="true"
       className="fixed inset-0 z-[9995] overflow-y-auto bg-slate-900/55 backdrop-blur-xs p-4 sm:p-6 flex items-center justify-center"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) handleClose();
-      }}
     >
       <motion.div
         role="dialog"
@@ -580,7 +561,6 @@ export default function StaffingModal({
           <div data-tech-modal="true" className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
             <div
               className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs"
-              onClick={() => !removing && setRemoveConfirm({ isOpen: false, memberId: null, memberName: '' })}
             />
             <motion.div
               role="dialog"

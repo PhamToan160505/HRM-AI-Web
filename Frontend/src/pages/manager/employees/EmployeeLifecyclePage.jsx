@@ -1,7 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { CalendarCheck, Check, CircleAlert, Loader2, RefreshCw, UserRoundCheck, X } from 'lucide-react';
+import { CalendarCheck, Check, CircleAlert, Loader2, RefreshCw, ShieldAlert, UserRoundCheck, X } from 'lucide-react';
 import api from '../../../services/api';
 import { useNotification } from '../../../context/NotificationContext';
+import CrossDeptHandoffPanel from '../../tech/components/CrossDeptHandoffPanel';
+import TechOffboardingCheckModal from '../../tech/components/TechOffboardingCheckModal';
+import useRealtimeSync from '../../../hooks/useRealtimeSync';
 
 const STATUS = {
   PRE_BOARDING: { label: 'Chờ nhận việc', className: 'bg-amber-50 text-amber-700 border-amber-200' },
@@ -30,7 +33,18 @@ const EVENT_TYPE_MAP = {
   ONBOARDING_CANCELLED: 'Hủy nhận việc',
   CONTRACT_ACTIVATED: 'Hợp đồng đã kích hoạt',
   PROVISIONED: 'Cấp quyền tài khoản',
-  ACCOUNT_PROVISIONED: 'Đã cấp quyền tài khoản'
+  ACCOUNT_PROVISIONED: 'Đã cấp quyền tài khoản',
+  PROBATION_PASSED: 'Đạt đánh giá thử việc (từ Phòng Công nghệ)',
+  PROBATION_FAILED: 'Không đạt thử việc (từ Phòng Công nghệ)',
+  CAREER_PROMOTION_SYNCED: 'Đồng bộ Thăng chức / Điều chỉnh C&B'
+};
+
+const PROBATION_STATUS_MAP = {
+  PLANNED: { label: 'Chưa bắt đầu thử việc', className: 'bg-slate-100 text-slate-600 border-slate-200' },
+  IN_PROGRESS: { label: 'Đang thử việc', className: 'bg-blue-50 text-blue-700 border-blue-200' },
+  PASSED: { label: 'Đạt thử việc (Chờ HĐ chính thức)', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  FAILED: { label: 'Không đạt thử việc', className: 'bg-rose-50 text-rose-700 border-rose-200' },
+  NOT_APPLICABLE: { label: 'Không áp dụng', className: 'bg-slate-100 text-slate-500 border-slate-200' },
 };
 
 const formatEventType = (type) => EVENT_TYPE_MAP[type] || type;
@@ -55,9 +69,14 @@ export default function EmployeeLifecyclePage() {
   const [detail, setDetail] = useState(null);
   const [action, setAction] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [offboardingTarget, setOffboardingTarget] = useState(null);
   const [form, setForm] = useState({ joinDate: new Date().toISOString().slice(0, 10), checklistOverrideReason: '', earlyJoinReason: '', reasonCode: '' });
 
   const loadEmployees = useCallback(async () => {
+    if (filter === 'CROSS_DEPT') {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const response = await api.get('/api/lifecycle/employees', { params: filter ? { status: filter } : {} });
@@ -71,6 +90,19 @@ export default function EmployeeLifecyclePage() {
 
   useEffect(() => { notificationRef.current = showNotification; }, [showNotification]);
   useEffect(() => { loadEmployees(); }, [loadEmployees]);
+
+  useRealtimeSync(
+    () => {
+      loadEmployees();
+      if (detail?.employee?.id) {
+        openDetail(detail.employee.id);
+      }
+    },
+    {
+      events: ['hrm:recruitment-sync', 'hrm:tech-sync', 'hrm:notification'],
+      paused: Boolean(action) || submitting || Boolean(offboardingTarget),
+    }
+  );
 
   const openDetail = async employeeId => {
     try {
@@ -126,11 +158,18 @@ export default function EmployeeLifecyclePage() {
       </div>
 
       <div className="flex gap-2 overflow-x-auto border-b border-slate-200">
-        {[['PRE_BOARDING', 'Chờ nhận việc'], ['EMPLOYED', 'Đã nhận việc'], ['ONBOARD_CANCELLED', 'Đã hủy'], ['', 'Tất cả']].map(([value, label]) => (
+        {[['PRE_BOARDING', 'Chờ nhận việc'], ['EMPLOYED', 'Đã nhận việc'], ['ONBOARD_CANCELLED', 'Đã hủy'], ['', 'Tất cả'], ['CROSS_DEPT', 'Phối hợp Công nghệ ↔ HR']].map(([value, label]) => (
           <button key={label} onClick={() => setFilter(value)} className={`whitespace-nowrap border-b-2 px-4 py-3 text-sm font-semibold ${filter === value ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>{label}</button>
         ))}
       </div>
 
+      {filter === 'CROSS_DEPT' ? (
+        <CrossDeptHandoffPanel
+          isModal={false}
+          direction="ALL"
+          title="Tác vụ Phối hợp Liên phòng (Phòng Công nghệ ↔ Phòng Nhân sự)"
+        />
+      ) : (
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         {loading ? (
           <div className="grid min-h-56 place-items-center text-slate-500"><Loader2 className="animate-spin text-blue-600" /></div>
@@ -160,6 +199,7 @@ export default function EmployeeLifecyclePage() {
           </div>
         )}
       </div>
+      )}
 
       {detail && (
         <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40 backdrop-blur-sm" onClick={() => setDetail(null)}>
@@ -168,19 +208,91 @@ export default function EmployeeLifecyclePage() {
 
             <div className="mt-7 grid grid-cols-2 gap-3"><div className="rounded-xl bg-blue-50 p-4"><p className="text-xs font-semibold text-blue-600">Trạng thái nhân sự</p><p className="mt-1 font-bold text-blue-950">{STATUS[detail.employee.status]?.label || detail.employee.status}</p></div><div className={`rounded-xl border p-4 ${accountMeta(detail.employee.accountStatus).className}`}><p className="text-xs font-semibold">Cấp quyền tài khoản</p><p className="mt-1 font-bold">{accountMeta(detail.employee.accountStatus).label}</p></div></div>
 
+            {detail.employee.probationStatus && PROBATION_STATUS_MAP[detail.employee.probationStatus] && (
+              <div className={`mt-3 rounded-xl border p-3.5 flex items-center justify-between gap-2 ${PROBATION_STATUS_MAP[detail.employee.probationStatus].className}`}>
+                <span className="text-xs font-semibold">Trạng thái thử việc (Đồng bộ Tech ↔ HR)</span>
+                <span className="text-xs font-bold">{PROBATION_STATUS_MAP[detail.employee.probationStatus].label}</span>
+              </div>
+            )}
+
             {detail.employee.status === 'EMPLOYED' && detail.employee.accountStatus !== 'PROVISIONED' && (
               <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
                 Nhân viên đã được xác nhận nhận việc. Việc cấp quyền đang xử lý độc lập và không làm thay đổi trạng thái <strong>Đang làm việc</strong>.
               </div>
             )}
 
-            <section className="mt-8"><h3 className="font-bold text-slate-900">Danh mục chuẩn bị nhận việc (Pre-boarding)</h3><div className="mt-3 divide-y divide-slate-100 rounded-xl border border-slate-200">{detail.checklist.map(item => <div key={item.id} className="flex items-center gap-3 p-4"><div className={`grid size-8 shrink-0 place-items-center rounded-full ${item.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>{item.status === 'COMPLETED' ? <Check size={17} /> : <CalendarCheck size={17} />}</div><div className="min-w-0 flex-1"><p className="text-sm font-semibold text-slate-800">{item.label}</p><p className="mt-0.5 text-xs text-slate-500">Hạn {formatDate(item.dueDate)}</p></div>{detail.employee.status === 'PRE_BOARDING' && item.status === 'PENDING' && <button onClick={() => completeItem(item.id)} className="rounded-lg bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100">Hoàn tất</button>}</div>)}</div></section>
+            <section className="mt-8">
+              <h3 className="font-bold text-slate-900">Danh mục chuẩn bị nhận việc (Pre-boarding)</h3>
+              <div className="mt-3 divide-y divide-slate-100 rounded-xl border border-slate-200">
+                {detail.checklist.map(item => {
+                  const isTechItem = String(item.code || '').toUpperCase().startsWith('TECH_');
+                  return (
+                    <div key={item.id} className="flex items-center gap-3 p-4">
+                      <div className={`grid size-8 shrink-0 place-items-center rounded-full ${item.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
+                        {item.status === 'COMPLETED' ? <Check size={17} /> : <CalendarCheck size={17} />}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-slate-800">{item.label}</p>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          Hạn {formatDate(item.dueDate)}
+                          {isTechItem && <span className="ml-2 font-semibold text-indigo-600">· Đồng bộ từ Phòng Công nghệ</span>}
+                        </p>
+                      </div>
+                      {isTechItem ? (
+                        item.status === 'COMPLETED' ? (
+                          <span className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                            Phòng CN đã hoàn tất
+                          </span>
+                        ) : (
+                          <span
+                            title="Đầu mục này do Trưởng phòng / Giám đốc Công nghệ thực hiện và tự động đồng bộ trạng thái về HR"
+                            className="shrink-0 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11px] font-semibold text-indigo-700"
+                          >
+                            Chờ Phòng Công nghệ xử lý
+                          </span>
+                        )
+                      ) : (
+                        detail.employee.status === 'PRE_BOARDING' && item.status === 'PENDING' && (
+                          <button
+                            onClick={() => completeItem(item.id)}
+                            className="shrink-0 rounded-lg bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100 cursor-pointer"
+                          >
+                            Hoàn tất
+                          </button>
+                        )
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
 
             <section className="mt-8"><h3 className="font-bold text-slate-900">Dòng thời gian (Timeline)</h3><div className="mt-3 space-y-4 border-l-2 border-blue-100 pl-5">{detail.events.map(event => <div key={event.id}><p className="text-sm font-semibold text-slate-800">{formatEventType(event.eventType)}</p><p className="mt-0.5 text-sm text-slate-600">{formatEventSummary(event.summary)}</p><p className="mt-1 text-xs text-slate-400">{new Date(event.eventDate).toLocaleString('vi-VN')}</p></div>)}</div></section>
 
             {detail.employee.status === 'PRE_BOARDING' && <div className="mt-9 flex gap-3 border-t border-slate-200 pt-6"><button onClick={() => setAction('CANCEL')} className="flex-1 rounded-xl border border-rose-200 px-4 py-3 text-sm font-semibold text-rose-700 hover:bg-rose-50">Hủy nhận việc</button><button onClick={() => setAction('JOIN')} className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700">Xác nhận đã đi làm</button></div>}
+
+            {detail.employee.status === 'EMPLOYED' && (
+              <div className="mt-8 border-t border-slate-200 pt-5">
+                <button
+                  type="button"
+                  onClick={() => setOffboardingTarget(detail.employee)}
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 px-4 py-3 text-sm font-bold text-amber-900 transition cursor-pointer"
+                >
+                  <ShieldAlert size={17} />
+                  <span>Kiểm tra Bàn giao Kỹ thuật (Trước khi Nghỉ việc / Điều chuyển)</span>
+                </button>
+              </div>
+            )}
           </aside>
         </div>
+      )}
+
+      {offboardingTarget && (
+        <TechOffboardingCheckModal
+          lifecycleEmployeeId={offboardingTarget.id}
+          employeeName={offboardingTarget.fullName}
+          onClose={() => setOffboardingTarget(null)}
+        />
       )}
 
       {action && (

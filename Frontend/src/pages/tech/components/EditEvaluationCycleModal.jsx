@@ -61,16 +61,8 @@ export default function EditEvaluationCycleModal({
     if (!isOpen) return;
     document.body.style.overflow = 'hidden';
 
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && !submitting) {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown, true);
 
     return () => {
-      window.removeEventListener('keydown', handleKeyDown, true);
       setTimeout(() => {
         const remaining = document.querySelectorAll('[data-tech-modal="true"]');
         if (remaining.length === 0) {
@@ -151,9 +143,6 @@ export default function EditEvaluationCycleModal({
     <div
       data-tech-modal="true"
       className="fixed inset-0 z-[9995] bg-slate-900/60 backdrop-blur-xs p-4 sm:p-6 flex items-center justify-center overflow-y-auto"
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !submitting) onClose();
-      }}
     >
       <motion.div
         role="dialog"

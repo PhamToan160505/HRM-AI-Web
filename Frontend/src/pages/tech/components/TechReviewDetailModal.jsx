@@ -29,6 +29,8 @@ import {
   formatDateVN,
   formatDateTimeVN,
   formatCurrencyVND,
+  formatVndInput,
+  parseVndInput,
 } from '../techHelpers';
 
 function extractRoadmapFromAiSummary(text) {
@@ -91,6 +93,7 @@ export default function TechReviewDetailModal({
   const [exceptionJustification, setExceptionJustification] = useState('');
   const [recommendedNewBaseSalary, setRecommendedNewBaseSalary] = useState('');
   const [recommendedNewAllowance, setRecommendedNewAllowance] = useState('');
+  const [probationPassed, setProbationPassed] = useState(true);
 
   // Final decision (Director / CEO) states
   const [approveCompensation, setApproveCompensation] = useState(true);
@@ -135,25 +138,30 @@ export default function TechReviewDetailModal({
     setExceptionJustification('');
     setRecommendedNewBaseSalary(
       r.recommendedNewBaseSalary !== null && r.recommendedNewBaseSalary !== undefined
-        ? String(r.recommendedNewBaseSalary)
+        ? formatVndInput(Number(r.recommendedNewBaseSalary))
         : ''
     );
     setRecommendedNewAllowance(
       r.recommendedNewAllowance !== null && r.recommendedNewAllowance !== undefined
-        ? String(r.recommendedNewAllowance)
+        ? formatVndInput(Number(r.recommendedNewAllowance))
         : ''
+    );
+    setProbationPassed(
+      r.probationPassed !== null && r.probationPassed !== undefined
+        ? Boolean(r.probationPassed)
+        : Number(r.finalScore ?? 70) >= 68
     );
 
     setApproveCompensation(r.compensationStatus !== 'REJECTED');
     setOverrideTitle(r.recommendedTitle || '');
     setCeoNewBaseSalary(
       r.recommendedNewBaseSalary !== null && r.recommendedNewBaseSalary !== undefined
-        ? String(r.recommendedNewBaseSalary)
+        ? formatVndInput(Number(r.recommendedNewBaseSalary))
         : ''
     );
     setCeoNewAllowance(
       r.recommendedNewAllowance !== null && r.recommendedNewAllowance !== undefined
-        ? String(r.recommendedNewAllowance)
+        ? formatVndInput(Number(r.recommendedNewAllowance))
         : ''
     );
     setCompensationNote(r.compensationReason || '');
@@ -206,16 +214,8 @@ export default function TechReviewDetailModal({
     if (!isOpen) return;
     document.body.style.overflow = 'hidden';
 
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && !submitting && !hasTopModalOpen) {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown, true);
 
     return () => {
-      window.removeEventListener('keydown', handleKeyDown, true);
       setTimeout(() => {
         const remaining = document.querySelectorAll('[data-tech-modal="true"]');
         if (remaining.length === 0) {
@@ -415,12 +415,13 @@ export default function TechReviewDetailModal({
           recommendedSalaryIncreasePct !== '' ? Number(recommendedSalaryIncreasePct) : null,
         compensationReason: compensationReason.trim() || null,
         exceptionJustification: exceptionJustification.trim() || null,
+        probationPassed: review?.reviewType === 'PROBATION' ? probationPassed : null,
         // B-10 Strict Masking: Trường lương tuyệt đối CHỈ gửi nếu actor được phép xem/nhập tiền lương
-        ...(canViewSalaryMoney && recommendedNewBaseSalary !== ''
-          ? { recommendedNewBaseSalary: Number(recommendedNewBaseSalary) }
+        ...(canViewSalaryMoney && parseVndInput(recommendedNewBaseSalary) !== null
+          ? { recommendedNewBaseSalary: parseVndInput(recommendedNewBaseSalary) }
           : {}),
-        ...(canViewSalaryMoney && recommendedNewAllowance !== ''
-          ? { recommendedNewAllowance: Number(recommendedNewAllowance) }
+        ...(canViewSalaryMoney && parseVndInput(recommendedNewAllowance) !== null
+          ? { recommendedNewAllowance: parseVndInput(recommendedNewAllowance) }
           : {}),
       };
 
@@ -472,14 +473,15 @@ export default function TechReviewDetailModal({
               approveCompensation: hasPendingComp ? approveCompensation : null,
               overrideTitle: hasPendingComp && approveCompensation ? overrideTitle.trim() || null : null,
               newBaseSalary:
-                hasPendingComp && approveCompensation && isCeoOrAdmin && ceoNewBaseSalary !== ''
-                  ? Number(ceoNewBaseSalary)
+                hasPendingComp && approveCompensation && isCeoOrAdmin
+                  ? parseVndInput(ceoNewBaseSalary)
                   : null,
               newAllowance:
-                hasPendingComp && approveCompensation && isCeoOrAdmin && ceoNewAllowance !== ''
-                  ? Number(ceoNewAllowance)
+                hasPendingComp && approveCompensation && isCeoOrAdmin
+                  ? parseVndInput(ceoNewAllowance)
                   : null,
               compensationNote: compensationNote.trim() || null,
+              probationPassed: review?.reviewType === 'PROBATION' ? probationPassed : null,
             }),
       };
 
@@ -511,9 +513,6 @@ export default function TechReviewDetailModal({
     <div
       data-tech-modal="true"
       className="fixed inset-0 z-[9988] bg-slate-900/60 backdrop-blur-xs p-3 sm:p-5 flex items-center justify-center overflow-y-auto"
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !submitting) onClose();
-      }}
     >
       <motion.div
         role="dialog"
@@ -1160,25 +1159,66 @@ export default function TechReviewDetailModal({
                                   <span className="text-slate-500 block">Phụ cấp hiện tại:</span>
                                   <strong className="text-slate-900">{formatCurrencyVND(review?.currentAllowance)}</strong>
                                 </div>
+                                {!canEvaluate &&
+                                  (review?.recommendedNewBaseSalary != null || review?.recommendedNewAllowance != null) && (
+                                    <>
+                                      <div>
+                                        <span className="text-slate-500 block">
+                                          {review?.compensationStatus === 'APPROVED' ? 'Lương CB đã chốt:' : 'Lương CB đề xuất:'}
+                                        </span>
+                                        <strong className="text-emerald-700">
+                                          {formatCurrencyVND(review?.recommendedNewBaseSalary)}
+                                        </strong>
+                                      </div>
+                                      <div>
+                                        <span className="text-slate-500 block">
+                                          {review?.compensationStatus === 'APPROVED' ? 'Phụ cấp đã chốt:' : 'Phụ cấp đề xuất:'}
+                                        </span>
+                                        <strong className="text-emerald-700">
+                                          {formatCurrencyVND(review?.recommendedNewAllowance)}
+                                        </strong>
+                                      </div>
+                                    </>
+                                  )}
                               </div>
                               {canEvaluate && (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    value={recommendedNewBaseSalary}
-                                    onChange={(e) => setRecommendedNewBaseSalary(e.target.value)}
-                                    placeholder="Đề xuất Lương CB mới (VNĐ)..."
-                                    className="px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-500 tabular"
-                                  />
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    value={recommendedNewAllowance}
-                                    onChange={(e) => setRecommendedNewAllowance(e.target.value)}
-                                    placeholder="Đề xuất Phụ cấp mới (VNĐ)..."
-                                    className="px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-500 tabular"
-                                  />
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                                  <div className="space-y-1">
+                                    <label className="block text-[11px] font-semibold text-slate-600">
+                                      Đề xuất Lương CB mới (VNĐ)
+                                    </label>
+                                    <div className="relative">
+                                      <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={recommendedNewBaseSalary}
+                                        onChange={(e) => setRecommendedNewBaseSalary(formatVndInput(e.target.value))}
+                                        placeholder="VD: 35.000.000"
+                                        className="w-full pl-2.5 pr-12 py-1.5 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-blue-500 tabular-nums"
+                                      />
+                                      <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">
+                                        VNĐ
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="block text-[11px] font-semibold text-slate-600">
+                                      Đề xuất Phụ cấp mới (VNĐ)
+                                    </label>
+                                    <div className="relative">
+                                      <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={recommendedNewAllowance}
+                                        onChange={(e) => setRecommendedNewAllowance(formatVndInput(e.target.value))}
+                                        placeholder="VD: 3.000.000"
+                                        className="w-full pl-2.5 pr-12 py-1.5 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-blue-500 tabular-nums"
+                                      />
+                                      <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">
+                                        VNĐ
+                                      </span>
+                                    </div>
+                                  </div>
                                 </div>
                               )}
                             </div>
@@ -1189,6 +1229,74 @@ export default function TechReviewDetailModal({
                                 Theo nguyên tắc bảo mật B-10, số tiền lương VNĐ tuyệt đối được ẩn khỏi vai trò hiện tại; quản lý chỉ đề xuất % tăng dự kiến.
                               </span>
                             </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Kết luận Thử việc (Đồng bộ sang Phòng Nhân sự khi duyệt) */}
+                  {review?.reviewType === 'PROBATION' && (
+                    <div className="p-3.5 rounded-xl bg-blue-50/70 border border-blue-200 space-y-2">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="text-xs font-bold text-[#0F2557]">
+                          Kết luận Đánh giá Thử việc (Đồng bộ sang HR Lifecycle)
+                        </span>
+                        <span className="text-[11px] font-semibold text-blue-700 tabular">
+                          Gợi ý hệ thống: {projectedFinalScore >= 68 ? 'Đạt thử việc (≥ 68đ)' : 'Cần cân nhắc (< 68đ)'}
+                        </span>
+                      </div>
+                      {canEvaluate ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <label
+                            className={`flex items-start gap-2 p-2.5 rounded-xl border text-xs cursor-pointer transition ${
+                              probationPassed
+                                ? 'bg-emerald-50 border-emerald-400 text-emerald-900 font-bold'
+                                : 'bg-white border-slate-200 text-slate-700 hover:border-emerald-300'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="probationResultEval"
+                              checked={probationPassed === true}
+                              onChange={() => setProbationPassed(true)}
+                              className="mt-0.5 accent-emerald-600"
+                            />
+                            <span>
+                              Đạt thử việc (PASSED)
+                              <span className="block text-[10px] font-normal text-slate-500 mt-0.5">
+                                Tự động báo HR lập Hợp đồng Lao động chính thức
+                              </span>
+                            </span>
+                          </label>
+                          <label
+                            className={`flex items-start gap-2 p-2.5 rounded-xl border text-xs cursor-pointer transition ${
+                              !probationPassed
+                                ? 'bg-rose-50 border-rose-400 text-rose-900 font-bold'
+                                : 'bg-white border-slate-200 text-slate-700 hover:border-rose-300'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="probationResultEval"
+                              checked={probationPassed === false}
+                              onChange={() => setProbationPassed(false)}
+                              className="mt-0.5 accent-rose-600"
+                            />
+                            <span>
+                              Không đạt thử việc (FAILED)
+                              <span className="block text-[10px] font-normal text-slate-500 mt-0.5">
+                                Tự động báo HR xử lý kết thúc thử việc &amp; bàn giao
+                              </span>
+                            </span>
+                          </label>
+                        </div>
+                      ) : (
+                        <div className="text-xs font-bold">
+                          {review.probationPassed === false ? (
+                            <span className="text-rose-700">Kết luận: Không đạt thử việc (FAILED)</span>
+                          ) : (
+                            <span className="text-emerald-700">Kết luận: Đạt thử việc (PASSED — chuyển HR ký HĐ chính thức)</span>
                           )}
                         </div>
                       )}
@@ -1277,29 +1385,39 @@ export default function TechReviewDetailModal({
                                     </div>
                                     <div className="space-y-1">
                                       <label className="block text-[11px] font-bold text-slate-700">
-                                        Lương CB mới (VNĐ - bỏ trống tự tính theo %{review?.recommendedSalaryIncreasePct ?? 0})
+                                        Lương CB mới (VNĐ - bỏ trống tự tính theo {review?.recommendedSalaryIncreasePct ?? 0}%)
                                       </label>
-                                      <input
-                                        type="number"
-                                        min={0}
-                                        value={ceoNewBaseSalary}
-                                        onChange={(e) => setCeoNewBaseSalary(e.target.value)}
-                                        placeholder="VD: 35000000"
-                                        className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-500 tabular"
-                                      />
+                                      <div className="relative">
+                                        <input
+                                          type="text"
+                                          inputMode="numeric"
+                                          value={ceoNewBaseSalary}
+                                          onChange={(e) => setCeoNewBaseSalary(formatVndInput(e.target.value))}
+                                          placeholder="VD: 35.000.000"
+                                          className="w-full pl-2.5 pr-12 py-1.5 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-blue-500 tabular-nums"
+                                        />
+                                        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">
+                                          VNĐ
+                                        </span>
+                                      </div>
                                     </div>
                                     <div className="space-y-1">
                                       <label className="block text-[11px] font-bold text-slate-700">
                                         Phụ cấp mới (VNĐ - tùy chọn)
                                       </label>
-                                      <input
-                                        type="number"
-                                        min={0}
-                                        value={ceoNewAllowance}
-                                        onChange={(e) => setCeoNewAllowance(e.target.value)}
-                                        placeholder="VD: 3000000"
-                                        className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-500 tabular"
-                                      />
+                                      <div className="relative">
+                                        <input
+                                          type="text"
+                                          inputMode="numeric"
+                                          value={ceoNewAllowance}
+                                          onChange={(e) => setCeoNewAllowance(formatVndInput(e.target.value))}
+                                          placeholder="VD: 3.000.000"
+                                          className="w-full pl-2.5 pr-12 py-1.5 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-blue-500 tabular-nums"
+                                        />
+                                        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">
+                                          VNĐ
+                                        </span>
+                                      </div>
                                     </div>
                                   </div>
                                 )}
@@ -1330,6 +1448,48 @@ export default function TechReviewDetailModal({
                                 />
                               </div>
                             </div>
+
+                            {review?.reviewType === 'PROBATION' && (
+                              <div className="p-3 rounded-xl bg-white border border-blue-200 space-y-2">
+                                <p className="text-[11px] font-bold text-[#0F2557]">
+                                  Chốt Kết quả Thử việc đồng bộ sang Phòng Nhân sự
+                                </p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                                  <label
+                                    className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer ${
+                                      probationPassed
+                                        ? 'bg-emerald-50 border-emerald-400 text-emerald-900 font-bold'
+                                        : 'bg-slate-50 border-slate-200 text-slate-700'
+                                    }`}
+                                  >
+                                    <input
+                                      type="radio"
+                                      name="probationResultFinal"
+                                      checked={probationPassed === true}
+                                      onChange={() => setProbationPassed(true)}
+                                      className="accent-emerald-600"
+                                    />
+                                    <span>Đạt thử việc (PASSED → HR lập HĐ)</span>
+                                  </label>
+                                  <label
+                                    className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer ${
+                                      !probationPassed
+                                        ? 'bg-rose-50 border-rose-400 text-rose-900 font-bold'
+                                        : 'bg-slate-50 border-slate-200 text-slate-700'
+                                    }`}
+                                  >
+                                    <input
+                                      type="radio"
+                                      name="probationResultFinal"
+                                      checked={probationPassed === false}
+                                      onChange={() => setProbationPassed(false)}
+                                      className="accent-rose-600"
+                                    />
+                                    <span>Không đạt (FAILED → HR kết thúc)</span>
+                                  </label>
+                                </div>
+                              </div>
+                            )}
                           </>
                         ) : (
                           <div className="p-3 rounded-xl bg-white border border-orange-200 text-xs text-orange-800">

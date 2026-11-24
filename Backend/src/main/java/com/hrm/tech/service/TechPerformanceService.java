@@ -47,6 +47,9 @@ public class TechPerformanceService {
     private final TechSkillService techSkillService;
     private final ObjectMapper objectMapper;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
+
     @Transactional(readOnly = true)
     public List<TechEvaluationCycleResponse> getCycles(Long actorId) {
         User actor = loadActor(actorId);
@@ -831,6 +834,10 @@ public class TechPerformanceService {
         review.setCalibrationReason(normalizeText(req.getCalibrationReason()));
         review.setFinalScore(bd1(finalScore));
         review.setFinalGrade(finalGrade);
+        if (review.getReviewType() == TechReviewType.PROBATION) {
+            boolean passed = req.getProbationPassed() != null ? req.getProbationPassed() : (finalScore >= 68.0);
+            review.setProbationPassed(passed);
+        }
 
         review.setRecommendPromotion(hasCompProposal);
         review.setRecommendedTitle(normalizeText(req.getRecommendedTitle()));
@@ -870,6 +877,7 @@ public class TechPerformanceService {
         TechPerformanceReview saved = reviewRepository.save(review);
         if (saved.getStatus() == TechReviewStatus.APPROVED) {
             applyApprovedSkillPromotionsAndTimeline(saved, actorId);
+            publishProbationApprovedIfApplicable(saved, employee, actorId);
             notifyEngineerOnReviewResult(saved, actor, true, null);
         } else {
             notifyApproversOnEscalation(saved, actor, employee, hasCompProposal);
@@ -961,6 +969,12 @@ public class TechPerformanceService {
         double finalScore = computeFinalScore(telemetryTotal, qualTotal, delta);
         review.setFinalScore(bd1(finalScore));
         review.setFinalGrade(TechRatingGrade.fromScore(finalScore));
+        if (review.getReviewType() == TechReviewType.PROBATION) {
+            boolean passed = req.getProbationPassed() != null
+                    ? req.getProbationPassed()
+                    : (review.getProbationPassed() != null ? review.getProbationPassed() : finalScore >= 68.0);
+            review.setProbationPassed(passed);
+        }
         review.setRejectionReason(null);
 
         if (pendingComp) {
@@ -979,6 +993,7 @@ public class TechPerformanceService {
 
         TechPerformanceReview saved = reviewRepository.save(review);
         applyApprovedSkillPromotionsAndTimeline(saved, actorId);
+        publishProbationApprovedIfApplicable(saved, employee, actorId);
         notifyEngineerOnReviewResult(saved, actor, true, null);
         if (saved.getEvaluatorId() != null && !Objects.equals(saved.getEvaluatorId(), actorId)) {
             notifySafe(
@@ -1014,6 +1029,8 @@ public class TechPerformanceService {
         }
 
         boolean userModified = false;
+        boolean titleChanged = false;
+        String oldTitle = employee.getChucVu();
 
         // 1. Thăng chức danh -> users.chuc_vu + employee_histories (PROMOTED) + tech_career_events (TITLE_PROMOTED)
         String targetTitle = normalizeText(req.getOverrideTitle());
@@ -1021,9 +1038,9 @@ public class TechPerformanceService {
             targetTitle = normalizeText(review.getRecommendedTitle());
         }
         if (targetTitle != null && !targetTitle.equals(employee.getChucVu())) {
-            String oldTitle = employee.getChucVu();
             employee.setChucVu(targetTitle);
             userModified = true;
+            titleChanged = true;
 
             employeeHistoryService.logHistory(
                     employee.getId(),
@@ -1113,6 +1130,49 @@ public class TechPerformanceService {
                     .eventDate(LocalDateTime.now())
                     .build());
         }
+
+        // Module 4: Đồng bộ sang hồ sơ HR (employment_records, compensation_records) & tạo Handoff Task lập Phụ lục HĐ
+        if ((titleChanged || salaryChanged) && eventPublisher != null) {
+            eventPublisher.publishEvent(new com.hrm.techhr.event.TechHrDomainEvents.CareerCompensationApprovedEvent(
+                    review.getId(),
+                    employee.getId(),
+                    employee.getHoTen(),
+                    employee.getEmail(),
+                    review.getDepartmentId(),
+                    review.getPeriodLabel(),
+                    titleChanged,
+                    oldTitle,
+                    employee.getChucVu(),
+                    salaryChanged,
+                    oldBs,
+                    employee.getBaseSalary(),
+                    oldAl,
+                    employee.getAllowance(),
+                    reason,
+                    actorId
+            ));
+        }
+    }
+
+    private void publishProbationApprovedIfApplicable(TechPerformanceReview review, User employee, Long actorId) {
+        if (review.getReviewType() != TechReviewType.PROBATION || eventPublisher == null) {
+            return;
+        }
+        double score = review.getFinalScore() != null ? review.getFinalScore().doubleValue() : 0.0;
+        boolean passed = review.getProbationPassed() != null ? review.getProbationPassed() : (score >= 68.0);
+        String grade = review.getFinalGrade() != null ? review.getFinalGrade().name() : "B";
+        eventPublisher.publishEvent(new com.hrm.techhr.event.TechHrDomainEvents.ProbationReviewApprovedEvent(
+                review.getId(),
+                employee.getId(),
+                employee.getHoTen(),
+                employee.getEmail(),
+                review.getDepartmentId(),
+                score,
+                grade,
+                passed,
+                review.getManagerComment(),
+                actorId
+        ));
     }
 
     private void applyApprovedSkillPromotionsAndTimeline(TechPerformanceReview review, Long approverId) {
@@ -1366,6 +1426,7 @@ public class TechPerformanceService {
                 .calibrationReason(r.getCalibrationReason())
                 .finalScore(r.getFinalScore() != null ? r.getFinalScore().doubleValue() : null)
                 .finalGrade(r.getFinalGrade())
+                .probationPassed(r.getProbationPassed())
                 .recommendPromotion(Boolean.TRUE.equals(r.getRecommendPromotion()))
                 .recommendedTitle(r.getRecommendedTitle())
                 .recommendedSalaryIncreasePct(r.getRecommendedSalaryIncreasePct() != null

@@ -91,16 +91,8 @@ export default function MilestoneFormModal({
     if (!isOpen) return;
     document.body.style.overflow = 'hidden';
 
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        handleClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown, true);
 
     return () => {
-      window.removeEventListener('keydown', handleKeyDown, true);
       setTimeout(() => {
         const remaining = document.querySelectorAll('[data-tech-modal="true"]');
         if (remaining.length === 0) {
@@ -235,9 +227,6 @@ export default function MilestoneFormModal({
         <div
           data-tech-modal="true"
           className="fixed inset-0 z-[9995] bg-slate-900/60 backdrop-blur-xs p-4 sm:p-6 flex items-center justify-center overflow-y-auto"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) handleClose();
-          }}
         >
       <motion.div
         role="dialog"
@@ -514,9 +503,6 @@ export default function MilestoneFormModal({
         createPortal(
           <div
             className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) setQualityGateBlocked(false);
-            }}
           >
             <motion.div
               role="dialog"

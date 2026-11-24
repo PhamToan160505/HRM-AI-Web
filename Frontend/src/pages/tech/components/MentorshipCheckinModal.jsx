@@ -116,17 +116,6 @@ export default function MentorshipCheckinModal({
     fetchCheckins();
   }, [fetchCheckins]);
 
-  useEffect(() => {
-    const handleEsc = (e) => {
-      if (e.key === 'Escape') {
-        if (deletingCheckin) setDeletingCheckin(null);
-        else onClose?.();
-      }
-    };
-    window.addEventListener('keydown', handleEsc);
-    return () => window.removeEventListener('keydown', handleEsc);
-  }, [deletingCheckin, onClose]);
-
   const handleSubmitCheckin = async (e) => {
     e.preventDefault();
     if (checkinDateError) {
@@ -199,9 +188,6 @@ export default function MentorshipCheckinModal({
   return createPortal(
     <div
       className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-xs p-4 flex items-center justify-center overflow-y-auto"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose?.();
-      }}
     >
       <div
         role="dialog"
@@ -490,9 +476,6 @@ export default function MentorshipCheckinModal({
         createPortal(
           <div
             className="fixed inset-0 z-[10000] bg-slate-900/65 backdrop-blur-xs p-4 flex items-center justify-center"
-            onClick={(e) => {
-              if (e.target === e.currentTarget && !submittingDelete) setDeletingCheckin(null);
-            }}
           >
             <div
               role="dialog"

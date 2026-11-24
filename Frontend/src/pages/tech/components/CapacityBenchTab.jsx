@@ -8,6 +8,8 @@ import {
   UserPlus,
   Clock,
   X,
+  Briefcase,
+  ShieldAlert,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -21,6 +23,8 @@ import {
   Cell,
 } from 'recharts';
 import { getShortEngineerName } from '../techHelpers';
+import TechPreboardingBanner from './TechPreboardingBanner';
+import TechOffboardingCheckModal from './TechOffboardingCheckModal';
 
 function CapacityTooltip({ active, payload }) {
   if (!active || !payload || !payload.length) return null;
@@ -55,10 +59,13 @@ export default function CapacityBenchTab({
   benchUsers = [],
   onInspectEngineer,
   onQuickAssign,
+  onGoToMentorship,
+  onRequestHiring,
   isReadOnly = false,
 }) {
   const [keyword, setKeyword] = useState('');
   const [capacityFilter, setCapacityFilter] = useState(''); // '' | 'bench' | 'full' | 'overloaded'
+  const [offboardingTarget, setOffboardingTarget] = useState(null);
 
   const summary = useMemo(() => {
     const totalEngineers = benchUsers.length;
@@ -126,6 +133,13 @@ export default function CapacityBenchTab({
 
   return (
     <div className="space-y-5">
+      {/* 0. Cross-Dept Pre-boarding & Probation Engineers Banner (HR → Tech) */}
+      <TechPreboardingBanner
+        isReadOnly={isReadOnly}
+        onGoToMentorship={onGoToMentorship}
+        onAssignToProject={onQuickAssign}
+      />
+
       {/* 1. Analytics Bento Row */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Left: Bar Chart Engineer Load */}
@@ -364,6 +378,22 @@ export default function CapacityBenchTab({
                 {pill.label}
               </button>
             ))}
+
+            {!isReadOnly && onRequestHiring && (
+              <button
+                type="button"
+                onClick={() =>
+                  onRequestHiring(
+                    [],
+                    `Bổ sung nhân lực kỹ thuật do nguồn lực trống (Bench) hiện chỉ còn ${summary.fteAvailable} FTE và có ${summary.overloadedCount} kỹ sư quá tải.`
+                  )
+                }
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition cursor-pointer whitespace-nowrap ml-1"
+              >
+                <Briefcase size={13} />
+                <span>Đề xuất Tuyển dụng (HR)</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -378,13 +408,10 @@ export default function CapacityBenchTab({
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                  <th className="py-3.5 px-4">Kỹ sư</th>
-                  <th className="py-3.5 px-4">Chức vụ / Phòng ban</th>
-                  <th className="py-3.5 px-4 whitespace-nowrap">Mức độ phân bổ (% Tải)</th>
-                  <th className="py-3.5 px-4 whitespace-nowrap">Dung lượng còn trống</th>
-                  <th className="py-3.5 px-4">Dự án đang làm</th>
-                  <th className="py-3.5 px-4 text-center whitespace-nowrap">Trạng thái</th>
-                  <th className="py-3.5 px-4 text-right whitespace-nowrap">Thao tác</th>
+                  <th className="py-3.5 px-4 w-[27%] min-w-[220px]">Kỹ sư &amp; Chức vụ</th>
+                  <th className="py-3.5 px-4 w-[23%] min-w-[205px]">Công suất &amp; Trạng thái</th>
+                  <th className="py-3.5 px-4 w-[27%] min-w-[220px]">Dự án đang tham gia</th>
+                  <th className="py-3.5 px-4 w-[23%] text-right whitespace-nowrap">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
@@ -394,37 +421,46 @@ export default function CapacityBenchTab({
                   const isAvailable = (user.availableCapacity || 0) > 0;
 
                   return (
-                    <tr key={user.userId} className="hover:bg-blue-50/35 transition">
+                    <tr key={user.userId} className="hover:bg-blue-50/35 transition align-middle">
                       <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
                           <div className="w-9 h-9 rounded-xl bg-[#1E3A8A] text-white font-bold text-xs flex items-center justify-center shrink-0">
                             {user.hoTen ? user.hoTen.charAt(0).toUpperCase() : 'U'}
                           </div>
-                          <div>
-                            <p className="font-bold text-slate-900">{user.hoTen}</p>
-                            <p className="text-[11px] text-slate-400 font-mono">{user.email}</p>
+                          <div className="min-w-0">
+                            <p className="font-bold text-[13px] text-slate-900 truncate">{user.hoTen}</p>
+                            <p className="text-[11px] font-medium text-slate-600 truncate">
+                              {user.chucVu || 'Kỹ sư phần mềm'}
+                              {user.departmentName ? <span className="text-slate-400"> · {user.departmentName}</span> : null}
+                            </p>
+                            <p className="text-[11px] text-slate-400 font-mono truncate">{user.email}</p>
                           </div>
                         </div>
                       </td>
 
-                      <td className="py-3.5 px-4">
-                        <p className="font-semibold text-slate-800">{user.chucVu || 'Kỹ sư phần mềm'}</p>
-                        <p className="text-[11px] text-slate-400">{user.departmentName}</p>
-                      </td>
-
-                      <td className="py-3.5 px-4 w-48 tabular">
-                        <div className="space-y-1.5">
-                          <div className="flex justify-between text-[11px] font-bold">
+                      <td className="py-3.5 px-4 tabular">
+                        <div className="space-y-1.5 max-w-[220px]">
+                          <div className="flex items-center justify-between gap-2">
                             <span
-                              className={
+                              className={`text-xs font-extrabold ${
                                 isOverloaded ? 'text-rose-600' : isFull ? 'text-blue-700' : 'text-emerald-700'
-                              }
+                              }`}
                             >
-                              {user.totalAllocation}%
+                              {user.totalAllocation}% tải
                             </span>
-                            <span className={isOverloaded ? 'text-rose-600' : 'text-slate-400 font-medium'}>
-                              {isOverloaded ? 'Vượt ngưỡng 100%' : 'Định mức 100%'}
-                            </span>
+                            {isOverloaded ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap">
+                                <AlertTriangle size={11} className="shrink-0" /> Quá tải
+                              </span>
+                            ) : isAvailable ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+                                <CheckCircle2 size={11} className="shrink-0" /> Rảnh {user.availableCapacity}%
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap">
+                                <CheckCircle2 size={11} className="shrink-0" /> Full 100%
+                              </span>
+                            )}
                           </div>
                           <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
                             <div
@@ -434,48 +470,32 @@ export default function CapacityBenchTab({
                               style={{ width: `${Math.min(100, user.totalAllocation || 0)}%` }}
                             />
                           </div>
+                          <p className="text-[10px] text-slate-400">
+                            {isOverloaded
+                              ? 'Vượt định mức 100% — cần san tải'
+                              : isAvailable
+                              ? 'Có thể gán thêm dự án'
+                              : 'Đã phân bổ tối đa định mức'}
+                          </p>
                         </div>
-                      </td>
-
-                      <td className="py-3.5 px-4 whitespace-nowrap tabular">
-                        {isAvailable ? (
-                          <span className="inline-block font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 whitespace-nowrap">
-                            Rảnh {user.availableCapacity}%
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 font-medium whitespace-nowrap">Hết dung lượng</span>
-                        )}
                       </td>
 
                       <td className="py-3.5 px-4">
                         {user.activeProjectNames && user.activeProjectNames.length > 0 ? (
-                          <div className="flex flex-wrap gap-1.5">
+                          <div className="flex flex-col gap-1.5">
                             {user.activeProjectNames.map((pName, pIdx) => (
                               <span
                                 key={pIdx}
-                                className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200/80"
+                                title={pName}
+                                className="inline-block w-fit max-w-full truncate text-[11px] font-medium px-2.5 py-1 rounded-lg bg-slate-100/90 text-slate-700 border border-slate-200/80"
                               >
                                 {pName}
                               </span>
                             ))}
                           </div>
                         ) : (
-                          <span className="text-slate-400 italic">Chưa gắn dự án (Ghế chờ)</span>
-                        )}
-                      </td>
-
-                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                        {isOverloaded ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap shrink-0">
-                            <AlertTriangle size={12} className="shrink-0" /> Quá tải
-                          </span>
-                        ) : isAvailable ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap shrink-0">
-                            <CheckCircle2 size={12} className="shrink-0" /> Có thể gán việc
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap shrink-0">
-                            <CheckCircle2 size={12} className="shrink-0" /> Full 100%
+                          <span className="inline-block text-[11px] text-slate-400 italic bg-slate-50 px-2.5 py-1 rounded-lg border border-dashed border-slate-200">
+                            Chưa gắn dự án (Ghế chờ Bench)
                           </span>
                         )}
                       </td>
@@ -485,7 +505,7 @@ export default function CapacityBenchTab({
                           <button
                             type="button"
                             onClick={() => onInspectEngineer && onInspectEngineer(user.userId)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white border border-blue-200 hover:border-blue-600 text-xs font-semibold transition cursor-pointer whitespace-nowrap"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white border border-blue-200 hover:border-blue-600 text-[11px] font-semibold transition cursor-pointer whitespace-nowrap"
                           >
                             <UserCheck size={13} />
                             <span>Tech Profile</span>
@@ -495,13 +515,23 @@ export default function CapacityBenchTab({
                             <button
                               type="button"
                               onClick={() => onQuickAssign(user)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#1E3A8A] hover:bg-blue-700 text-white text-xs font-bold transition cursor-pointer whitespace-nowrap"
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#1E3A8A] hover:bg-blue-700 text-white text-[11px] font-bold transition cursor-pointer whitespace-nowrap"
                               title="Phân bổ kỹ sư này vào dự án"
                             >
                               <UserPlus size={13} />
                               <span>Phân bổ</span>
                             </button>
                           )}
+
+                          <button
+                            type="button"
+                            onClick={() => setOffboardingTarget(user)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-[11px] font-semibold transition cursor-pointer whitespace-nowrap"
+                            title="Kiểm tra bàn giao kỹ thuật (dự án, Tech Lead, tài khoản, mentorship)"
+                          >
+                            <ShieldAlert size={13} />
+                            <span>Bàn giao</span>
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -512,6 +542,14 @@ export default function CapacityBenchTab({
           </div>
         )}
       </div>
+
+      <TechOffboardingCheckModal
+        isOpen={!!offboardingTarget}
+        onClose={() => setOffboardingTarget(null)}
+        userId={offboardingTarget?.userId}
+        employeeName={offboardingTarget?.hoTen}
+        isReadOnly={isReadOnly}
+      />
     </div>
   );
 }

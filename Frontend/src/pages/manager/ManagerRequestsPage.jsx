@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { requestService } from '../../services/request.service';
-import { Clock, CheckCircle2, XCircle, FileText, X, Eye, Search, Filter } from 'lucide-react';
+import { Clock, CheckCircle2, XCircle, FileText, X, Eye, Search, Filter, AlertTriangle, ShieldAlert } from 'lucide-react';
 import { useToast } from '../../components/common/Toast';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
@@ -16,6 +16,8 @@ export default function ManagerRequestsPage() {
   const [rejectNote, setRejectNote] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
   const [showForwardInput, setShowForwardInput] = useState(false);
+  const [leaveImpact, setLeaveImpact] = useState(null);
+  const [loadingLeaveImpact, setLoadingLeaveImpact] = useState(false);
 
   // Config from API
   const [configRoles, setConfigRoles] = useState([]);
@@ -51,6 +53,50 @@ export default function ManagerRequestsPage() {
   useEffect(() => {
     loadRequestsAndConfig();
   }, [loadRequestsAndConfig]);
+
+  // Module 5 (HR ↔ Tech): Kiểm tra tác động dự án Công nghệ khi duyệt đơn nghỉ phép dài ngày (≥ 3 ngày)
+  useEffect(() => {
+    if (
+      !selectedRequest?.userId ||
+      !selectedRequest?.startDate ||
+      !selectedRequest?.endDate ||
+      selectedRequest.requestType === 'OVERTIME' ||
+      selectedRequest.requestType === 'SPECIAL_WFH_LEAVE'
+    ) {
+      setLeaveImpact(null);
+      setLoadingLeaveImpact(false);
+      return;
+    }
+    const startIso = String(selectedRequest.startDate).slice(0, 10);
+    const endIso = String(selectedRequest.endDate).slice(0, 10);
+    const startMs = new Date(`${startIso}T00:00:00`).getTime();
+    const endMs = new Date(`${endIso}T00:00:00`).getTime();
+    const days = Number.isNaN(startMs) || Number.isNaN(endMs) ? 1 : Math.floor((endMs - startMs) / 86400000) + 1;
+    if (days < 3) {
+      setLeaveImpact(null);
+      setLoadingLeaveImpact(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingLeaveImpact(true);
+    api
+      .get(`/api/tech-hr/leave-impact/${selectedRequest.userId}`, {
+        params: { startDate: startIso, endDate: endIso },
+      })
+      .then((res) => {
+        if (!cancelled) setLeaveImpact(res.data?.data || null);
+      })
+      .catch(() => {
+        if (!cancelled) setLeaveImpact(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingLeaveImpact(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedRequest]);
 
   const handleApprove = async (id) => {
     try {
@@ -374,6 +420,79 @@ export default function ManagerRequestsPage() {
                   {selectedRequest.reason}
                 </div>
               </div>
+
+              {/* Module 5 (HR ↔ Tech): Cảnh báo Tác động Dự án Công nghệ khi nghỉ ≥ 3 ngày */}
+              {loadingLeaveImpact && (
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-500 flex items-center gap-2">
+                  <div className="w-3.5 h-3.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                  <span>Đang kiểm tra tác động dự án &amp; mốc bàn giao Phòng Công nghệ...</span>
+                </div>
+              )}
+
+              {!loadingLeaveImpact &&
+                (leaveImpact?.isTechEngineer ?? leaveImpact?.techEngineer) &&
+                leaveImpact?.riskLevel &&
+                leaveImpact.riskLevel !== 'NONE' && (
+                <div
+                  className={`p-3.5 rounded-xl border space-y-2 text-xs ${
+                    leaveImpact.riskLevel === 'HIGH'
+                      ? 'bg-rose-50 border-rose-200 text-rose-900'
+                      : 'bg-amber-50 border-amber-200 text-amber-900'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-1.5 font-bold">
+                      {leaveImpact.riskLevel === 'HIGH' ? (
+                        <ShieldAlert size={15} className="text-rose-600 shrink-0" />
+                      ) : (
+                        <AlertTriangle size={15} className="text-amber-600 shrink-0" />
+                      )}
+                      <span>Cảnh báo Tác động Dự án Công nghệ ({leaveImpact.leaveDays} ngày nghỉ)</span>
+                    </div>
+                    <span
+                      className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border shrink-0 ${
+                        leaveImpact.riskLevel === 'HIGH'
+                          ? 'bg-rose-100 text-rose-800 border-rose-300'
+                          : 'bg-amber-100 text-amber-800 border-amber-300'
+                      }`}
+                    >
+                      Rủi ro {leaveImpact.riskLevel}
+                    </span>
+                  </div>
+
+                  {leaveImpact.summaryMessage && (
+                    <p className="leading-relaxed">{leaveImpact.summaryMessage}</p>
+                  )}
+
+                  {(leaveImpact.isTechLeadAnywhere ?? leaveImpact.techLeadAnywhere) && (
+                    <p className="font-bold text-rose-700">
+                      • Kỹ sư đang giữ vai trò Tech Lead dự án — cần bố trí người backup trước khi duyệt nghỉ.
+                    </p>
+                  )}
+
+                  {leaveImpact.affectedProjectNames?.length > 0 && (
+                    <div>
+                      <span className="font-semibold block mb-1">Dự án đang tham gia ({leaveImpact.activeProjectsCount}):</span>
+                      <div className="flex flex-wrap gap-1">
+                        {leaveImpact.affectedProjectNames.map((pName, idx) => (
+                          <span key={idx} className="px-2 py-0.5 rounded bg-white/80 border border-current/20 font-medium text-[11px]">
+                            {pName}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {leaveImpact.affectedMilestoneAlerts?.length > 0 && (
+                    <div className="space-y-0.5">
+                      <span className="font-semibold block">Mốc bàn giao (Milestone) trùng lịch nghỉ:</span>
+                      {leaveImpact.affectedMilestoneAlerts.map((alert, idx) => (
+                        <p key={idx} className="text-[11px]">• {alert}</p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {selectedRequest.status !== 'PENDING' && selectedRequest.note && (
                 <div>

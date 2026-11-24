@@ -86,17 +86,6 @@ export default function CeoProjectDetailModal({
     };
   }, [isOpen, project, fetchFreshDetail]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && !hasTopModalOpen) {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, hasTopModalOpen, onClose]);
-
   if (!isOpen || !projectData) return null;
 
   const statusInfo = PROJECT_STATUS_CONFIG[projectData.status] || {
@@ -125,9 +114,6 @@ export default function CeoProjectDetailModal({
     <div
       data-tech-modal="true"
       className="fixed inset-0 z-[9980] bg-slate-900/55 backdrop-blur-xs p-4 sm:p-6 flex items-center justify-center overflow-y-auto"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
     >
       <motion.div
         role="dialog"

@@ -23,6 +23,9 @@ public class ApprovalService {
     private final ApprovalStepRepository stepRepository;
     private final ApprovalPolicyResolver policyResolver;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hrm.common.repository.UserRepository userRepository;
+
     @Transactional
     public ApprovalRequest openRequest(
             ApprovalEntityType entityType,
@@ -101,7 +104,17 @@ public class ApprovalService {
         ApprovalStep currentStep = stepRepository.findFirstByRequestIdAndStatusOrderByStepOrder(
                         request.getId(), ApprovalStepStatus.PENDING)
                 .orElseThrow(() -> AppException.conflict("Approval request không còn bước đang chờ"));
-        if (currentStep.getResolvedApproverId() == null || !currentStep.getResolvedApproverId().equals(actorId)) {
+        boolean isAssignedApprover = currentStep.getResolvedApproverId() != null
+                && currentStep.getResolvedApproverId().equals(actorId);
+        if (!isAssignedApprover && userRepository != null) {
+            isAssignedApprover = userRepository.findById(actorId)
+                    .filter(u -> Boolean.TRUE.equals(u.getActive()))
+                    .filter(u -> u.getRole() == com.hrm.common.entity.Role.CEO
+                            || u.getRole() == com.hrm.common.entity.Role.ADMIN)
+                    .map(u -> u.getRole() == currentStep.getApproverRole())
+                    .orElse(false);
+        }
+        if (!isAssignedApprover) {
             throw AppException.forbidden("Bạn không phải người được phân công cho bước duyệt hiện tại");
         }
         if ((decision == ApprovalDecision.RETURN || decision == ApprovalDecision.REJECT)

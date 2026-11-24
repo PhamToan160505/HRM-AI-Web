@@ -142,6 +142,10 @@ public class TechPerformanceReview {
     @Column(name = "final_grade", length = 5)
     private TechRatingGrade finalGrade;
 
+    // Dành riêng cho kỳ Đánh giá Thử việc (PROBATION): kết quả Đạt / Không đạt tường minh
+    @Column(name = "probation_passed")
+    private Boolean probationPassed;
+
     // Đề xuất Thăng chức & Điều chỉnh đãi ngộ (B-10)
     @Column(name = "recommend_promotion", nullable = false)
     @Builder.Default

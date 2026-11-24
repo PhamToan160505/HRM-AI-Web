@@ -11,5 +11,6 @@ import java.util.Optional;
 public interface TechProjectEnvironmentRepository extends JpaRepository<TechProjectEnvironment, Long> {
     List<TechProjectEnvironment> findByProjectIdOrderByEnvNameAsc(Long projectId);
     Optional<TechProjectEnvironment> findByProjectIdAndEnvName(Long projectId, String envName);
+    List<TechProjectEnvironment> findByOwnerId(Long ownerId);
 }
 

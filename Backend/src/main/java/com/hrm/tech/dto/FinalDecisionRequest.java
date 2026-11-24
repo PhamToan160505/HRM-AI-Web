@@ -42,4 +42,7 @@ public class FinalDecisionRequest {
 
     @Size(max = 500, message = "Ghi chú quyết định tối đa 500 ký tự")
     private String compensationNote;
+
+    // Cho phép cấp duyệt chốt tường minh kết quả thử việc nếu phiếu thuộc loại PROBATION
+    private Boolean probationPassed;
 }

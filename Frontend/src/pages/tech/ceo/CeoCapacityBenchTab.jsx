@@ -382,13 +382,10 @@ export default function CeoCapacityBenchTab({ benchUsers = [], onInspectEngineer
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                  <th className="py-3.5 px-4">Kỹ sư</th>
-                  <th className="py-3.5 px-4">Chức vụ / Phòng ban</th>
-                  <th className="py-3.5 px-4 whitespace-nowrap">Mức độ phân bổ (% Tải)</th>
-                  <th className="py-3.5 px-4 whitespace-nowrap">Dung lượng còn trống</th>
-                  <th className="py-3.5 px-4">Dự án đang làm</th>
-                  <th className="py-3.5 px-4 text-center whitespace-nowrap">Trạng thái</th>
-                  <th className="py-3.5 px-4 text-right whitespace-nowrap">Hồ sơ năng lực</th>
+                  <th className="py-3.5 px-4 w-[30%] min-w-[230px]">Kỹ sư &amp; Chức vụ</th>
+                  <th className="py-3.5 px-4 w-[24%] min-w-[205px]">Công suất &amp; Trạng thái</th>
+                  <th className="py-3.5 px-4 w-[32%] min-w-[230px]">Dự án đang tham gia</th>
+                  <th className="py-3.5 px-4 w-[14%] text-right whitespace-nowrap">Hồ sơ năng lực</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
@@ -398,37 +395,46 @@ export default function CeoCapacityBenchTab({ benchUsers = [], onInspectEngineer
                   const isAvailable = (user.availableCapacity || 0) > 0;
 
                   return (
-                    <tr key={user.userId} className="hover:bg-blue-50/35 transition">
+                    <tr key={user.userId} className="hover:bg-blue-50/35 transition align-middle">
                       <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
                           <div className="w-9 h-9 rounded-xl bg-[#1E3A8A] text-white font-bold text-xs flex items-center justify-center shrink-0">
                             {user.hoTen ? user.hoTen.charAt(0).toUpperCase() : 'U'}
                           </div>
-                          <div>
-                            <p className="font-bold text-slate-900">{user.hoTen}</p>
-                            <p className="text-[11px] text-slate-400 font-mono">{user.email}</p>
+                          <div className="min-w-0">
+                            <p className="font-bold text-[13px] text-slate-900 truncate">{user.hoTen}</p>
+                            <p className="text-[11px] font-medium text-slate-600 truncate">
+                              {user.chucVu || 'Kỹ sư phần mềm'}
+                              {user.departmentName ? <span className="text-slate-400"> · {user.departmentName}</span> : null}
+                            </p>
+                            <p className="text-[11px] text-slate-400 font-mono truncate">{user.email}</p>
                           </div>
                         </div>
                       </td>
 
-                      <td className="py-3.5 px-4">
-                        <p className="font-semibold text-slate-800">{user.chucVu || 'Kỹ sư phần mềm'}</p>
-                        <p className="text-[11px] text-slate-400">{user.departmentName}</p>
-                      </td>
-
-                      <td className="py-3.5 px-4 w-48 tabular">
-                        <div className="space-y-1.5">
-                          <div className="flex justify-between text-[11px] font-bold">
+                      <td className="py-3.5 px-4 tabular">
+                        <div className="space-y-1.5 max-w-[220px]">
+                          <div className="flex items-center justify-between gap-2">
                             <span
-                              className={
+                              className={`text-xs font-extrabold ${
                                 isOverloaded ? 'text-rose-600' : isFull ? 'text-blue-700' : 'text-emerald-700'
-                              }
+                              }`}
                             >
-                              {user.totalAllocation}%
+                              {user.totalAllocation}% tải
                             </span>
-                            <span className={isOverloaded ? 'text-rose-600' : 'text-slate-400 font-medium'}>
-                              {isOverloaded ? 'Vượt ngưỡng 100%' : 'Định mức 100%'}
-                            </span>
+                            {isOverloaded ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap">
+                                <AlertTriangle size={11} className="shrink-0" /> Quá tải
+                              </span>
+                            ) : isAvailable ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+                                <CheckCircle2 size={11} className="shrink-0" /> Rảnh {user.availableCapacity}%
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap">
+                                <CheckCircle2 size={11} className="shrink-0" /> Full 100%
+                              </span>
+                            )}
                           </div>
                           <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
                             <div
@@ -438,48 +444,32 @@ export default function CeoCapacityBenchTab({ benchUsers = [], onInspectEngineer
                               style={{ width: `${Math.min(100, user.totalAllocation || 0)}%` }}
                             />
                           </div>
+                          <p className="text-[10px] text-slate-400">
+                            {isOverloaded
+                              ? 'Vượt định mức 100% — cần san tải'
+                              : isAvailable
+                              ? 'Có thể gán thêm dự án'
+                              : 'Đã phân bổ tối đa định mức'}
+                          </p>
                         </div>
-                      </td>
-
-                      <td className="py-3.5 px-4 whitespace-nowrap tabular">
-                        {isAvailable ? (
-                          <span className="inline-block font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 whitespace-nowrap">
-                            Rảnh {user.availableCapacity}%
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 font-medium whitespace-nowrap">Hết dung lượng</span>
-                        )}
                       </td>
 
                       <td className="py-3.5 px-4">
                         {user.activeProjectNames && user.activeProjectNames.length > 0 ? (
-                          <div className="flex flex-wrap gap-1.5">
+                          <div className="flex flex-col gap-1.5">
                             {user.activeProjectNames.map((pName, pIdx) => (
                               <span
                                 key={pIdx}
-                                className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200/80"
+                                title={pName}
+                                className="inline-block w-fit max-w-full truncate text-[11px] font-medium px-2.5 py-1 rounded-lg bg-slate-100/90 text-slate-700 border border-slate-200/80"
                               >
                                 {pName}
                               </span>
                             ))}
                           </div>
                         ) : (
-                          <span className="text-slate-400 italic">Chưa gắn dự án (Ghế chờ)</span>
-                        )}
-                      </td>
-
-                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                        {isOverloaded ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap shrink-0">
-                            <AlertTriangle size={12} className="shrink-0" /> Quá tải
-                          </span>
-                        ) : isAvailable ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap shrink-0">
-                            <CheckCircle2 size={12} className="shrink-0" /> Có thể gán việc
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap shrink-0">
-                            <CheckCircle2 size={12} className="shrink-0" /> Full 100%
+                          <span className="inline-block text-[11px] text-slate-400 italic bg-slate-50 px-2.5 py-1 rounded-lg border border-dashed border-slate-200">
+                            Chưa gắn dự án (Ghế chờ Bench)
                           </span>
                         )}
                       </td>

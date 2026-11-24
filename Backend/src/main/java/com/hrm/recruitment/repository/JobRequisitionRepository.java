@@ -22,6 +22,7 @@ public interface JobRequisitionRepository extends JpaRepository<JobRequisition, 
     List<JobRequisition> findByDepartmentId(Long departmentId);
     List<JobRequisition> findByStatus(JobRequisitionStatus status);
     List<JobRequisition> findByDepartmentIdAndStatus(Long departmentId, JobRequisitionStatus status);
+    List<JobRequisition> findByTechProjectIdOrderByCreatedAtDesc(Long techProjectId);
 
     @Query("SELECT j FROM JobRequisition j WHERE (:departmentId IS NULL OR j.departmentId = :departmentId) AND (:targetRole IS NULL OR j.targetRole = :targetRole) AND (:status IS NULL OR j.status = :status) AND (:filterRequesterId IS NULL OR j.requesterId = :filterRequesterId) AND (j.requesterId = :userId OR :isCEO = true OR (:isHR = true AND j.status = com.hrm.recruitment.entity.JobRequisitionStatus.APPROVED))")
     Page<JobRequisition> findWithFiltersAndPermissions(

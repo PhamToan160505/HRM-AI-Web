@@ -68,18 +68,6 @@ export default function SkillAddModal({
     };
   }, [isOpen, initialSkill]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        handleClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown, true);
-    return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [isOpen, handleClose]);
-
   const fetchStandardSkills = async () => {
     try {
       setLoadingSkills(true);
@@ -161,9 +149,6 @@ export default function SkillAddModal({
     <div
       data-tech-modal="true"
       className="fixed inset-0 z-[9990] overflow-y-auto bg-slate-900/55 backdrop-blur-xs p-4 sm:p-6 flex items-center justify-center"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) handleClose();
-      }}
     >
       <motion.div
         role="dialog"
