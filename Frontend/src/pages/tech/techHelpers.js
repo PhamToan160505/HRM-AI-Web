@@ -412,6 +412,13 @@ export const formatMonthShortVN = (monthStr) => {
   return `${Number(month)} - ${year}`;
 };
 
+export const formatMonthVN = (monthStr) => {
+  if (!monthStr) return '';
+  const match = String(monthStr).trim().match(/^(\d{4})-(\d{2})$/);
+  if (!match) return String(monthStr);
+  return `Tháng ${match[2]}-${match[1]}`;
+};
+
 export const scrollElementIntoViewCleanly = (element, block = 'center') => {
   if (!element || typeof window === 'undefined') return;
   let parent = element.parentElement;

@@ -92,10 +92,14 @@ export default function ApprovalTimelineModal({ requisition, onClose }) {
                             <span className={`relative z-10 grid size-8 shrink-0 place-items-center rounded-full ${meta.className}`}><Icon size={16} /></span>
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center justify-between gap-2">
-                                <p className="text-sm font-semibold text-slate-900">Bước {step.stepOrder}: {ROLE_LABEL[step.approverRole] || step.approverRole}</p>
+                                <p className="text-sm font-semibold text-slate-900">
+                                  Bước {step.stepOrder}: {step.stepLabel || ROLE_LABEL[step.approverRole] || step.approverRole}
+                                </p>
                                 <span className="text-xs font-semibold text-slate-500">{meta.label}</span>
                               </div>
-                              <p className="mt-1 text-xs text-slate-500">{formatDateTime(step.decidedAt)}</p>
+                              <p className="mt-1 text-xs text-slate-500">
+                                {step.decidedByName ? `${step.decidedByName} · ` : ''}{formatDateTime(step.decidedAt)}
+                              </p>
                               {step.comment && <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">{step.comment}</p>}
                               {step.resolutionNote && <p className="mt-2 text-xs text-slate-500">{step.resolutionNote}</p>}
                             </div>

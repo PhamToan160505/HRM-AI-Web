@@ -17,3 +17,11 @@ export const REJECT_STAGE_LABEL = {
     CHIEF_ACCOUNTANT: 'Kế toán trưởng',
     CEO: 'Tổng Giám đốc',
 };
+
+const FINANCE_DEPARTMENT_NAME = 'tài chính - kế toán';
+
+export const isFinanceDepartment = (tenPhong) => {
+    if (!tenPhong) return false;
+    const norm = String(tenPhong).trim().replace(/\s+/g, ' ').toLowerCase();
+    return norm === FINANCE_DEPARTMENT_NAME || (norm.includes('tài chính') && norm.includes('kế toán'));
+};

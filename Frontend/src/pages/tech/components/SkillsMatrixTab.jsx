@@ -14,6 +14,9 @@ import {
   FileSpreadsheet,
   Users2,
   Briefcase,
+  Award,
+  ExternalLink,
+  XCircle,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -32,6 +35,7 @@ import {
   PROFICIENCY_CONFIG,
   RADAR_DIMENSIONS,
   sortSkillsByLevel,
+  formatCurrencyVND,
   scrollElementIntoViewCleanly,
 } from '../techHelpers';
 
@@ -68,6 +72,45 @@ export default function SkillsMatrixTab({
   focusUserRequest = null,
   onFocusHandled,
 }) {
+  const [pendingCertReimbs, setPendingCertReimbs] = useState([]);
+  const [reviewingReimbId, setReviewingReimbId] = useState(null);
+  const [rejectReimbTarget, setRejectReimbTarget] = useState(null);
+  const [rejectReimbReason, setRejectReimbReason] = useState('');
+
+  const loadPendingCertReimbs = React.useCallback(async () => {
+    if (isReadOnly) return;
+    try {
+      const res = await api.get('/api/tech-finance/cert-reimbursements?status=SUBMITTED');
+      setPendingCertReimbs(res.data?.data || []);
+    } catch {
+      setPendingCertReimbs([]);
+    }
+  }, [isReadOnly]);
+
+  useEffect(() => {
+    loadPendingCertReimbs();
+  }, [loadPendingCertReimbs]);
+
+  const handleTechReviewCert = async (id, decision, note = '') => {
+    try {
+      setReviewingReimbId(id);
+      await api.put(`/api/tech-finance/cert-reimbursements/${id}/tech-review`, { decision, note });
+      toast?.show(
+        decision === 'APPROVED' ? 'Đã xác thực chuyên môn' : 'Đã từ chối đề xuất',
+        decision === 'APPROVED'
+          ? 'Đề xuất hoàn ứng chứng chỉ đã được chuyển sang Phòng Tài chính - Kế toán duyệt chi.'
+          : 'Đã gửi thông báo từ chối tới kỹ sư.',
+        'success'
+      );
+      setRejectReimbTarget(null);
+      setRejectReimbReason('');
+      await loadPendingCertReimbs();
+    } catch (err) {
+      toast?.show('Lỗi', err.response?.data?.message || 'Không thể xử lý đề xuất hoàn ứng', 'error');
+    } finally {
+      setReviewingReimbId(null);
+    }
+  };
   const toast = useToast();
 
   // Smart Skill Matcher State
@@ -942,6 +985,98 @@ export default function SkillsMatrixTab({
           </div>
         )}
       </div>
+
+      {/* Module F4: Đề xuất Hoàn ứng Lệ phí Chứng chỉ chờ Phòng Công nghệ xác thực chuyên môn */}
+      {!isReadOnly && pendingCertReimbs.length > 0 && (
+        <div className="bg-amber-50/70 rounded-2xl border border-amber-200 p-4 space-y-3">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <h3 className="text-xs font-extrabold text-amber-950 flex items-center gap-2">
+              <Award size={15} className="text-amber-700" />
+              <span>Đề xuất Hoàn ứng Chứng chỉ Quốc tế chờ Công nghệ xác thực ({pendingCertReimbs.length})</span>
+            </h3>
+            <span className="text-[11px] text-amber-800">
+              Sau khi xác thực chuyên môn, đề xuất sẽ tự động chuyển sang Phòng Tài chính - Kế toán duyệt chi.
+            </span>
+          </div>
+          <div className="space-y-2">
+            {pendingCertReimbs.map((item) => (
+              <div key={item.id} className="p-3 rounded-xl bg-white border border-amber-200/90 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+                <div className="space-y-0.5">
+                  <p className="font-bold text-slate-900">
+                    {item.employeeName} — <span className="text-[#1E3A8A]">{item.certificateName}</span> ({item.issuingOrganization})
+                  </p>
+                  <p className="text-[11px] text-slate-600 tabular-nums">
+                    Lệ phí: <strong>{formatCurrencyVND(item.examFeeVnd)}</strong> • Đề xuất ({item.supportPercent}%):{' '}
+                    <strong className="text-emerald-700">{formatCurrencyVND(item.requestedAmountVnd)}</strong>
+                    {item.invoiceNumber ? ` • HĐ: ${item.invoiceNumber}` : ''}
+                    {item.credentialUrl && (
+                      <a href={item.credentialUrl} target="_blank" rel="noreferrer" className="ml-2 inline-flex items-center gap-0.5 text-blue-600 hover:underline font-semibold">
+                        Xác thực <ExternalLink size={10} />
+                      </a>
+                    )}
+                  </p>
+                  {item.employeeNote && <p className="text-[11px] text-slate-500 italic">&ldquo;{item.employeeNote}&rdquo;</p>}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    disabled={reviewingReimbId === item.id}
+                    onClick={() => handleTechReviewCert(item.id, 'APPROVED')}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold cursor-pointer disabled:opacity-50"
+                  >
+                    <CheckCircle2 size={13} />
+                    <span>Xác nhận &amp; Chuyển Tài chính</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={reviewingReimbId === item.id}
+                    onClick={() => {
+                      setRejectReimbTarget(item);
+                      setRejectReimbReason('');
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[11px] font-bold cursor-pointer"
+                  >
+                    <XCircle size={13} />
+                    <span>Từ chối</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {rejectReimbTarget && (
+            <div className="p-3 rounded-xl bg-white border border-rose-200 space-y-2 text-xs">
+              <p className="font-bold text-rose-800">
+                Lý do từ chối hoàn ứng cho {rejectReimbTarget.employeeName} ({rejectReimbTarget.certificateName}) *
+              </p>
+              <input
+                type="text"
+                value={rejectReimbReason}
+                onChange={(e) => setRejectReimbReason(e.target.value)}
+                placeholder="Nhập lý do từ chối (tối thiểu 5 ký tự)..."
+                className="w-full px-3 py-1.5 border border-rose-200 rounded-lg outline-none focus:border-rose-400"
+              />
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRejectReimbTarget(null)}
+                  className="px-3 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg font-semibold cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  disabled={rejectReimbReason.trim().length < 5 || reviewingReimbId === rejectReimbTarget.id}
+                  onClick={() => handleTechReviewCert(rejectReimbTarget.id, 'REJECTED', rejectReimbReason.trim())}
+                  className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-bold cursor-pointer disabled:opacity-50"
+                >
+                  Xác nhận từ chối
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
         </>
       )}
     </div>

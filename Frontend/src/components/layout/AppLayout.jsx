@@ -22,6 +22,7 @@ import {
   Wallet,
   Calculator,
   KeyRound,
+  Landmark,
 } from 'lucide-react';
 import logoImg from '../../assets/logo.jpg';
 import { useAuth } from '../../context/AuthContext';
@@ -65,7 +66,7 @@ function NavItem({ to, icon: Icon, label, end = false, hasUnread = false }) {
             size={16}
             className={`shrink-0 transition-transform duration-200 ${isActive ? '' : 'group-hover:scale-110'}`}
           />
-          <span>{label}</span>
+          <span className="leading-snug">{label}</span>
           {hasUnread && (
             <span className="absolute right-3 top-1/2 -translate-y-1/2 w-2 h-2 bg-red-500 rounded-full shadow-sm" />
           )}
@@ -92,6 +93,7 @@ function SidebarContent({ role, tenPhong, onClose, hasUnreadChat }) {
     { to: '/ceo/attendance', icon: ClipboardCheck, label: 'Quản lý chấm công' },
     { to: '/ceo/requests', icon: FileText, label: 'Quản lý đơn từ' },
     { to: '/ceo/payroll', icon: Banknote, label: 'Quản lý bảng lương' },
+    { to: '/ceo/finance-tech', icon: Landmark, label: 'Tài chính ↔ Công nghệ' },
     { to: '/ceo/chat', icon: MessageSquare, label: 'Thảo luận', hasUnread: hasUnreadChat },
   ];
   const directorNav = [
@@ -113,6 +115,10 @@ function SidebarContent({ role, tenPhong, onClose, hasUnreadChat }) {
     { to: '/director/my-payroll', icon: Wallet, label: 'Phiếu lương của tôi' });
   if (tenPhong === 'Nhân sự') directorNav.splice(2, 0,
     { to: '/director/lifecycle', icon: UserRoundCheck, label: 'Nhân viên mới' });
+  if (isFinanceDepartment(tenPhong)) {
+    directorNav.splice(directorNav.findIndex(i => i.to === '/director/payroll') + 2, 0,
+      { to: '/director/finance-tech', icon: Landmark, label: 'Tài chính ↔ Công nghệ' });
+  }
   const managerNav = [
     { to: '/manager/dashboard', icon: LayoutDashboard, label: 'Tổng quan', end: true },
     { to: '/manager/employees', icon: Users, label: 'Nhân sự' },
@@ -130,6 +136,8 @@ function SidebarContent({ role, tenPhong, onClose, hasUnreadChat }) {
     { to: '/manager/my-payroll', icon: Wallet, label: 'Phiếu lương của tôi' });
   if (isFinanceDepartment(tenPhong)) {
     managerNav.find(i => i.to === '/manager/payroll').label = 'Kế toán lương';
+    managerNav.splice(managerNav.findIndex(i => i.to === '/manager/payroll') + 2, 0,
+      { to: '/manager/finance-tech', icon: Landmark, label: 'Tài chính ↔ Công nghệ' });
   }
   if (tenPhong === 'Nhân sự') managerNav.splice(2, 0,
     { to: '/manager/lifecycle', icon: UserRoundCheck, label: 'Nhân viên mới' });
@@ -142,8 +150,11 @@ function SidebarContent({ role, tenPhong, onClose, hasUnreadChat }) {
   ];
   if (isTechDept) employeeNav.splice(1, 0,
     { to: '/employee/my-projects', icon: FolderGit2, label: 'Dự án của tôi' });
-  if (isFinanceDepartment(tenPhong)) employeeNav.splice(3, 0,
-    { to: '/employee/finance-payroll', icon: Calculator, label: 'Kế toán lương' });
+  if (isFinanceDepartment(tenPhong)) {
+    employeeNav.splice(3, 0,
+      { to: '/employee/finance-payroll', icon: Calculator, label: 'Kế toán lương' },
+      { to: '/employee/finance-tech', icon: Landmark, label: 'Tài chính ↔ Công nghệ' });
+  }
 
   const navItems =
     role === 'admin' ? adminNav

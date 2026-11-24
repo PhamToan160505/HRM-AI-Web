@@ -51,6 +51,7 @@ import TechProjectListPage from './pages/tech/TechProjectListPage';
 import CeoTechProjectsPage from './pages/tech/ceo/CeoTechProjectsPage';
 import MyTechProjectsPage from './pages/tech/MyTechProjectsPage';
 import TechProjectDetailPage from './pages/tech/TechProjectDetailPage';
+import FinanceTechHubPage from './pages/finance/FinanceTechHubPage';
 
 /**
  * App Router — cấu trúc route theo SKILL_react-frontend-patterns.md mục 1.
@@ -133,6 +134,7 @@ export default function App() {
             <Route path="my-requests" element={<MyRequestsPage />} />
             <Route path="holidays" element={<HolidayPage />} />
             <Route path="payroll" element={<PayrollPage />} />
+            <Route path="finance-tech" element={<FinanceTechHubPage />} />
             <Route path="tech-projects" element={<CeoTechProjectsPage />} />
             <Route path="tech-projects/:id" element={<TechProjectDetailPage />} />
             <Route path="profile" element={<ProfilePage />} />
@@ -180,6 +182,7 @@ export default function App() {
             <Route path="holidays" element={<HolidayPage />} />
             <Route path="payroll" element={<PayrollPage />} />
             <Route path="my-payroll" element={<PayrollViewPage />} />
+            <Route path="finance-tech" element={<FinanceTechHubPage />} />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="chat" element={<GroupChatPage />} />
             <Route path="face-enroll" element={
@@ -210,6 +213,7 @@ export default function App() {
             <Route path="my-requests" element={<MyRequestsPage />} />
             <Route path="payroll" element={<PayrollPage />} />
             <Route path="my-payroll" element={<PayrollViewPage />} />
+            <Route path="finance-tech" element={<FinanceTechHubPage />} />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="chat" element={<GroupChatPage />} />
             <Route path="face-enroll" element={
@@ -257,6 +261,7 @@ export default function App() {
             <Route path="my-projects/:id" element={<TechProjectDetailPage />} />
             {/* Kế toán viên phòng Tài chính - Kế toán (role nhân viên) */}
             <Route path="finance-payroll" element={<PayrollPage />} />
+            <Route path="finance-tech" element={<FinanceTechHubPage />} />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="chat" element={<GroupChatPage />} />
           </Route>

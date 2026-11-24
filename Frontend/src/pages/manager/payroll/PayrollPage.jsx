@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Calculator, AlertTriangle, CheckCircle, Settings, Users, X, Landmark, Info } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Calculator, AlertTriangle, CheckCircle, Settings, Users, X, Landmark, Info, ArrowRight } from 'lucide-react';
 import { Card } from '../../../components/common/Card';
 import Button from '../../../components/common/Button';
 import ConfirmModal from '../../../components/common/ConfirmModal';
@@ -70,7 +71,9 @@ const SIMPLE_ACTIONS = {
 export default function PayrollPage() {
     const { user } = useAuth();
     const toast = useToast();
+    const navigate = useNavigate();
     const role = user?.role?.toUpperCase();
+    const [techFinanceBanner, setTechFinanceBanner] = useState(null);
     const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, message: '', onConfirm: null, title: 'Xác nhận' });
     const [access, setAccess] = useState({ accountant: false, chiefAccountant: false });
     const [batches, setBatches] = useState([]);
@@ -126,7 +129,12 @@ export default function PayrollPage() {
     useEffect(() => {
         fetchBatches();
         setGenerateResult(null);
-    }, [fetchBatches]);
+        if (access.accountant || isCeo) {
+            api.get(`/api/tech-finance/payroll-banner?month=${month}&year=${year}`)
+                .then(res => setTechFinanceBanner(res.data?.data || null))
+                .catch(() => setTechFinanceBanner(null));
+        }
+    }, [fetchBatches, access.accountant, isCeo, month, year]);
 
     const runAction = async (key, fn, successMessage) => {
         try {
@@ -418,6 +426,53 @@ export default function PayrollPage() {
                         </div>
                     )}
 
+                    {techFinanceBanner &&
+                        (techFinanceBanner.pendingSalarySyncsCount > 0 ||
+                            techFinanceBanner.payrollCertReimbursementsCount > 0 ||
+                            techFinanceBanner.submittedCostReportsCount > 0) && (
+                            <div className="bg-blue-50/90 border border-blue-200 rounded-xl p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
+                                <div className="flex items-start gap-3">
+                                    <Landmark className="text-[#1E3A8A] mt-0.5 shrink-0" size={20} />
+                                    <div className="text-xs text-slate-800 space-y-1">
+                                        <p className="font-bold text-[#0F2557] text-sm">
+                                            Liên kết Tài chính – Công nghệ kỳ {String(month).padStart(2, '0')}/{year}
+                                        </p>
+                                        <div className="flex flex-wrap gap-x-4 gap-y-1">
+                                            {techFinanceBanner.pendingSalarySyncsCount > 0 && (
+                                                <span className="text-amber-800 font-semibold">
+                                                    • Có <strong>{techFinanceBanner.pendingSalarySyncsCount}</strong> quyết định tăng lương/phụ cấp từ CEO chờ xác nhận áp dụng trước khi tính lương.
+                                                </span>
+                                            )}
+                                            {techFinanceBanner.payrollCertReimbursementsCount > 0 && (
+                                                <span className="text-indigo-800 font-semibold">
+                                                    • Có <strong>{techFinanceBanner.payrollCertReimbursementsCount}</strong> khoản hoàn ứng chứng chỉ gộp kỳ lương ({formatCurrencyVND(techFinanceBanner.totalPayrollCertReimbursementsVnd)}).
+                                                </span>
+                                            )}
+                                            {techFinanceBanner.submittedCostReportsCount > 0 && (
+                                                <span className="text-blue-800 font-semibold">
+                                                    • Có <strong>{techFinanceBanner.submittedCostReportsCount}</strong> bảng hạch toán giờ công dự án Công nghệ chờ đối soát.
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const dest = role === 'CEO' ? '/ceo/finance-tech'
+                                            : role === 'GIAM_DOC_PHONG_BAN' ? '/director/finance-tech'
+                                                : role === 'TRUONG_PHONG' ? '/manager/finance-tech'
+                                                    : '/employee/finance-tech';
+                                        navigate(dest);
+                                    }}
+                                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#1E3A8A] hover:bg-blue-700 text-white text-xs font-bold shrink-0 cursor-pointer"
+                                >
+                                    <span>Mở Tài chính ↔ Công nghệ</span>
+                                    <ArrowRight size={14} />
+                                </button>
+                            </div>
+                        )}
+
                     {generateResult && (generateResult.skipped?.length > 0 || generateResult.blocked?.length > 0 || generateResult.warnings?.length > 0) && (
                         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 shadow-sm">
                             <div className="flex items-start gap-3">
@@ -511,7 +566,7 @@ export default function PayrollPage() {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <input 
+                                            <input
                                                 type="number"
                                                 value={emp.baseSalary}
                                                 onChange={e => handleConfigChange(emp.id, 'baseSalary', e.target.value)}
@@ -519,7 +574,7 @@ export default function PayrollPage() {
                                             />
                                         </td>
                                         <td className="px-6 py-4">
-                                            <input 
+                                            <input
                                                 type="number"
                                                 value={emp.allowance}
                                                 onChange={e => handleConfigChange(emp.id, 'allowance', e.target.value)}
@@ -562,20 +617,26 @@ export default function PayrollPage() {
                         <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50 space-y-6">
                             {(() => {
                                 const sum = (f) => detailItems.reduce((s, p) => s + (f(p) || 0), 0);
+                                const certSum = sum(p => p.certReimbursementAmount);
                                 const tiles = [
                                     { label: 'Tổng gross', value: sum(p => p.grossSalary) },
                                     { label: 'Tổng thực nhận', value: sum(p => p.netSalary), highlight: true },
                                     { label: 'Thuế TNCN', value: sum(p => p.thuTncn) },
                                     { label: 'Bảo hiểm NLĐ đóng', value: sum(p => (p.bhxhAmount || 0) + (p.bhytAmount || 0) + (p.bhtnAmount || 0)) },
+                                    ...(certSum > 0
+                                        ? [{ label: 'Hoàn ứng chứng chỉ (miễn thuế)', value: certSum, certHighlight: true }]
+                                        : []),
                                 ];
                                 return (
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    <div className={`grid grid-cols-2 ${certSum > 0 ? 'md:grid-cols-5' : 'md:grid-cols-4'} gap-4`}>
                                         {tiles.map(t => (
                                             <div key={t.label} className={t.highlight
                                                 ? 'bg-gradient-to-br from-blue-500 to-blue-600 p-4 rounded-xl text-white shadow-md'
-                                                : 'bg-white p-4 rounded-xl border border-gray-100 shadow-sm'}>
-                                                <div className={`text-xs font-medium ${t.highlight ? 'text-blue-100' : 'text-gray-500'}`}>{t.label}</div>
-                                                <div className="text-lg font-bold mt-1 tabular-nums">{formatCurrencyVND(t.value)}</div>
+                                                : t.certHighlight
+                                                    ? 'bg-indigo-50 p-4 rounded-xl border border-indigo-200 shadow-sm'
+                                                    : 'bg-white p-4 rounded-xl border border-gray-100 shadow-sm'}>
+                                                <div className={`text-xs font-medium ${t.highlight ? 'text-blue-100' : t.certHighlight ? 'text-indigo-700' : 'text-gray-500'}`}>{t.label}</div>
+                                                <div className={`text-lg font-bold mt-1 tabular-nums ${t.certHighlight ? 'text-indigo-800' : ''}`}>{formatCurrencyVND(t.value)}</div>
                                             </div>
                                         ))}
                                     </div>
@@ -612,7 +673,7 @@ export default function PayrollPage() {
                                 {loadingDetail ? (
                                     <div className="p-10 text-center text-gray-500">Đang tải chi tiết...</div>
                                 ) : (
-                                    <PayrollTable payrolls={detailItems} />
+                                    <PayrollTable payrolls={detailItems} departmentName={detailBatch.departmentName} />
                                 )}
                             </div>
                         </div>

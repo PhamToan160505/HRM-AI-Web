@@ -23,6 +23,8 @@ import {
   ChevronRight,
   Loader2,
   FileSpreadsheet,
+  Landmark,
+  Send,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -43,6 +45,7 @@ import {
   WORKLOG_TYPE_CONFIG,
   WORKLOG_STATUS_CONFIG,
   formatDateVN,
+  formatMonthVN,
   formatHours,
   formatCurrencyVND,
   getShortEngineerName,
@@ -170,6 +173,50 @@ export default function TimesheetAnalyticsTab({
   const [rejectModal, setRejectModal] = useState({ isOpen: false, worklog: null });
   const [rejectReason, setRejectReason] = useState('');
   const [rejectSubmitting, setRejectSubmitting] = useState(false);
+
+  // Module F2: Gửi bảng đối soát chi phí dự án sang Phòng Tài chính - Kế toán
+  const [costReport, setCostReport] = useState(null);
+  const [costModalOpen, setCostModalOpen] = useState(false);
+  const [costSubmitNote, setCostSubmitNote] = useState('');
+  const [submittingCostReport, setSubmittingCostReport] = useState(false);
+
+  const loadMonthCostReport = useCallback(async () => {
+    if (!selectedMonth) return;
+    try {
+      const res = await api.get('/api/tech-finance/cost-reports');
+      const list = res.data?.data || [];
+      setCostReport(list.find((r) => r.reportMonth === selectedMonth) || null);
+    } catch {
+      setCostReport(null);
+    }
+  }, [selectedMonth]);
+
+  useEffect(() => {
+    loadMonthCostReport();
+  }, [loadMonthCostReport]);
+
+  const handleSubmitCostReportToFinance = async (e) => {
+    e.preventDefault();
+    try {
+      setSubmittingCostReport(true);
+      await api.post('/api/tech-finance/cost-reports/submit', {
+        reportMonth: selectedMonth,
+        submitNote: costSubmitNote.trim() || null,
+      });
+      toast?.show(
+        'Đã gửi sang Tài chính',
+        `Đã chốt gửi bảng đối soát giờ công & chi phí dự án ${formatMonthVN(selectedMonth)} sang Phòng Tài chính - Kế toán.`,
+        'success'
+      );
+      setCostModalOpen(false);
+      setCostSubmitNote('');
+      await loadMonthCostReport();
+    } catch (err) {
+      toast?.show('Không thể gửi đối soát', err.response?.data?.message || 'Đã có lỗi xảy ra', 'error');
+    } finally {
+      setSubmittingCostReport(false);
+    }
+  };
 
   // Khi nhảy từ thông báo vào tab Giờ công: xóa bộ lọc đang che khuất bản ghi đích
   useEffect(() => {
@@ -629,8 +676,114 @@ export default function TimesheetAnalyticsTab({
             <FileSpreadsheet size={14} className="text-emerald-700" />
             <span>{exportingExcel ? 'Đang xuất Excel...' : 'Xuất Excel Giờ công'}</span>
           </button>
+
+          {!isReadOnly && (
+            <button
+              type="button"
+              disabled={costReport?.status === 'CONFIRMED'}
+              onClick={() => {
+                setCostSubmitNote('');
+                setCostModalOpen(true);
+              }}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold border transition cursor-pointer disabled:cursor-not-allowed ${
+                costReport?.status === 'CONFIRMED'
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : costReport?.status === 'DISPUTED'
+                    ? 'bg-rose-600 hover:bg-rose-700 text-white border-rose-600'
+                    : 'bg-[#1E3A8A] hover:bg-blue-700 text-white border-[#1E3A8A]'
+              }`}
+              title={
+                costReport?.status === 'CONFIRMED'
+                  ? `Phòng Tài chính đã xác nhận hạch toán ${formatMonthVN(selectedMonth)}${costReport.accountingVoucherNo ? ` (CT: ${costReport.accountingVoucherNo})` : ''}`
+                  : 'Chốt số liệu giờ công duyệt (Billable/Internal, Man-days) gửi Phòng Tài chính hạch toán giá vốn dự án'
+              }
+            >
+              <Landmark size={14} />
+              <span>
+                {costReport?.status === 'CONFIRMED'
+                  ? 'Đã hạch toán Tài chính'
+                  : costReport?.status === 'DISPUTED'
+                    ? 'Gửi lại Đối soát Tài chính'
+                    : costReport?.status === 'SUBMITTED'
+                      ? 'Cập nhật Đối soát Tài chính'
+                      : 'Gửi Đối soát Tài chính'}
+              </span>
+            </button>
+          )}
         </div>
       </div>
+
+      {costReport && (
+        <div
+          className={`px-4 py-2.5 rounded-xl border text-xs flex flex-wrap items-center justify-between gap-2 ${
+            costReport.status === 'CONFIRMED'
+              ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
+              : costReport.status === 'DISPUTED'
+                ? 'bg-rose-50/80 border-rose-200 text-rose-900'
+                : 'bg-blue-50/70 border-blue-200 text-blue-900'
+          }`}
+        >
+          <span>
+            <strong>Đối soát Tài chính {formatMonthVN(costReport.reportMonth)}:</strong>{' '}
+            {costReport.status === 'CONFIRMED'
+              ? `Đã xác nhận hạch toán${costReport.accountingVoucherNo ? ` (Mã CT: ${costReport.accountingVoucherNo})` : ''}.`
+              : costReport.status === 'DISPUTED'
+                ? `Tài chính yêu cầu giải trình: ${costReport.financeNote || ''}`
+                : 'Đã gửi sang Phòng Tài chính - Kế toán, đang chờ Kế toán trưởng xác nhận.'}
+          </span>
+          <span className="text-[11px] font-semibold tabular-nums">
+            {costReport.totalApprovedHours}h • {costReport.totalManDays} Man-days • {costReport.billableRatioPercent}% Billable
+          </span>
+        </div>
+      )}
+
+      {costModalOpen &&
+        createPortal(
+          <div data-tech-modal="true" className="fixed inset-0 z-[10000] bg-slate-900/60 backdrop-blur-xs p-4 flex items-center justify-center">
+            <div onClick={(e) => e.stopPropagation()} className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+              <div className="bg-[#0F2557] px-5 py-4 text-white flex items-center justify-between">
+                <h3 className="text-sm font-bold flex items-center gap-2">
+                  <Landmark size={16} className="text-amber-300" />
+                  <span>Chốt &amp; Gửi Đối soát Giờ công Dự án ({formatMonthVN(selectedMonth)})</span>
+                </h3>
+                <button type="button" disabled={submittingCostReport} onClick={() => setCostModalOpen(false)} className="p-1 hover:bg-white/10 rounded-lg cursor-pointer">
+                  <X size={17} />
+                </button>
+              </div>
+              <form onSubmit={handleSubmitCostReportToFinance} className="p-5 space-y-3 text-xs">
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1 text-slate-700">
+                  <p>Tổng giờ đã duyệt: <strong>{formatHours(approvedHours)}</strong> ({approvedManDays} Man-days)</p>
+                  <p>Tỷ lệ Billable: <strong>{billablePercent}%</strong></p>
+                  {pendingHours > 0 && (
+                    <p className="text-amber-700 font-semibold">
+                      ⚠ Lưu ý: vẫn còn {formatHours(pendingHours)} giờ công chờ duyệt trong tháng này (chỉ giờ đã duyệt mới được hạch toán).
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Ghi chú gửi Phòng Tài chính - Kế toán (tùy chọn)</label>
+                  <textarea
+                    rows={3}
+                    value={costSubmitNote}
+                    onChange={(e) => setCostSubmitNote(e.target.value)}
+                    placeholder="VD: Đã rà soát đầy đủ worklog tháng, dự án PRJ-HRM-AI đạt 100% billable..."
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <button type="button" disabled={submittingCostReport} onClick={() => setCostModalOpen(false)} className="px-4 py-2 font-semibold bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer">
+                    Hủy
+                  </button>
+                  <button type="submit" disabled={submittingCostReport} className="inline-flex items-center gap-1.5 px-4 py-2 font-bold text-white bg-[#1E3A8A] hover:bg-blue-700 rounded-xl cursor-pointer disabled:opacity-55">
+                    {submittingCostReport ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                    <span>Xác nhận gửi sang Tài chính</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>,
+          document.body
+        )}
 
       {/* 2. 4 Bento KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
@@ -708,7 +861,7 @@ export default function TimesheetAnalyticsTab({
             </div>
             <div>
               <h4 className="text-sm font-bold text-slate-900">
-                Đối chiếu Kế hoạch FTE &amp; Giờ công Thực tế ({selectedMonth})
+                Đối chiếu Kế hoạch FTE &amp; Giờ công Thực tế ({formatMonthVN(selectedMonth)})
               </h4>
               <p className="text-[11px] text-slate-500">
                 So sánh quỹ giờ phân bổ kế hoạch với số giờ đã được nghiệm thu trong tháng
@@ -742,7 +895,7 @@ export default function TimesheetAnalyticsTab({
 
         {chartData.length === 0 ? (
           <div className="py-10 text-center text-xs text-slate-400">
-            Chưa có dữ liệu phân bổ hoặc nhật ký giờ công trong tháng {selectedMonth}.
+            Chưa có dữ liệu phân bổ hoặc nhật ký giờ công trong {formatMonthVN(selectedMonth)}.
           </div>
         ) : (
           <div className="h-72 w-full">
@@ -943,7 +1096,7 @@ export default function TimesheetAnalyticsTab({
         {filteredWorklogs.length === 0 ? (
           <div className="p-10 text-center space-y-2.5">
             <p className="text-xs text-slate-400">
-              Không có nhật ký giờ công nào khớp với điều kiện lọc trong tháng {selectedMonth}.
+              Không có nhật ký giờ công nào khớp với điều kiện lọc trong {formatMonthVN(selectedMonth)}.
             </p>
             {hasActiveFilters && (
               <button

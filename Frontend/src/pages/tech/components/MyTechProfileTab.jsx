@@ -16,17 +16,20 @@ import {
   X,
   AlertTriangle,
   Cpu,
+  Banknote,
 } from 'lucide-react';
 import api from '../../../services/api';
 import { useToast } from '../../../components/common/Toast';
 import TechRadarChart from './TechRadarChart';
 import SkillAddModal from './SkillAddModal';
 import CertificateAddModal from './CertificateAddModal';
+import CertReimbursementModal from './CertReimbursementModal';
 import {
   PROFICIENCY_CONFIG,
   RADAR_DIMENSIONS,
   sortSkillsByLevel,
   formatDateVN,
+  formatCurrencyVND,
   getCertExpiryInfo,
 } from '../techHelpers';
 
@@ -43,6 +46,21 @@ export default function MyTechProfileTab({ externalProfile = null, onRefreshProf
   const [editingSkill, setEditingSkill] = useState(null);
   const [isCertModalOpen, setIsCertModalOpen] = useState(false);
   const [editingCert, setEditingCert] = useState(null);
+  const [reimbCertTarget, setReimbCertTarget] = useState(null);
+  const [myCertReimbs, setMyCertReimbs] = useState([]);
+
+  const fetchMyCertReimbs = useCallback(async () => {
+    try {
+      const res = await api.get('/api/tech-finance/cert-reimbursements');
+      setMyCertReimbs(res.data?.data || []);
+    } catch {
+      setMyCertReimbs([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchMyCertReimbs();
+  }, [fetchMyCertReimbs]);
 
   // Delete Confirm Modal State
   const [deleteConfirm, setDeleteConfirm] = useState({
@@ -527,10 +545,40 @@ export default function MyTechProfileTab({ externalProfile = null, onRefreshProf
                           {cert.credentialId && (
                             <p className="text-slate-500 text-[10px] font-mono">Mã ID: {cert.credentialId}</p>
                           )}
+                          {(() => {
+                            const reimb = myCertReimbs.find((r) => r.certificateId === cert.id);
+                            if (!reimb) return null;
+                            const labelMap = {
+                              SUBMITTED: { text: 'Hoàn ứng: Chờ CN xác thực', cls: 'bg-sky-50 text-sky-700 border-sky-200' },
+                              TECH_APPROVED: { text: 'Hoàn ứng: Chờ Tài chính duyệt chi', cls: 'bg-amber-50 text-amber-800 border-amber-200' },
+                              FINANCE_APPROVED: { text: `Đã duyệt chi ${formatCurrencyVND(reimb.approvedAmountVnd)}`, cls: 'bg-indigo-50 text-indigo-800 border-indigo-200' },
+                              DISBURSED: { text: `Đã chi trả ${formatCurrencyVND(reimb.approvedAmountVnd)}${reimb.paymentReference ? ` (${reimb.paymentReference})` : ''}`, cls: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
+                              REJECTED: { text: `Hoàn ứng bị từ chối: ${reimb.rejectionReason || ''}`, cls: 'bg-rose-50 text-rose-700 border-rose-200' },
+                            };
+                            const m = labelMap[reimb.status] || labelMap.SUBMITTED;
+                            return (
+                              <span className={`inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${m.cls}`}>
+                                {m.text}
+                              </span>
+                            );
+                          })()}
                         </div>
                       </div>
 
                       <div className="flex items-center gap-1 shrink-0">
+                        {!myCertReimbs.some(
+                          (r) => r.certificateId === cert.id && ['SUBMITTED', 'TECH_APPROVED', 'FINANCE_APPROVED', 'DISBURSED'].includes(r.status)
+                        ) && (
+                          <button
+                            type="button"
+                            onClick={() => setReimbCertTarget(cert)}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-[10px] font-bold transition cursor-pointer whitespace-nowrap"
+                            title="Đề xuất hoàn ứng / tài trợ lệ phí thi chứng chỉ sang Phòng Công nghệ & Tài chính"
+                          >
+                            <Banknote size={12} />
+                            <span>Hoàn ứng</span>
+                          </button>
+                        )}
                         {cert.credentialUrl && (
                           <a
                             href={cert.credentialUrl}
@@ -594,6 +642,14 @@ export default function MyTechProfileTab({ externalProfile = null, onRefreshProf
           setEditingCert(null);
         }}
         onSuccess={syncProfile}
+      />
+
+      {/* Modal Đề xuất Hoàn ứng Lệ phí Chứng chỉ */}
+      <CertReimbursementModal
+        isOpen={Boolean(reimbCertTarget)}
+        certificate={reimbCertTarget}
+        onClose={() => setReimbCertTarget(null)}
+        onSuccess={fetchMyCertReimbs}
       />
 
       {/* ── Popup Xác nhận Xóa (z-[10000]) ─────────────────────────────────── */}

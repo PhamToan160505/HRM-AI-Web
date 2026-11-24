@@ -100,6 +100,11 @@ export default function TechReviewDetailModal({
   const [overrideTitle, setOverrideTitle] = useState('');
   const [ceoNewBaseSalary, setCeoNewBaseSalary] = useState('');
   const [ceoNewAllowance, setCeoNewAllowance] = useState('');
+  const [effectivePayrollMonth, setEffectivePayrollMonth] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [payrollLockHint, setPayrollLockHint] = useState(null);
   const [compensationNote, setCompensationNote] = useState('');
   const [ceoCalDelta, setCeoCalDelta] = useState(0);
   const [ceoCalReason, setCeoCalReason] = useState('');
@@ -224,6 +229,27 @@ export default function TechReviewDetailModal({
       }, 50);
     };
   }, [isOpen, submitting, hasTopModalOpen, onClose]);
+
+  useEffect(() => {
+    if (!isOpen || !review?.departmentId || !(viewerRole === 'ceo' || viewerRole === 'admin')) return;
+    let active = true;
+    api
+      .get('/api/tech-finance/payroll-lock-hint', {
+        params: { departmentId: review.departmentId },
+      })
+      .then((res) => {
+        if (!active) return;
+        const hint = res.data?.data;
+        setPayrollLockHint(hint || null);
+        if (hint?.suggestedEffectiveMonth) {
+          setEffectivePayrollMonth(hint.suggestedEffectiveMonth);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [isOpen, review?.departmentId, viewerRole]);
 
   const roleNorm = (viewerRole || '').toLowerCase();
   const isCeoOrAdmin = roleNorm === 'ceo' || roleNorm === 'admin';
@@ -479,6 +505,10 @@ export default function TechReviewDetailModal({
               newAllowance:
                 hasPendingComp && approveCompensation && isCeoOrAdmin
                   ? parseVndInput(ceoNewAllowance)
+                  : null,
+              effectivePayrollMonth:
+                hasPendingComp && approveCompensation && isCeoOrAdmin && effectivePayrollMonth
+                  ? effectivePayrollMonth
                   : null,
               compensationNote: compensationNote.trim() || null,
               probationPassed: review?.reviewType === 'PROBATION' ? probationPassed : null,
@@ -1385,7 +1415,7 @@ export default function TechReviewDetailModal({
                                     </div>
                                     <div className="space-y-1">
                                       <label className="block text-[11px] font-bold text-slate-700">
-                                        Lương CB mới (VNĐ - bỏ trống tự tính theo {review?.recommendedSalaryIncreasePct ?? 0}%)
+                                        Lương cơ bản mới (VNĐ)
                                       </label>
                                       <div className="relative">
                                         <input
@@ -1400,10 +1430,13 @@ export default function TechReviewDetailModal({
                                           VNĐ
                                         </span>
                                       </div>
+                                      <p className="text-[10px] text-slate-400">
+                                        Bỏ trống sẽ tự tính theo mức đề xuất {review?.recommendedSalaryIncreasePct ?? 0}%
+                                      </p>
                                     </div>
                                     <div className="space-y-1">
                                       <label className="block text-[11px] font-bold text-slate-700">
-                                        Phụ cấp mới (VNĐ - tùy chọn)
+                                        Phụ cấp mới (VNĐ)
                                       </label>
                                       <div className="relative">
                                         <input
@@ -1417,6 +1450,31 @@ export default function TechReviewDetailModal({
                                         <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">
                                           VNĐ
                                         </span>
+                                      </div>
+                                      <p className="text-[10px] text-slate-400">
+                                        Tùy chọn (bỏ trống nếu giữ nguyên)
+                                      </p>
+                                    </div>
+                                    <div className="sm:col-span-2 space-y-1">
+                                      <label className="block text-[11px] font-bold text-slate-700">
+                                        Kỳ lương áp dụng điều chỉnh (Đồng bộ Tài chính • An toàn theo khóa kỳ lương)
+                                      </label>
+                                      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                        <input
+                                          type="month"
+                                          value={effectivePayrollMonth}
+                                          onChange={(e) => setEffectivePayrollMonth(e.target.value)}
+                                          className="px-2.5 py-1.5 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-blue-500"
+                                        />
+                                        {payrollLockHint && (
+                                          <span
+                                            className={`text-[11px] font-medium ${
+                                              payrollLockHint.locked ? 'text-amber-700' : 'text-emerald-700'
+                                            }`}
+                                          >
+                                            {payrollLockHint.message}
+                                          </span>
+                                        )}
                                       </div>
                                     </div>
                                   </div>

@@ -21,9 +21,11 @@ const ForcePortal = ({ children }) => {
 import { useAuth } from '../../../context/AuthContext';
 import { useToast } from '../../../components/common/Toast';
 import api from '../../../services/api';
-import { Filter, ChevronLeft, ChevronRight, History } from 'lucide-react';
+import { Filter, ChevronLeft, ChevronRight, History, CheckCircle2, Clock3, XCircle, Landmark } from 'lucide-react';
 import ApprovalTimelineModal from './components/ApprovalTimelineModal';
 import useRealtimeSync from '../../../hooks/useRealtimeSync';
+import { isFinanceDepartment } from '../../../utils/payrollStatus';
+import { formatCurrencyVND } from '../../../utils/currency';
 
 const ROLES_MAP = {
   NHAN_VIEN: 'Nhân viên',
@@ -63,10 +65,15 @@ export default function JobRequisitionPage() {
   const { user } = useAuth();
   const { show } = useToast();
   
+  const isCeoOrAdmin = user?.role === 'ceo' || user?.role === 'admin';
+  const isDeptDirector = user?.role === 'giam_doc_phong_ban';
+  const isFinanceApprover = (user?.role === 'truong_phong' || user?.role === 'giam_doc_phong_ban') && isFinanceDepartment(user?.tenPhong);
+  const isHrManager = (user?.role === 'truong_phong' || user?.role === 'giam_doc_phong_ban') && user?.tenPhong === 'Nhân sự';
+
   const [requisitions, setRequisitions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(
-    (user?.role === 'ceo' || user?.role === 'admin') ? 'department_requests' : 'my_requests'
+    (isCeoOrAdmin || isDeptDirector || isFinanceApprover) ? 'department_requests' : 'my_requests'
   );
 
   // Pagination & Filters
@@ -151,10 +158,12 @@ export default function JobRequisitionPage() {
     }
     try {
       if (type === 'approve') {
-        await api.post(`/api/job-requisitions/${reqId}/approve`, null, {
-          headers: { 'Idempotency-Key': crypto.randomUUID() }
-        });
-        show('Thành công', 'Đã duyệt yêu cầu', 'success');
+        await api.post(
+          `/api/job-requisitions/${reqId}/approve`,
+          actionReason.trim() ? { comment: actionReason.trim() } : {},
+          { headers: { 'Idempotency-Key': crypto.randomUUID() } }
+        );
+        show('Thành công', 'Đã phê duyệt bước hiện tại của yêu cầu', 'success');
       } else if (type === 'return') {
         await api.post(`/api/job-requisitions/${reqId}/return`, { comment: actionReason }, {
           headers: { 'Idempotency-Key': crypto.randomUUID() }
@@ -248,34 +257,50 @@ export default function JobRequisitionPage() {
         </div>
       </div>
 
-      {(user?.role === 'ceo' || user?.role === 'admin') && (
+      {(isCeoOrAdmin || isDeptDirector || isFinanceApprover) && (
         <div className="border-b border-gray-200">
           <nav className="-mb-px flex space-x-8">
-            <button
-              onClick={() => { setActiveTab('my_requests'); setPage(0); }}
-              className={`${
-                activeTab === 'my_requests'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
-            >
-              Yêu cầu của cá nhân
-            </button>
             <button
               onClick={() => { setActiveTab('department_requests'); setPage(0); }}
               className={`${
                 activeTab === 'department_requests'
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors cursor-pointer`}
             >
-              Yêu cầu của phòng ban
+              {isFinanceApprover
+                ? 'Thẩm định ngân sách & Yêu cầu toàn công ty'
+                : isDeptDirector
+                  ? 'Duyệt chuyên môn & Yêu cầu phòng ban'
+                  : 'Yêu cầu của phòng ban'}
             </button>
+            <button
+              onClick={() => { setActiveTab('my_requests'); setPage(0); }}
+              className={`${
+                activeTab === 'my_requests'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors cursor-pointer`}
+            >
+              Yêu cầu của cá nhân
+            </button>
+            {isHrManager && (
+              <button
+                onClick={() => { setActiveTab('ceo_approved'); setPage(0); }}
+                className={`${
+                  activeTab === 'ceo_approved'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors cursor-pointer`}
+              >
+                Yêu cầu đã duyệt (Mở chiến dịch)
+              </button>
+            )}
           </nav>
         </div>
       )}
 
-      {user?.tenPhong === 'Nhân sự' && (user?.role === 'truong_phong' || user?.role === 'giam_doc_phong_ban') && (
+      {isHrManager && !isDeptDirector && (
         <div className="border-b border-gray-200">
           <nav className="-mb-px flex space-x-8">
             <button
@@ -284,7 +309,7 @@ export default function JobRequisitionPage() {
                 activeTab === 'my_requests'
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors cursor-pointer`}
             >
               Yêu cầu của cá nhân
             </button>
@@ -294,7 +319,7 @@ export default function JobRequisitionPage() {
                 activeTab === 'ceo_approved'
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors cursor-pointer`}
             >
               Yêu cầu từ Tổng Giám đốc
             </button>
@@ -311,9 +336,9 @@ export default function JobRequisitionPage() {
           ) : (
              requisitions.map((req) => (
               <li key={req.id} className="hover:bg-slate-50 transition-colors">
-                <div className="px-4 py-5 flex items-center sm:px-6">
-                  <div className="min-w-0 flex-1 sm:flex sm:items-center sm:justify-between">
-                    <div className="truncate pr-4">
+                <div className="px-4 py-5 sm:px-6 space-y-3">
+                  <div className="min-w-0 flex-1 sm:flex sm:items-start sm:justify-between gap-4">
+                    <div className="min-w-0 flex-1">
                       <div className="flex text-sm">
                         <p className="font-bold text-blue-700 truncate text-base">{req.title}</p>
                         <p className="ml-2 flex-shrink-0 font-normal text-gray-500 flex items-center">
@@ -365,37 +390,64 @@ export default function JobRequisitionPage() {
                           ))}
                         </div>
                       )}
+
+                      {/* Bối cảnh Ngân sách & Tác động Quỹ lương (Hiển thị cho Tài chính / CEO / Giám đốc) */}
+                      {(req.budget || req.estimatedAnnualCost || req.financeBudgetNote) && (
+                        <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs">
+                          {req.budget && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold">
+                              <Landmark size={12} /> Ngân sách/tháng: {req.budget}
+                            </span>
+                          )}
+                          {(isFinanceApprover || isCeoOrAdmin || isDeptDirector) && req.estimatedAnnualCost && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-900 border border-blue-200 font-semibold tabular-nums">
+                              Quỹ lương ước tính/năm (+21,5% BHXH DN): {formatCurrencyVND(req.estimatedAnnualCost)}
+                            </span>
+                          )}
+                          {req.financeBudgetNote && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 border border-amber-200">
+                              <strong>Tài chính{req.financeReviewerName ? ` (${req.financeReviewerName})` : ''}:</strong> {req.financeBudgetNote}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <div className="mt-4 flex-shrink-0 sm:mt-0 sm:ml-5 flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 items-end sm:items-center">
                       <span className={`px-3 py-1 inline-flex text-xs leading-5 font-bold rounded-full border ${STATUS_MAP[req.status]?.color || 'bg-gray-100 text-gray-800'}`}>
-                        {STATUS_MAP[req.status]?.label || req.status}
+                        {req.status === 'PENDING_APPROVAL' && req.currentStepOrder
+                          ? `Chờ B${req.currentStepOrder}`
+                          : (STATUS_MAP[req.status]?.label || req.status)}
                       </span>
                       <div className="flex gap-2">
                         <button
                           type="button"
                           onClick={() => setTimelineRequisition(req)}
-                          className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                          className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 cursor-pointer"
                           title="Xem lịch sử gửi, trả về và duyệt"
                         >
                           <History size={15} /> Lịch sử
                         </button>
-                        {req.status === 'PENDING_APPROVAL' && (user.role === 'ceo' || user.role === 'admin') && req.requesterId !== user.userId && (
+                        {req.status === 'PENDING_APPROVAL' && req.canCurrentUserApprove && (
                           <>
                             <button
-                              onClick={() => setActionModal({ isOpen: true, type: 'approve', reqId: req.id })}
-                              className="text-white bg-green-500 hover:bg-green-600 px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
+                              onClick={() => setActionModal({ isOpen: true, type: 'approve', reqId: req.id, req })}
+                              className="text-white bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 rounded-md text-sm font-semibold transition-colors cursor-pointer"
                             >
-                              Duyệt
+                              {req.currentStepScope === 'FINANCE_DEPARTMENT'
+                                ? 'Duyệt ngân sách'
+                                : req.currentStepScope === 'ENTITY_DEPARTMENT'
+                                  ? 'Duyệt chuyên môn'
+                                  : 'Duyệt chốt'}
                             </button>
                             <button
-                              onClick={() => setActionModal({ isOpen: true, type: 'return', reqId: req.id })}
-                              className="text-white bg-amber-500 hover:bg-amber-600 px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
+                              onClick={() => setActionModal({ isOpen: true, type: 'return', reqId: req.id, req })}
+                              className="text-white bg-amber-500 hover:bg-amber-600 px-3 py-1.5 rounded-md text-sm font-medium transition-colors cursor-pointer"
                             >
                               Trả về
                             </button>
                             <button
-                              onClick={() => setActionModal({ isOpen: true, type: 'reject', reqId: req.id })}
-                              className="text-white bg-red-500 hover:bg-red-600 px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
+                              onClick={() => setActionModal({ isOpen: true, type: 'reject', reqId: req.id, req })}
+                              className="text-white bg-red-500 hover:bg-red-600 px-3 py-1.5 rounded-md text-sm font-medium transition-colors cursor-pointer"
                             >
                               Từ chối
                             </button>
@@ -445,6 +497,52 @@ export default function JobRequisitionPage() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Thanh tiến trình duyệt tuần tự đa cấp (Full-width 1 hàng ngang) */}
+                  {req.approvalSteps?.length > 0 && (
+                    <div className="pt-2.5 border-t border-slate-100 flex items-center gap-2 overflow-x-auto">
+                      {req.approvalSteps.map((step, idx) => {
+                        const isApprovedStep = step.status === 'APPROVED';
+                        const isPendingActive = step.status === 'PENDING' && req.currentStepOrder === step.stepOrder && req.status === 'PENDING_APPROVAL';
+                        const isRejectedStep = step.status === 'REJECTED' || step.status === 'RETURNED';
+                        const pillClass = isApprovedStep
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                          : isRejectedStep
+                            ? 'bg-rose-50 text-rose-800 border-rose-200'
+                            : isPendingActive
+                              ? 'bg-amber-50 text-amber-900 border-amber-300 ring-1 ring-amber-200 font-bold'
+                              : 'bg-slate-50 text-slate-500 border-slate-200';
+                        const shortLabel =
+                          step.stepScope === 'ENTITY_DEPARTMENT'
+                            ? 'GĐ Phòng ban duyệt chuyên môn'
+                            : step.stepScope === 'FINANCE_DEPARTMENT'
+                              ? 'Tài chính thẩm định ngân sách'
+                              : step.approverRole === 'CEO'
+                                ? 'CEO phê duyệt cuối'
+                                : step.stepLabel;
+                        return (
+                          <React.Fragment key={`${req.id}-st-${step.stepOrder}`}>
+                            <span
+                              className={`inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full border whitespace-nowrap shrink-0 ${pillClass}`}
+                              title={`${step.stepLabel || ''}${step.decidedByName ? ` — ${step.decidedByName}` : ''}${step.comment ? `: ${step.comment}` : ''}`}
+                            >
+                              {isApprovedStep ? (
+                                <CheckCircle2 size={12} className="text-emerald-600 shrink-0" />
+                              ) : isRejectedStep ? (
+                                <XCircle size={12} className="text-rose-600 shrink-0" />
+                              ) : (
+                                <Clock3 size={12} className={isPendingActive ? 'text-amber-600 shrink-0' : 'text-slate-400 shrink-0'} />
+                              )}
+                              <span>B{step.stepOrder}: {shortLabel}</span>
+                            </span>
+                            {idx < req.approvalSteps.length - 1 && (
+                              <span className="text-slate-300 text-xs font-bold shrink-0">→</span>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </li>
             ))
@@ -562,14 +660,50 @@ export default function JobRequisitionPage() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
                       </svg>
                     </div>
-                    <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
-                      <h3 className="text-lg leading-6 font-medium text-gray-900" id="modal-title">
-                        Xác nhận duyệt
+                    <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                      <h3 className="text-lg leading-6 font-semibold text-gray-900" id="modal-title">
+                        {actionModal.req?.currentStepScope === 'FINANCE_DEPARTMENT'
+                          ? 'Xác nhận Thẩm định Ngân sách Tuyển dụng'
+                          : actionModal.req?.currentStepScope === 'ENTITY_DEPARTMENT'
+                            ? 'Xác nhận Duyệt Chuyên môn & Bench'
+                            : 'Xác nhận Phê duyệt Yêu cầu Tuyển dụng'}
                       </h3>
-                      <div className="mt-2">
-                        <p className="text-sm text-gray-500">
-                          Bạn có chắc chắn muốn duyệt yêu cầu này? Sau khi duyệt, phòng nhân sự sẽ có thể tạo chiến dịch tuyển dụng.
+                      <div className="mt-2 space-y-3">
+                        <p className="text-sm text-gray-600">
+                          {actionModal.req?.currentStepLabel
+                            ? `Bước hiện tại: ${actionModal.req.currentStepLabel}. `
+                            : ''}
+                          {actionModal.req?.currentStepScope === 'FINANCE_DEPARTMENT'
+                            ? 'Sau khi thẩm định đạt ngân sách, yêu cầu sẽ tự động chuyển lên Tổng Giám đốc phê duyệt cuối.'
+                            : actionModal.req?.currentStepScope === 'ENTITY_DEPARTMENT'
+                              ? 'Sau khi duyệt chuyên môn, yêu cầu sẽ chuyển sang Phòng Tài chính - Kế toán thẩm định ngân sách.'
+                              : 'Sau khi phê duyệt cuối, Phòng Nhân sự sẽ nhận thông báo để mở chiến dịch tuyển dụng.'}
                         </p>
+                        {actionModal.req?.estimatedAnnualCost && (
+                          <div className="p-2.5 rounded-lg bg-blue-50 border border-blue-200 text-xs text-blue-900">
+                            <strong>Tác động quỹ lương ước tính/năm (+21,5% BHXH DN):</strong>{' '}
+                            <span className="font-bold">{formatCurrencyVND(actionModal.req.estimatedAnnualCost)}</span>
+                            {actionModal.req.budget ? ` (${actionModal.req.soLuong} vị trí × ${actionModal.req.budget}/tháng)` : ''}
+                          </div>
+                        )}
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1">
+                            {actionModal.req?.currentStepScope === 'FINANCE_DEPARTMENT'
+                              ? 'Ghi chú thẩm định ngân sách (tùy chọn)'
+                              : 'Ghi chú phê duyệt (tùy chọn)'}
+                          </label>
+                          <textarea
+                            rows={3}
+                            className="shadow-sm focus:ring-emerald-500 focus:border-emerald-500 block w-full sm:text-sm border-gray-300 rounded-md p-2 border"
+                            placeholder={
+                              actionModal.req?.currentStepScope === 'FINANCE_DEPARTMENT'
+                                ? 'VD: Đạt hạn mức quỹ lương Q4/2026 - nguồn OpEx Phòng Công nghệ...'
+                                : 'Nhập ghi chú đính kèm bước phê duyệt (nếu có)...'
+                            }
+                            value={actionReason}
+                            onChange={(e) => setActionReason(e.target.value)}
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
