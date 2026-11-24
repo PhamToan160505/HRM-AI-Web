@@ -26,6 +26,9 @@ public class ApprovalService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.hrm.common.repository.UserRepository userRepository;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hrm.common.payroll.service.FinanceAccess financeAccess;
+
     @Transactional
     public ApprovalRequest openRequest(
             ApprovalEntityType entityType,
@@ -64,7 +67,9 @@ public class ApprovalService {
                         step.stepOrder(),
                         step.approverRole(),
                         step.approverId(),
-                        step.resolutionNote()))
+                        step.resolutionNote(),
+                        step.stepScope(),
+                        step.stepLabel()))
                 .toList();
         stepRepository.saveAll(steps);
         return request;
@@ -104,16 +109,7 @@ public class ApprovalService {
         ApprovalStep currentStep = stepRepository.findFirstByRequestIdAndStatusOrderByStepOrder(
                         request.getId(), ApprovalStepStatus.PENDING)
                 .orElseThrow(() -> AppException.conflict("Approval request không còn bước đang chờ"));
-        boolean isAssignedApprover = currentStep.getResolvedApproverId() != null
-                && currentStep.getResolvedApproverId().equals(actorId);
-        if (!isAssignedApprover && userRepository != null) {
-            isAssignedApprover = userRepository.findById(actorId)
-                    .filter(u -> Boolean.TRUE.equals(u.getActive()))
-                    .filter(u -> u.getRole() == com.hrm.common.entity.Role.CEO
-                            || u.getRole() == com.hrm.common.entity.Role.ADMIN)
-                    .map(u -> u.getRole() == currentStep.getApproverRole())
-                    .orElse(false);
-        }
+        boolean isAssignedApprover = canActorDecideStep(currentStep, actorId);
         if (!isAssignedApprover) {
             throw AppException.forbidden("Bạn không phải người được phân công cho bước duyệt hiện tại");
         }
@@ -171,6 +167,82 @@ public class ApprovalService {
         return requestRepository.save(request);
     }
 
+    public boolean canActorDecideStep(ApprovalStep step, Long actorId) {
+        if (step == null || actorId == null || step.getStatus() != ApprovalStepStatus.PENDING) {
+            return false;
+        }
+        if (step.getResolvedApproverId() != null && step.getResolvedApproverId().equals(actorId)) {
+            return true;
+        }
+        if (userRepository == null) {
+            return false;
+        }
+        com.hrm.common.entity.User actor = userRepository.findById(actorId)
+                .filter(u -> Boolean.TRUE.equals(u.getActive()))
+                .orElse(null);
+        if (actor == null) {
+            return false;
+        }
+        // Bước thẩm định ngân sách Phòng Tài chính: cho phép cả Kế toán trưởng (TRUONG_PHONG) và Giám đốc Tài chính (GIAM_DOC_PHONG_BAN)
+        if ("FINANCE_DEPARTMENT".equals(step.getStepScope()) && financeAccess != null) {
+            Long finDeptId = financeAccess.financeDepartmentId().orElse(null);
+            return finDeptId != null
+                    && finDeptId.equals(actor.getDepartmentId())
+                    && (actor.getRole() == com.hrm.common.entity.Role.TRUONG_PHONG
+                        || actor.getRole() == com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN);
+        }
+        // Bước duyệt Giám đốc Phòng ban: cho phép Giám đốc cùng phòng với người được phân công
+        if ("ENTITY_DEPARTMENT".equals(step.getStepScope())
+                && step.getApproverRole() == com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN
+                && actor.getRole() == com.hrm.common.entity.Role.GIAM_DOC_PHONG_BAN
+                && step.getResolvedApproverId() != null) {
+            Long targetDeptId = userRepository.findById(step.getResolvedApproverId())
+                    .map(com.hrm.common.entity.User::getDepartmentId)
+                    .orElse(null);
+            return targetDeptId != null && targetDeptId.equals(actor.getDepartmentId());
+        }
+        // Bước CEO / ADMIN toàn cục
+        if ((actor.getRole() == com.hrm.common.entity.Role.CEO
+                || actor.getRole() == com.hrm.common.entity.Role.ADMIN)
+                && actor.getRole() == step.getApproverRole()) {
+            return true;
+        }
+        return false;
+    }
+
+    @Transactional
+    public void syncOpenRequestEntityVersion(
+            ApprovalEntityType entityType,
+            Long entityId,
+            Long newEntityVersion) {
+        if (entityType == null || entityId == null || newEntityVersion == null) {
+            return;
+        }
+        requestRepository.findFirstByEntityTypeAndEntityIdAndStatusOrderByCreatedAtDesc(
+                        entityType, entityId, ApprovalRequestStatus.OPEN)
+                .ifPresent(req -> {
+                    req.syncEntityVersion(newEntityVersion);
+                    requestRepository.save(req);
+                });
+    }
+
+    @Transactional(readOnly = true)
+    public java.util.Optional<ApprovalRequestView> getLatestRequestView(ApprovalEntityType entityType, Long entityId) {
+        return requestRepository.findByEntityTypeAndEntityIdOrderByCreatedAtDesc(entityType, entityId)
+                .stream()
+                .findFirst()
+                .map(this::toView);
+    }
+
+    @Transactional(readOnly = true)
+    public java.util.Optional<ApprovalStep> getCurrentPendingStep(ApprovalEntityType entityType, Long entityId) {
+        return requestRepository.findFirstByEntityTypeAndEntityIdAndStatusOrderByCreatedAtDesc(
+                        entityType, entityId, ApprovalRequestStatus.OPEN)
+                .flatMap(req -> stepRepository.findByRequestIdOrderByStepOrder(req.getId()).stream()
+                        .filter(s -> s.getStatus() == ApprovalStepStatus.PENDING)
+                        .findFirst());
+    }
+
     @Transactional(readOnly = true)
     public List<ApprovalRequestView> getHistory(ApprovalEntityType entityType, Long entityId) {
         return requestRepository.findByEntityTypeAndEntityIdOrderByCreatedAtDesc(entityType, entityId)
@@ -196,10 +268,16 @@ public class ApprovalService {
 
     private ApprovalRequestView toView(ApprovalRequest request) {
         List<ApprovalStepView> steps = stepRepository.findByRequestIdOrderByStepOrder(request.getId()).stream()
-                .map(step -> new ApprovalStepView(
-                        step.getId(), step.getStepOrder(), step.getApproverRole(),
-                        step.getResolvedApproverId(), step.getStatus(), step.getDecidedBy(),
-                        step.getDecidedAt(), step.getComment(), step.getDelegatedFrom(), step.getResolutionNote()))
+                .map(step -> {
+                    String decidedByName = (step.getDecidedBy() != null && userRepository != null)
+                            ? userRepository.findById(step.getDecidedBy()).map(com.hrm.common.entity.User::getHoTen).orElse(null)
+                            : null;
+                    return new ApprovalStepView(
+                            step.getId(), step.getStepOrder(), step.getApproverRole(),
+                            step.getResolvedApproverId(), step.getStatus(), step.getDecidedBy(),
+                            step.getDecidedAt(), step.getComment(), step.getDelegatedFrom(), step.getResolutionNote(),
+                            step.getStepScope(), step.getStepLabel(), decidedByName);
+                })
                 .toList();
         return new ApprovalRequestView(
                 request.getId(), request.getEntityType(), request.getEntityId(), request.getEntityVersion(),
@@ -214,7 +292,9 @@ public class ApprovalService {
                 step.getId(),
                 step.getStatus(),
                 request.getStatus() != ApprovalRequestStatus.OPEN,
-                idempotentReplay);
+                idempotentReplay,
+                step.getStepScope(),
+                step.getStepOrder());
     }
 
     private void skipOtherPending(List<ApprovalStep> steps, Long decidedStepId, String reason) {
@@ -252,7 +332,20 @@ public class ApprovalService {
             Long stepId,
             ApprovalStepStatus stepStatus,
             boolean requestFinalized,
-            boolean idempotentReplay) {}
+            boolean idempotentReplay,
+            String stepScope,
+            Integer stepOrder) {
+
+        public ApprovalOutcome(
+                Long requestId,
+                ApprovalRequestStatus requestStatus,
+                Long stepId,
+                ApprovalStepStatus stepStatus,
+                boolean requestFinalized,
+                boolean idempotentReplay) {
+            this(requestId, requestStatus, stepId, stepStatus, requestFinalized, idempotentReplay, null, null);
+        }
+    }
 
     public record ApprovalRequestView(
             Long id,
@@ -276,7 +369,25 @@ public class ApprovalService {
             java.time.LocalDateTime decidedAt,
             String comment,
             Long delegatedFrom,
-            String resolutionNote) {}
+            String resolutionNote,
+            String stepScope,
+            String stepLabel,
+            String decidedByName) {
+
+        public ApprovalStepView(
+                Long id,
+                Integer stepOrder,
+                com.hrm.common.entity.Role approverRole,
+                Long resolvedApproverId,
+                ApprovalStepStatus status,
+                Long decidedBy,
+                java.time.LocalDateTime decidedAt,
+                String comment,
+                Long delegatedFrom,
+                String resolutionNote) {
+            this(id, stepOrder, approverRole, resolvedApproverId, status, decidedBy, decidedAt, comment, delegatedFrom, resolutionNote, null, null, null);
+        }
+    }
 
     public record ApprovalInboxItem(
             Long requestId,

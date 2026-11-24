@@ -5,6 +5,8 @@ import com.hrm.common.payroll.entity.Payroll;
 import com.hrm.common.payroll.service.PayrollService;
 import com.hrm.exception.ApiResponse;
 import com.hrm.security.CustomUserDetails;
+import com.hrm.techfinance.entity.TechCertReimbursement;
+import com.hrm.techfinance.repository.TechCertReimbursementRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -13,9 +15,12 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * API lương theo luồng do phòng Tài chính - Kế toán điều phối.
@@ -28,6 +33,7 @@ import java.util.Map;
 public class PayrollController {
 
     private final PayrollService payrollService;
+    private final TechCertReimbursementRepository techCertReimbursementRepository;
 
     @GetMapping("/access")
     @PreAuthorize("isAuthenticated()")
@@ -49,7 +55,9 @@ public class PayrollController {
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getBatchItems(
             @PathVariable Long id,
             @AuthenticationPrincipal CustomUserDetails user) {
-        return ResponseEntity.ok(ApiResponse.ok(payrollService.getBatchItems(id, user)));
+        List<Map<String, Object>> items = payrollService.getBatchItems(id, user);
+        enrichBatchItemsWithCertReimbursements(items);
+        return ResponseEntity.ok(ApiResponse.ok(items));
     }
 
     // ── 1. Trưởng phòng / GĐ phòng chốt công ──
@@ -182,6 +190,78 @@ public class PayrollController {
     @GetMapping("/me")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<List<Payroll>>> getMyPayroll(@AuthenticationPrincipal CustomUserDetails user) {
-        return ResponseEntity.ok(ApiResponse.ok(payrollService.getMyPayroll(user.getUserId()), "Lấy phiếu lương thành công"));
+        List<Payroll> payrolls = payrollService.getMyPayroll(user.getUserId());
+        enrichMyPayrollsWithCertReimbursements(payrolls, user.getUserId());
+        return ResponseEntity.ok(ApiResponse.ok(payrolls, "Lấy phiếu lương thành công"));
+    }
+
+    /**
+     * Bổ sung cột hiển thị "Hoàn ứng chứng chỉ (miễn thuế)" cho các khoản hoàn ứng chọn gộp kỳ lương
+     * (không tác động vào công thức Gross/BHXH/Thuế TNCN của PayrollService).
+     */
+    private void enrichBatchItemsWithCertReimbursements(List<Map<String, Object>> items) {
+        if (items == null || items.isEmpty()) return;
+        Object mObj = items.get(0).get("month");
+        Object yObj = items.get(0).get("year");
+        if (!(mObj instanceof Number mNum) || !(yObj instanceof Number yNum)) return;
+
+        String yyyyMm = String.format("%04d-%02d", yNum.intValue(), mNum.intValue());
+        List<TechCertReimbursement> certs = techCertReimbursementRepository
+                .findByPayoutMethodAndPayoutPayrollMonthAndStatusIn(
+                        "NEXT_PAYROLL", yyyyMm, List.of("FINANCE_APPROVED", "DISBURSED"));
+        Map<Long, List<TechCertReimbursement>> byEmp = certs.stream()
+                .collect(Collectors.groupingBy(TechCertReimbursement::getEmployeeId));
+
+        for (Map<String, Object> row : items) {
+            Long empId = row.get("employeeId") instanceof Number n ? n.longValue() : null;
+            double net = row.get("netSalary") instanceof Number n ? n.doubleValue() : 0.0;
+            List<TechCertReimbursement> empCerts = empId != null ? byEmp.getOrDefault(empId, List.of()) : List.of();
+            double certTotal = sumCertReimbursement(empCerts);
+            row.put("certReimbursementAmount", certTotal);
+            row.put("certReimbursementSummary", buildCertSummary(empCerts));
+            row.put("totalPayoutAmount", net + certTotal);
+        }
+    }
+
+    private void enrichMyPayrollsWithCertReimbursements(List<Payroll> payrolls, Long userId) {
+        if (payrolls == null || payrolls.isEmpty() || userId == null) return;
+        List<TechCertReimbursement> allMyCerts = techCertReimbursementRepository
+                .findByEmployeeIdOrderByCreatedAtDesc(userId).stream()
+                .filter(c -> "NEXT_PAYROLL".equals(c.getPayoutMethod())
+                        && ("FINANCE_APPROVED".equals(c.getStatus()) || "DISBURSED".equals(c.getStatus()))
+                        && c.getPayoutPayrollMonth() != null)
+                .toList();
+        Map<String, List<TechCertReimbursement>> byMonth = allMyCerts.stream()
+                .collect(Collectors.groupingBy(TechCertReimbursement::getPayoutPayrollMonth));
+
+        for (Payroll p : payrolls) {
+            if (p.getYear() == null || p.getMonth() == null) continue;
+            String yyyyMm = String.format("%04d-%02d", p.getYear(), p.getMonth());
+            List<TechCertReimbursement> monthCerts = byMonth.getOrDefault(yyyyMm, List.of());
+            double certTotal = sumCertReimbursement(monthCerts);
+            double net = p.getNetSalary() != null ? p.getNetSalary() : 0.0;
+            p.setCertReimbursementAmount(certTotal);
+            p.setCertReimbursementSummary(buildCertSummary(monthCerts));
+            p.setTotalPayoutAmount(net + certTotal);
+        }
+    }
+
+    private static double sumCertReimbursement(List<TechCertReimbursement> certs) {
+        if (certs == null || certs.isEmpty()) return 0.0;
+        return certs.stream()
+                .map(c -> c.getApprovedAmountVnd() != null ? c.getApprovedAmountVnd() : c.getRequestedAmountVnd())
+                .filter(v -> v != null && v.compareTo(BigDecimal.ZERO) > 0)
+                .mapToDouble(BigDecimal::doubleValue)
+                .sum();
+    }
+
+    private static String buildCertSummary(List<TechCertReimbursement> certs) {
+        if (certs == null || certs.isEmpty()) return null;
+        return certs.stream()
+                .map(c -> c.getCertificateName()
+                        + (c.getPaymentReference() != null && !c.getPaymentReference().isBlank()
+                                ? " (" + c.getPaymentReference() + ")"
+                                : ""))
+                .collect(Collectors.joining("; "));
     }
 }

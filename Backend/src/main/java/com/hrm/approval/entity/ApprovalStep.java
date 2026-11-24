@@ -51,6 +51,12 @@ public class ApprovalStep {
     @Column(name = "resolution_note", nullable = false, length = 500)
     private String resolutionNote;
 
+    @Column(name = "step_scope", length = 40)
+    private String stepScope;
+
+    @Column(name = "step_label", length = 150)
+    private String stepLabel;
+
     @Column(name = "decision_key", unique = true, length = 120)
     private String decisionKey;
 
@@ -64,6 +70,17 @@ public class ApprovalStep {
             Role approverRole,
             Long resolvedApproverId,
             String resolutionNote) {
+        return pending(requestId, stepOrder, approverRole, resolvedApproverId, resolutionNote, null, null);
+    }
+
+    public static ApprovalStep pending(
+            Long requestId,
+            int stepOrder,
+            Role approverRole,
+            Long resolvedApproverId,
+            String resolutionNote,
+            String stepScope,
+            String stepLabel) {
         ApprovalStep step = new ApprovalStep();
         step.requestId = requestId;
         step.stepOrder = stepOrder;
@@ -71,6 +88,8 @@ public class ApprovalStep {
         step.resolvedApproverId = resolvedApproverId;
         step.status = ApprovalStepStatus.PENDING;
         step.resolutionNote = resolutionNote;
+        step.stepScope = stepScope;
+        step.stepLabel = stepLabel;
         return step;
     }
 

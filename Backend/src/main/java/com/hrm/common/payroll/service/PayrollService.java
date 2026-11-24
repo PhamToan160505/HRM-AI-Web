@@ -212,6 +212,8 @@ public class PayrollService {
                     Map<String, Object> row = new LinkedHashMap<>();
                     row.put("id", p.getId());
                     row.put("employeeId", p.getEmployeeId());
+                    row.put("month", p.getMonth());
+                    row.put("year", p.getYear());
                     row.put("employeeName", u != null ? u.getHoTen() : "NV " + p.getEmployeeId());
                     row.put("maNhanVien", u != null ? u.getMaNhanVien() : null);
                     row.put("chucVu", u != null ? u.getChucVu() : null);

@@ -141,12 +141,14 @@ public class JobRequisitionController {
     @PreAuthorize("hasAnyAuthority('ROLE_TRUONG_PHONG', 'ROLE_GIAM_DOC_PHONG_BAN', 'ROLE_CEO', 'ROLE_ADMIN')")
     public ResponseEntity<ApiResponse<JobRequisition>> approveRequisition(
             @PathVariable Long id,
+            @RequestBody(required = false) Map<String, String> body,
             @RequestHeader(name = "X-Request-ID", required = false) String requestId,
             @RequestHeader(name = "Idempotency-Key") String idempotencyKey,
             @AuthenticationPrincipal UserDetails userDetails) {
+        String comment = body != null ? body.getOrDefault("comment", null) : null;
         return ResponseEntity.ok(ApiResponse.ok(
                 jobRequisitionService.approveRequisition(
-                        id, extractUserId(userDetails), requestId, idempotencyKey),
+                        id, extractUserId(userDetails), comment, requestId, idempotencyKey),
                 "Đã duyệt yêu cầu"));
     }
 

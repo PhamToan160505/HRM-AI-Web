@@ -50,6 +50,18 @@ public class TechPerformanceService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private org.springframework.context.ApplicationEventPublisher eventPublisher;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hrm.common.payroll.service.PayrollPeriodLock payrollPeriodLock;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hrm.techfinance.repository.TechCompensationSyncRepository compensationSyncRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hrm.techhr.service.CrossDeptHandoffService handoffService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.hrm.common.payroll.service.FinanceAccess financeAccess;
+
     @Transactional(readOnly = true)
     public List<TechEvaluationCycleResponse> getCycles(Long actorId) {
         User actor = loadActor(actorId);
@@ -1078,17 +1090,52 @@ public class TechPerformanceService {
         }
 
         boolean salaryChanged = false;
+        Double targetBs = oldBs;
+        Double targetAl = oldAl;
         if (proposedBs != null && (oldBs == null || !oldBs.equals(proposedBs))) {
-            employee.setBaseSalary(proposedBs);
+            targetBs = proposedBs;
             review.setRecommendedNewBaseSalary(proposedBs);
             salaryChanged = true;
-            userModified = true;
         }
         if (proposedAl != null && (oldAl == null || !oldAl.equals(proposedAl))) {
-            employee.setAllowance(proposedAl);
+            targetAl = proposedAl;
             review.setRecommendedNewAllowance(proposedAl);
             salaryChanged = true;
-            userModified = true;
+        }
+
+        // Module F3 (Tech <-> Finance): Xác định kỳ lương hiệu lực & tôn trọng khóa kỳ lương PayrollPeriodLock
+        java.time.ZoneId vnZone = java.time.ZoneId.of("Asia/Ho_Chi_Minh");
+        java.time.YearMonth currentYm = java.time.YearMonth.now(vnZone);
+        java.time.YearMonth effectiveYm = currentYm;
+        boolean applySalaryImmediately = true;
+
+        if (salaryChanged) {
+            if (req.getEffectivePayrollMonth() != null && !req.getEffectivePayrollMonth().isBlank()) {
+                try {
+                    effectiveYm = java.time.YearMonth.parse(req.getEffectivePayrollMonth().trim());
+                } catch (Exception e) {
+                    throw AppException.badRequest("Kỳ lương áp dụng không hợp lệ (định dạng YYYY-MM).");
+                }
+                if (effectiveYm.isBefore(currentYm)) {
+                    throw AppException.badRequest("Không thể chọn kỳ lương áp dụng trong quá khứ (" + effectiveYm + ").");
+                }
+                if (payrollPeriodLock != null && payrollPeriodLock.isDepartmentMonthLocked(review.getDepartmentId(), effectiveYm)) {
+                    throw AppException.conflict("Kỳ lương tháng " + effectiveYm.getMonthValue() + "/" + effectiveYm.getYear()
+                            + " của Phòng Công nghệ đã bị khóa. Vui lòng chọn tháng kế tiếp!");
+                }
+            } else if (payrollPeriodLock != null && payrollPeriodLock.isDepartmentMonthLocked(review.getDepartmentId(), currentYm)) {
+                effectiveYm = currentYm.plusMonths(1);
+            }
+
+            boolean isLockedNow = payrollPeriodLock != null
+                    && payrollPeriodLock.isDepartmentMonthLocked(review.getDepartmentId(), effectiveYm);
+            applySalaryImmediately = !effectiveYm.isAfter(currentYm) && !isLockedNow;
+
+            if (applySalaryImmediately) {
+                employee.setBaseSalary(targetBs);
+                employee.setAllowance(targetAl);
+                userModified = true;
+            }
         }
 
         if (userModified) {
@@ -1096,24 +1143,26 @@ public class TechPerformanceService {
         }
 
         if (salaryChanged) {
-            SalaryHistory salHistory = SalaryHistory.builder()
-                    .employeeId(employee.getId())
-                    .changedBy(actorId)
-                    .oldBaseSalary(oldBs)
-                    .newBaseSalary(employee.getBaseSalary())
-                    .oldAllowance(oldAl)
-                    .newAllowance(employee.getAllowance())
-                    .reason(reason)
-                    .changeDate(LocalDateTime.now())
-                    .build();
-            salaryHistoryRepository.save(salHistory);
+            LocalDateTime nowVn = LocalDateTime.now(vnZone);
+            if (applySalaryImmediately) {
+                SalaryHistory salHistory = SalaryHistory.builder()
+                        .employeeId(employee.getId())
+                        .changedBy(actorId)
+                        .oldBaseSalary(oldBs)
+                        .newBaseSalary(targetBs)
+                        .oldAllowance(oldAl)
+                        .newAllowance(targetAl)
+                        .reason(reason + " [Kỳ áp dụng: " + effectiveYm + "]")
+                        .changeDate(nowVn)
+                        .build();
+                salaryHistoryRepository.save(salHistory);
 
-            String oldSal = String.format("Lương CB: %.0f, Phụ cấp: %.0f",
-                    oldBs != null ? oldBs : 0, oldAl != null ? oldAl : 0);
-            String newSal = String.format("Lương CB: %.0f, Phụ cấp: %.0f",
-                    employee.getBaseSalary() != null ? employee.getBaseSalary() : 0,
-                    employee.getAllowance() != null ? employee.getAllowance() : 0);
-            employeeHistoryService.logHistory(employee.getId(), "SALARY_CHANGED", oldSal, newSal, reason);
+                String oldSal = String.format("Lương CB: %.0f, Phụ cấp: %.0f",
+                        oldBs != null ? oldBs : 0, oldAl != null ? oldAl : 0);
+                String newSal = String.format("Lương CB: %.0f, Phụ cấp: %.0f",
+                        targetBs != null ? targetBs : 0, targetAl != null ? targetAl : 0);
+                employeeHistoryService.logHistory(employee.getId(), "SALARY_CHANGED", oldSal, newSal, reason);
+            }
 
             String pctLabel = review.getRecommendedSalaryIncreasePct() != null
                     ? "+" + review.getRecommendedSalaryIncreasePct().stripTrailingZeros().toPlainString() + "%"
@@ -1122,13 +1171,86 @@ public class TechPerformanceService {
                     .employeeId(employee.getId())
                     .reviewId(review.getId())
                     .eventType(TechCareerEventType.COMPENSATION_ADJUSTED)
-                    .title("Tổng Giám Đốc phê duyệt điều chỉnh đãi ngộ (" + review.getPeriodLabel() + ")")
+                    .title("Tổng Giám Đốc phê duyệt điều chỉnh đãi ngộ (" + review.getPeriodLabel() + " · Kỳ " + effectiveYm + ")")
                     .oldValue(null)
                     .newValue(pctLabel)
                     .actorId(actorId)
                     .note(reason)
-                    .eventDate(LocalDateTime.now())
+                    .eventDate(nowVn)
                     .build());
+
+            // Ghi nhận đồng bộ sang Phòng Tài chính - Kế toán (tech_compensation_syncs)
+            if (compensationSyncRepository != null) {
+                com.hrm.techfinance.entity.TechCompensationSync sync = compensationSyncRepository
+                        .findByReviewId(review.getId())
+                        .orElseGet(com.hrm.techfinance.entity.TechCompensationSync::new);
+                sync.setReviewId(review.getId());
+                sync.setEmployeeId(employee.getId());
+                sync.setDepartmentId(review.getDepartmentId());
+                sync.setOldTitle(oldTitle);
+                sync.setNewTitle(employee.getChucVu());
+                sync.setOldBaseSalary(oldBs != null ? BigDecimal.valueOf(oldBs) : null);
+                sync.setNewBaseSalary(targetBs != null ? BigDecimal.valueOf(targetBs) : null);
+                sync.setOldAllowance(oldAl != null ? BigDecimal.valueOf(oldAl) : null);
+                sync.setNewAllowance(targetAl != null ? BigDecimal.valueOf(targetAl) : null);
+                sync.setEffectiveMonth(effectiveYm.toString());
+                sync.setStatus(applySalaryImmediately ? "APPLIED" : "PENDING_FINANCE_APPLY");
+                sync.setApprovedByCeo(actorId);
+                sync.setApprovedAt(nowVn);
+                sync.setCeoNote(reason);
+                if (applySalaryImmediately) {
+                    sync.setAppliedBy(actorId);
+                    sync.setAppliedAt(nowVn);
+                    sync.setFinanceNote("Tự động cập nhật vào hồ sơ lương vì kỳ " + effectiveYm + " đang mở.");
+                }
+                compensationSyncRepository.save(sync);
+
+                // Thông báo & tạo Handoff Task tới Phòng Tài chính - Kế toán
+                if (financeAccess != null) {
+                    Long finDeptId = financeAccess.financeDepartmentId().orElse(null);
+                    if (finDeptId != null && handoffService != null && !applySalaryImmediately) {
+                        Map<String, Object> finMeta = new LinkedHashMap<>();
+                        finMeta.put("reviewId", review.getId());
+                        finMeta.put("effectiveMonth", effectiveYm.toString());
+                        finMeta.put("newBaseSalary", targetBs);
+                        finMeta.put("newAllowance", targetAl);
+                        handoffService.createTaskIfNotOpen(
+                                com.hrm.techhr.entity.CrossDeptTaskType.FINANCE_PAYROLL_SALARY_SYNC,
+                                review.getDepartmentId(),
+                                finDeptId,
+                                employee.getId(),
+                                null,
+                                "TECH_COMPENSATION_SYNC",
+                                sync.getId(),
+                                "Đồng bộ Tăng lương/Phụ cấp kỳ " + effectiveYm + ": " + employee.getHoTen(),
+                                "CEO đã duyệt điều chỉnh lương/phụ cấp cho kỹ sư " + employee.getHoTen()
+                                        + " áp dụng từ kỳ lương " + effectiveYm + ". Vui lòng xác nhận áp dụng trước khi tính lương tháng.",
+                                finMeta,
+                                com.hrm.techhr.entity.CrossDeptTaskPriority.HIGH,
+                                effectiveYm.atDay(1),
+                                actorId
+                        );
+                    }
+                    if (notificationService != null) {
+                        for (User acc : financeAccess.accountants()) {
+                            String path = acc.getRole() == Role.GIAM_DOC_PHONG_BAN ? "/director/finance-tech"
+                                    : acc.getRole() == Role.TRUONG_PHONG ? "/manager/finance-tech" : "/employee/finance-tech";
+                            try {
+                                notificationService.createNotification(
+                                        acc.getId(),
+                                        "FINANCE_PAYROLL_SALARY_SYNC",
+                                        "Điều chỉnh lương kỹ sư áp dụng kỳ " + effectiveYm + ": " + employee.getHoTen(),
+                                        applySalaryImmediately
+                                                ? "CEO vừa duyệt điều chỉnh lương cho " + employee.getHoTen() + " (đã tự động áp dụng cho kỳ lương đang mở " + effectiveYm + ")."
+                                                : "CEO vừa duyệt điều chỉnh lương cho " + employee.getHoTen() + " (hẹn áp dụng từ kỳ " + effectiveYm + " — chờ Phòng Tài chính xác nhận khi mở kỳ lương).",
+                                        "THONG_TIN",
+                                        path
+                                );
+                            } catch (Exception ignored) {}
+                        }
+                    }
+                }
+            }
         }
 
         // Module 4: Đồng bộ sang hồ sơ HR (employment_records, compensation_records) & tạo Handoff Task lập Phụ lục HĐ
@@ -1145,9 +1267,9 @@ public class TechPerformanceService {
                     employee.getChucVu(),
                     salaryChanged,
                     oldBs,
-                    employee.getBaseSalary(),
+                    targetBs,
                     oldAl,
-                    employee.getAllowance(),
+                    targetAl,
                     reason,
                     actorId
             ));

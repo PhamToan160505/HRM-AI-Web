@@ -50,9 +50,38 @@ public class PayrollPeriodLock {
         }
     }
 
+    /** Kiểm tra nhanh xem phòng ban đã chốt công / khóa kỳ lương tháng {@code ym} hay chưa. */
+    public boolean isDepartmentMonthLocked(Long departmentId, YearMonth ym) {
+        if (departmentId == null || ym == null) return false;
+        return findLockByDepartment(departmentId, ym).isPresent();
+    }
+
+    /** Kiểm tra xem kỳ lương tháng {@code ym} của phòng ban đã gửi duyệt hoặc đã chi trả (không còn sửa lương được) hay chưa. */
+    public boolean isDepartmentMonthSubmittedOrPaid(Long departmentId, YearMonth ym) {
+        if (departmentId == null || ym == null) return false;
+        return findLockByDepartment(departmentId, ym)
+                .map(r -> {
+                    String st = r.getStatus();
+                    return !(PayrollService.ATTENDANCE_CLOSED.equals(st)
+                            || PayrollService.DRAFT.equals(st)
+                            || PayrollService.REJECTED.equals(st));
+                })
+                .orElse(false);
+    }
+
+    /** Trả về trạng thái kỳ lương hiện tại của phòng ban (null nếu chưa chốt công). */
+    public Optional<String> getDepartmentMonthStatus(Long departmentId, YearMonth ym) {
+        if (departmentId == null || ym == null) return Optional.empty();
+        return findLockByDepartment(departmentId, ym).map(PayrollReport::getStatus);
+    }
+
     private Optional<PayrollReport> findLock(Long employeeId, YearMonth ym) {
         Long deptId = userRepository.findById(employeeId).map(User::getDepartmentId).orElse(null);
-        if (deptId == null) return Optional.empty();
+        return findLockByDepartment(deptId, ym);
+    }
+
+    private Optional<PayrollReport> findLockByDepartment(Long deptId, YearMonth ym) {
+        if (deptId == null || ym == null) return Optional.empty();
         return payrollReportRepository
                 .findByDepartmentIdAndMonthAndYearAndReportLevel(deptId, ym.getMonthValue(), ym.getYear(), PayrollService.LEVEL_DEPARTMENT)
                 .stream()

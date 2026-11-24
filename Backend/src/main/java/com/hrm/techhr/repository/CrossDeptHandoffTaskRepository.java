@@ -27,4 +27,7 @@ public interface CrossDeptHandoffTaskRepository extends JpaRepository<CrossDeptH
 
     List<CrossDeptHandoffTask> findByEmployeeUserIdAndStatusIn(
             Long employeeUserId, List<CrossDeptTaskStatus> statuses);
+
+    List<CrossDeptHandoffTask> findByReferenceTypeAndReferenceIdAndStatusIn(
+            String referenceType, Long referenceId, List<CrossDeptTaskStatus> statuses);
 }

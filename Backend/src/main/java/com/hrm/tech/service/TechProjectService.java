@@ -438,6 +438,7 @@ public class TechProjectService {
                 .jiraUrl(project.getJiraUrl())
                 .figmaUrl(project.getFigmaUrl())
                 .description(project.getDescription())
+                .budgetAmount(project.getBudgetAmount())
                 .createdBy(project.getCreatedBy())
                 .createdByName(createdByName)
                 .createdAt(project.getCreatedAt())

@@ -5,6 +5,7 @@ import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -58,6 +59,9 @@ public class TechProject {
 
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
+
+    @Column(name = "budget_amount", precision = 15, scale = 2)
+    private BigDecimal budgetAmount;
 
     @Column(name = "created_by", nullable = false)
     private Long createdBy;

@@ -122,6 +122,15 @@ public class DataSeeder implements CommandLineRunner {
             departmentRepository.save(kyThuat);
             log.info("[Seed] Tạo phòng ban: Công nghệ");
         }
+
+        if (!departmentRepository.existsByTenPhong("Tài chính - Kế toán")) {
+            Department taiChinh = Department.builder()
+                    .tenPhong("Tài chính - Kế toán")
+                    .moTa("Phòng Tài chính - Kế toán — thẩm định ngân sách, kế toán và điều phối bảng lương")
+                    .build();
+            departmentRepository.save(taiChinh);
+            log.info("[Seed] Tạo phòng ban: Tài chính - Kế toán");
+        }
     }
 
     private void seedUsers() {
@@ -282,6 +291,56 @@ public class DataSeeder implements CommandLineRunner {
             log.info("[Seed] Tạo tài khoản: tester_hung@hrm.vn");
         }
 
+        // 10. Phòng Tài chính - Kế toán
+        Long taiChinhDeptId = departmentRepository.findByTenPhong("Tài chính - Kế toán")
+                .map(Department::getId)
+                .orElse(null);
+
+        if (!userRepository.existsByEmail("giamdoc_tc@hrm.vn")) {
+            User gdTaiChinh = User.builder()
+                    .hoTen("Lê Minh Giám Đốc Tài Chính")
+                    .email("giamdoc_tc@hrm.vn")
+                    .passwordHash(hashedPassword)
+                    .role(Role.GIAM_DOC_PHONG_BAN)
+                    .departmentId(taiChinhDeptId)
+                    .chucVu("Giám đốc Tài chính")
+                    .active(true)
+                    .build();
+            userRepository.save(gdTaiChinh);
+            log.info("[Seed] Tạo tài khoản: giamdoc_tc@hrm.vn (GIAM_DOC_PHONG_BAN, phòng Tài chính - Kế toán id={})",
+                    taiChinhDeptId);
+        }
+
+        if (!userRepository.existsByEmail("ketoantruong@hrm.vn")) {
+            User keToanTruong = User.builder()
+                    .hoTen("Nguyễn Thị Kế Toán Trưởng")
+                    .email("ketoantruong@hrm.vn")
+                    .passwordHash(hashedPassword)
+                    .role(Role.TRUONG_PHONG)
+                    .departmentId(taiChinhDeptId)
+                    .chucVu("Kế toán trưởng")
+                    .active(true)
+                    .build();
+            userRepository.save(keToanTruong);
+            log.info("[Seed] Tạo tài khoản: ketoantruong@hrm.vn (TRUONG_PHONG, phòng Tài chính - Kế toán id={})",
+                    taiChinhDeptId);
+        }
+
+        if (!userRepository.existsByEmail("ketoan@hrm.vn")) {
+            User keToanVien = User.builder()
+                    .hoTen("Trần Minh Kế Toán")
+                    .email("ketoan@hrm.vn")
+                    .passwordHash(hashedPassword)
+                    .role(Role.NHAN_VIEN)
+                    .departmentId(taiChinhDeptId)
+                    .chucVu("Nhân viên Kế toán")
+                    .active(true)
+                    .build();
+            userRepository.save(keToanVien);
+            log.info("[Seed] Tạo tài khoản: ketoan@hrm.vn (NHAN_VIEN, phòng Tài chính - Kế toán id={})",
+                    taiChinhDeptId);
+        }
+
         log.info("[Seed] Hoàn tất. Password mặc định: Admin@123 — đổi ngay trên môi trường production.");
     }
 
@@ -353,6 +412,18 @@ public class DataSeeder implements CommandLineRunner {
         });
         userRepository.findByEmail("tester_hung@hrm.vn").ifPresent(u -> {
             u.setMaNhanVien("02000004");
+            userRepository.save(u);
+        });
+        userRepository.findByEmail("giamdoc_tc@hrm.vn").ifPresent(u -> {
+            u.setMaNhanVien("88000003");
+            userRepository.save(u);
+        });
+        userRepository.findByEmail("ketoantruong@hrm.vn").ifPresent(u -> {
+            u.setMaNhanVien("03000001");
+            userRepository.save(u);
+        });
+        userRepository.findByEmail("ketoan@hrm.vn").ifPresent(u -> {
+            u.setMaNhanVien("03000002");
             userRepository.save(u);
         });
         log.info("[Seed] Đã cập nhật mã nhân viên tĩnh cho các tài khoản demo.");

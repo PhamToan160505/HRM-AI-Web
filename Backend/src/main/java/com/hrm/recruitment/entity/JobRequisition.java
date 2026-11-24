@@ -6,7 +6,9 @@ import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Entity
 @Table(name = "job_requisitions")
@@ -78,6 +80,18 @@ public class JobRequisition {
     @Builder.Default
     private String urgencyLevel = "NORMAL"; // NORMAL | HIGH | CRITICAL
 
+    @Column(name = "estimated_annual_cost", precision = 15, scale = 2)
+    private BigDecimal estimatedAnnualCost;
+
+    @Column(name = "finance_budget_note", columnDefinition = "TEXT")
+    private String financeBudgetNote;
+
+    @Column(name = "finance_reviewed_by")
+    private Long financeReviewedBy;
+
+    @Column(name = "finance_reviewed_at")
+    private LocalDateTime financeReviewedAt;
+
     @CreationTimestamp
     private LocalDateTime createdAt;
 
@@ -104,4 +118,37 @@ public class JobRequisition {
 
     @Transient
     private String activePostingStatus;
+
+    @Transient
+    private Integer currentStepOrder;
+
+    @Transient
+    private String currentStepScope;
+
+    @Transient
+    private String currentStepLabel;
+
+    @Transient
+    private boolean canCurrentUserApprove;
+
+    @Transient
+    private String financeReviewerName;
+
+    @Transient
+    private List<ApprovalStepSummary> approvalSteps;
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ApprovalStepSummary {
+        private Integer stepOrder;
+        private String stepScope;
+        private String stepLabel;
+        private String approverRole;
+        private String status;
+        private String decidedByName;
+        private LocalDateTime decidedAt;
+        private String comment;
+    }
 }

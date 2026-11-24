@@ -43,6 +43,10 @@ public class FinalDecisionRequest {
     @Size(max = 500, message = "Ghi chú quyết định tối đa 500 ký tự")
     private String compensationNote;
 
+    // Kỳ lương áp dụng điều chỉnh lương/phụ cấp (YYYY-MM), tôn trọng PayrollPeriodLock
+    @Size(max = 7, message = "Kỳ lương áp dụng có định dạng YYYY-MM")
+    private String effectivePayrollMonth;
+
     // Cho phép cấp duyệt chốt tường minh kết quả thử việc nếu phiếu thuộc loại PROBATION
     private Boolean probationPassed;
 }

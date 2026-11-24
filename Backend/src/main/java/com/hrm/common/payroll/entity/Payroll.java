@@ -96,6 +96,18 @@ public class Payroll {
     @Column(name = "rejection_reason", columnDefinition = "TEXT")
     private String rejectionReason;
 
+    /** Khoản hoàn ứng chứng chỉ quốc tế gộp kỳ lương (miễn thuế TNCN, không tính vào BHXH) — enrich khi trả API. */
+    @Transient
+    private Double certReimbursementAmount;
+
+    /** Mô tả chứng chỉ hoàn ứng gộp kỳ lương (tên chứng chỉ / mã chứng từ) — enrich khi trả API. */
+    @Transient
+    private String certReimbursementSummary;
+
+    /** Tổng số tiền nhân viên thực nhận gồm lương Net + hoàn ứng chứng chỉ miễn thuế (nếu có). */
+    @Transient
+    private Double totalPayoutAmount;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

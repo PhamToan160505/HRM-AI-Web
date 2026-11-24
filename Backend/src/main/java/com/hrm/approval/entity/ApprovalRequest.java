@@ -97,6 +97,12 @@ public class ApprovalRequest {
         complete(ApprovalRequestStatus.CANCELLED, reason);
     }
 
+    public void syncEntityVersion(Long newEntityVersion) {
+        if (status == ApprovalRequestStatus.OPEN && newEntityVersion != null) {
+            this.entityVersion = newEntityVersion;
+        }
+    }
+
     private void complete(ApprovalRequestStatus target, String reason) {
         if (status != ApprovalRequestStatus.OPEN) {
             throw new IllegalStateException("Approval request is no longer open");
