@@ -1,5 +1,6 @@
 package com.hrm.auth.service;
 
+import com.hrm.auth.dto.ChangePasswordRequest;
 import com.hrm.auth.dto.LoginRequest;
 import com.hrm.auth.dto.LoginResponse;
 import com.hrm.common.entity.User;
@@ -12,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Logic đăng nhập — xác thực email/password, sinh JWT.
@@ -68,6 +70,45 @@ public class AuthService {
                 .departmentId(user.getDepartmentId())
                 .tenPhong(tenPhong)
                 .teamId(user.getTeamId())
+                .mustChangePassword(Boolean.TRUE.equals(user.getMustChangePassword()))
                 .build();
+    }
+
+    @Transactional
+    public void changePassword(Long userId, ChangePasswordRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> AppException.notFound("Không tìm thấy tài khoản người dùng"));
+
+        if (!Boolean.TRUE.equals(user.getActive())) {
+            throw new AppException(HttpStatus.FORBIDDEN, "Tài khoản đã bị vô hiệu hóa");
+        }
+
+        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPasswordHash())) {
+            throw AppException.badRequest("Mật khẩu hiện tại không chính xác");
+        }
+
+        String newPass = request.getNewPassword().trim();
+        if (!newPass.equals(request.getConfirmPassword().trim())) {
+            throw AppException.badRequest("Xác nhận mật khẩu mới không khớp");
+        }
+
+        if (newPass.length() < 8) {
+            throw AppException.badRequest("Mật khẩu mới phải có ít nhất 8 ký tự");
+        }
+
+        boolean hasLetter = newPass.chars().anyMatch(Character::isLetter);
+        boolean hasDigit = newPass.chars().anyMatch(Character::isDigit);
+        if (!hasLetter || !hasDigit) {
+            throw AppException.badRequest("Mật khẩu mới phải chứa ít nhất 1 chữ cái và 1 chữ số");
+        }
+
+        if (passwordEncoder.matches(newPass, user.getPasswordHash())) {
+            throw AppException.badRequest("Mật khẩu mới không được trùng với mật khẩu hiện tại");
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(newPass));
+        user.setMustChangePassword(false);
+        userRepository.save(user);
+        log.info("Password changed successfully for userId={}", userId);
     }
 }

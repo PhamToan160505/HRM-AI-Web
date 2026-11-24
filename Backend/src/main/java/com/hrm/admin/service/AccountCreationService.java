@@ -64,6 +64,7 @@ public class AccountCreationService {
                 .departmentId(request.getDepartmentId())
                 .chucVu(request.getChucVu())
                 .active(false)
+                .mustChangePassword(true)
                 .build();
 
         User savedUser = userRepository.save(newUser);
@@ -103,6 +104,7 @@ public class AccountCreationService {
                     .orElseThrow(() -> AppException.notFound("Không tìm thấy tài khoản đã chuẩn bị"));
             user.setPasswordHash(passwordEncoder.encode(rawPassword));
             user.setActive(true);
+            user.setMustChangePassword(true);
         } else {
             if (userRepository.existsByEmail(request.getEmail())) {
                 request.setStatus(AccountCreationRequest.RequestStatus.FAILED);
@@ -120,6 +122,7 @@ public class AccountCreationService {
                     .departmentId(request.getDepartmentId())
                     .chucVu(request.getChucVu())
                     .active(true)
+                    .mustChangePassword(true)
                     .build();
         }
         user = userRepository.save(user);

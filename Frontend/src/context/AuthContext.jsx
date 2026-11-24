@@ -35,7 +35,7 @@ export function AuthProvider({ children }) {
    * @param {Object} loginResponse — { token, userId, hoTen, role, departmentId }
    */
   const login = useCallback((loginResponse) => {
-    const { token, userId, hoTen, role, departmentId, tenPhong, teamId } = loginResponse;
+    const { token, userId, hoTen, role, departmentId, tenPhong, teamId, mustChangePassword } = loginResponse;
 
     // Chuẩn hóa role về lowercase để dùng trong so sánh/route guard
     const normalizedRole = role?.toLowerCase();
@@ -47,11 +47,21 @@ export function AuthProvider({ children }) {
       departmentId,
       tenPhong,
       teamId,
+      mustChangePassword: Boolean(mustChangePassword),
     };
 
     localStorage.setItem(TOKEN_KEY, token);
     localStorage.setItem(USER_KEY, JSON.stringify(userData));
     setUser(userData);
+  }, []);
+
+  const clearMustChangePassword = useCallback(() => {
+    setUser((prev) => {
+      if (!prev) return prev;
+      const updated = { ...prev, mustChangePassword: false };
+      localStorage.setItem(USER_KEY, JSON.stringify(updated));
+      return updated;
+    });
   }, []);
 
   const logout = useCallback(() => {
@@ -67,6 +77,7 @@ export function AuthProvider({ children }) {
     isAuthenticated,
     login,
     logout,
+    clearMustChangePassword,
     // Helpers
     role: user?.role ?? null,
     departmentId: user?.departmentId ?? null,
@@ -74,6 +85,7 @@ export function AuthProvider({ children }) {
     teamId: user?.teamId ?? null,
     userId: user?.userId ?? null,
     hoTen: user?.hoTen ?? null,
+    mustChangePassword: Boolean(user?.mustChangePassword),
     token: localStorage.getItem(TOKEN_KEY) || null,
   };
 

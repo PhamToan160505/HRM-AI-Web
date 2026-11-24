@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { UserSquare2 } from 'lucide-react';
+import { KeyRound, UserSquare2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import { useToast } from '../../components/common/Toast';
 import Button from '../../components/common/Button';
+import ChangePasswordModal from '../../components/common/ChangePasswordModal';
 import EmployeeProfileSummary from '../../components/employee/EmployeeProfileSummary';
 import CccdScannerModal from '../../components/employee/CccdScannerModal';
 
@@ -14,6 +15,7 @@ export default function ProfilePage() {
     const [myProfile, setMyProfile] = useState(null);
     const [myCccdImages, setMyCccdImages] = useState({ frontUrl: null, backUrl: null });
     const [isCccdModalOpen, setIsCccdModalOpen] = useState(false);
+    const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
     const [isLoadingProfile, setIsLoadingProfile] = useState(true);
 
     const loadProfileData = async () => {
@@ -60,7 +62,17 @@ export default function ProfilePage() {
 
     return (
         <div className="max-w-4xl mx-auto py-6">
-            <h2 className="text-2xl font-bold mb-6 text-gray-900">Hồ sơ cá nhân của tôi</h2>
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">Hồ sơ cá nhân của tôi</h2>
+                <button
+                    type="button"
+                    onClick={() => setIsChangePasswordOpen(true)}
+                    className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white px-4 py-2 text-sm font-semibold transition cursor-pointer shadow-2xs"
+                >
+                    <KeyRound size={16} />
+                    <span>Đổi mật khẩu</span>
+                </button>
+            </div>
             
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                 {isLoadingProfile ? (
@@ -136,6 +148,11 @@ export default function ProfilePage() {
                         loadProfileData(); // Reload profile info after successful update
                     }
                 }} 
+            />
+            <ChangePasswordModal
+                isOpen={isChangePasswordOpen}
+                onClose={() => setIsChangePasswordOpen(false)}
+                isFirstLogin={false}
             />
         </div>
     );
