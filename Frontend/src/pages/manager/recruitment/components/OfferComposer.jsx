@@ -1,9 +1,20 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  ArrowLeft, ArrowRight, BriefcaseBusiness, Check, Coins, Eye,
+  AlertTriangle, ArrowLeft, ArrowRight, BriefcaseBusiness, Check, Coins, Eye,
   Gift, Plus, Printer, ShieldCheck, Trash2,
 } from 'lucide-react';
 import OfferPreview from './OfferPreview';
+
+const getTodayIsoLocal = () => {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+};
+
+const formatVndDigits = (raw) => {
+  const digits = String(raw ?? '').replace(/\D/g, '').replace(/^0+/, '');
+  return digits ? Number(digits).toLocaleString('vi-VN') : '';
+};
 
 const STEPS = [
   { title: 'Công việc', icon: BriefcaseBusiness },
@@ -26,6 +37,23 @@ function Select({ value, onChange, children }) {
 
 export default function OfferComposer({ application, fields, onFieldsChange, terms, onTermsChange }) {
   const [step, setStep] = useState(0);
+  const todayIso = useMemo(() => getTodayIsoLocal(), []);
+  const maxStartDateIso = useMemo(() => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() + 1);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }, []);
+  const startDateError = useMemo(() => {
+    if (!fields.startDate) return '';
+    if (fields.startDate < todayIso) {
+      return 'Ngày bắt đầu dự kiến không được nằm trong quá khứ.';
+    }
+    if (fields.startDate > maxStartDateIso) {
+      return 'Ngày bắt đầu dự kiến không được vượt quá 1 năm kể từ hôm nay.';
+    }
+    return '';
+  }, [fields.startDate, todayIso, maxStartDateIso]);
   const update = (name, value) => onFieldsChange({ ...fields, [name]: value });
   const updateCollection = (name, index, key, value) => {
     const next = [...fields[name]];
@@ -84,9 +112,26 @@ export default function OfferComposer({ application, fields, onFieldsChange, ter
             <Field label="Chu kỳ trả lương"><Select value={fields.payCycle} onChange={event => update('payCycle', event.target.value)}><option value="MONTHLY">Hàng tháng</option></Select></Field>
             <Field label="Ngày trả lương"><input type="number" min="1" max="31" className={inputClass} value={fields.payDay} onChange={event => update('payDay', event.target.value)} /></Field>
             <Field label="Tiền tệ"><Select value={fields.currency} onChange={event => update('currency', event.target.value)}><option value="VND">VND</option><option value="USD">USD</option></Select></Field>
-            <Field label="Thời gian thử việc (tháng)"><input type="number" min="0" className={inputClass} value={fields.probationMonths} onChange={event => update('probationMonths', event.target.value)} /></Field>
+            <Field label="Thời gian thử việc (tháng)"><input type="number" min="0" max="6" className={inputClass} value={fields.probationMonths} onChange={event => update('probationMonths', event.target.value)} /></Field>
             <Field label="Lương thử việc (%)"><input type="number" min="1" max="100" className={inputClass} value={fields.probationRate} onChange={event => update('probationRate', event.target.value)} /></Field>
-            <Field label="Ngày bắt đầu" required><input type="date" className={inputClass} value={fields.startDate} onChange={event => update('startDate', event.target.value)} /></Field>
+            <Field label="Ngày bắt đầu" required>
+              <input
+                type="date"
+                min={todayIso}
+                max={maxStartDateIso}
+                className={`${inputClass} ${startDateError ? 'border-rose-400 bg-rose-50/40 text-rose-700 focus:border-rose-500 focus:ring-rose-100' : ''}`}
+                value={fields.startDate}
+                onChange={event => update('startDate', event.target.value)}
+              />
+              {startDateError ? (
+                <p className="mt-1.5 flex items-center gap-1 text-xs font-medium text-rose-600">
+                  <AlertTriangle size={13} className="shrink-0" />
+                  <span>{startDateError}</span>
+                </p>
+              ) : (
+                <p className="mt-1 text-[11px] text-slate-500">Chọn từ hôm nay trở đi (tối đa 1 năm).</p>
+              )}
+            </Field>
           </div>
 
           <div className="rounded-2xl border border-slate-200 p-4">
@@ -97,9 +142,19 @@ export default function OfferComposer({ application, fields, onFieldsChange, ter
             <div className="mt-4 space-y-3">
               {fields.compensationItems.length === 0 && <p className="rounded-lg bg-slate-50 px-3 py-4 text-center text-sm text-slate-500">Chưa có phụ cấp hoặc khoản thu nhập bổ sung.</p>}
               {fields.compensationItems.map((item, index) => (
-                <div key={index} className="grid gap-2 rounded-xl bg-slate-50 p-3 md:grid-cols-[1fr_160px_1fr_auto]">
+                <div key={index} className="grid gap-2 rounded-xl bg-slate-50 p-3 md:grid-cols-[1fr_180px_1fr_auto]">
                   <input className={inputClass} value={item.label} onChange={event => updateCollection('compensationItems', index, 'label', event.target.value)} placeholder="Ví dụ: Phụ cấp ăn trưa" />
-                  <input className={inputClass} value={item.amount} onChange={event => updateCollection('compensationItems', index, 'amount', event.target.value.replace(/\D/g, ''))} placeholder="Số tiền/tháng" />
+                  <div className="relative">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      className={`${inputClass} pr-12 tabular-nums`}
+                      value={formatVndDigits(item.amount)}
+                      onChange={event => updateCollection('compensationItems', index, 'amount', formatVndDigits(event.target.value))}
+                      placeholder="1.500.000"
+                    />
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400">VNĐ</span>
+                  </div>
                   <input className={inputClass} value={item.note} onChange={event => updateCollection('compensationItems', index, 'note', event.target.value)} placeholder="Ghi chú/điều kiện" />
                   <button type="button" onClick={() => removeCollection('compensationItems', index)} className="grid size-10 place-items-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={17} /></button>
                 </div>

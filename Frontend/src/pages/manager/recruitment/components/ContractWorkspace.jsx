@@ -1,12 +1,31 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  BookOpen, CheckCircle2, FileCheck2, FileSignature, Gavel, History,
+  AlertTriangle, BookOpen, CheckCircle2, FileCheck2, FileSignature, Gavel, History,
   Loader2, Plus, Printer, RefreshCw, Send, ShieldCheck, UploadCloud,
 } from 'lucide-react';
 import api from '../../../../services/api';
 import { useAuth } from '../../../../context/AuthContext';
 import { useNotification } from '../../../../context/NotificationContext';
+import useRealtimeSync from '../../../../hooks/useRealtimeSync';
 import ContractLifecyclePanel from './ContractLifecyclePanel';
+
+const getTodayIsoLocal = () => {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
+const getNowDateTimeLocal = () => {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+const formatVndDigits = (raw) => {
+  if (raw === null || raw === undefined || raw === '') return '';
+  const digits = String(raw).replace(/\D/g, '').replace(/^0+/, '');
+  return digits ? digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '';
+};
 
 const STATUS = {
   DRAFT: ['Bản nháp', 'bg-slate-100 text-slate-700'],
@@ -58,7 +77,7 @@ const FIELD_GROUPS = [
     ['employer.representativeName', 'Người đại diện'], ['employer.representativeTitle', 'Chức danh đại diện'],
   ]],
   ['Thu nhập', [
-    ['compensation.baseSalary', 'Lương cơ bản', 'number'], ['compensation.payDay', 'Ngày trả lương'],
+    ['compensation.baseSalary', 'Lương cơ bản', 'vnd'], ['compensation.payDay', 'Ngày trả lương'],
   ]],
 ];
 
@@ -86,13 +105,60 @@ function normalizeText(value) {
   return (value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
 }
 
-function Field({ path, label, type, data, disabled, onChange }) {
+function Field({ path, label, type, data, disabled, onChange, todayIso }) {
   const value = deepGet(data, path);
+  const baseClass = 'mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-500';
+
+  if (type === 'vnd') {
+    return (
+      <label className="text-sm font-semibold text-slate-700">
+        {label}
+        <div className="relative mt-1.5">
+          <input
+            type="text"
+            inputMode="numeric"
+            disabled={disabled}
+            placeholder="VD: 20.000.000"
+            value={formatVndDigits(typeof value === 'number' ? Math.round(value) : value)}
+            onChange={event => {
+              const digits = event.target.value.replace(/\D/g, '');
+              onChange(path, digits ? Number(digits) : '');
+            }}
+            className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-3 pr-14 text-sm font-medium outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-500 tabular-nums"
+          />
+          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">VNĐ</span>
+        </div>
+      </label>
+    );
+  }
+
+  let dateMin;
+  let dateMax;
+  let dateWarning = '';
+  if (type === 'date') {
+    if (path === 'employee.identityIssuedDate') {
+      dateMax = todayIso;
+      if (value && value > todayIso) {
+        dateWarning = 'Ngày cấp CCCD không được ở tương lai.';
+      }
+    } else if (path === 'employment.startDate') {
+      dateMin = todayIso;
+    } else if (path === 'employment.endDate') {
+      const startDate = deepGet(data, 'employment.startDate');
+      dateMin = startDate || todayIso;
+      if (value && startDate && value <= startDate) {
+        dateWarning = 'Ngày kết thúc phải sau ngày bắt đầu.';
+      }
+    }
+  }
+
   const common = {
     value,
     disabled,
+    min: dateMin,
+    max: dateMax,
     onChange: event => onChange(path, type === 'number' ? Number(event.target.value) : event.target.value),
-    className: 'mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-500',
+    className: `${baseClass} ${dateWarning ? 'border-rose-400 text-rose-700 focus:border-rose-500 focus:ring-rose-100' : ''}`,
   };
   return (
     <label className="text-sm font-semibold text-slate-700">
@@ -100,6 +166,12 @@ function Field({ path, label, type, data, disabled, onChange }) {
       {type === 'contractType' ? (
         <select {...common}><option value="FIXED_TERM">Xác định thời hạn</option><option value="INDEFINITE">Không xác định thời hạn</option></select>
       ) : <input {...common} type={type || 'text'} />}
+      {dateWarning && (
+        <span className="mt-1 flex items-center gap-1 text-xs font-medium text-rose-600">
+          <AlertTriangle size={12} className="shrink-0" />
+          {dateWarning}
+        </span>
+      )}
     </label>
   );
 }
@@ -121,6 +193,16 @@ export default function ContractWorkspace({ applicationId, applicationStatus }) 
   });
   const [showLibrary, setShowLibrary] = useState(false);
   const [newClause, setNewClause] = useState({ code: '', title: '', category: '', content: '', requiredClause: false });
+  const todayIso = useMemo(() => getTodayIsoLocal(), []);
+  const minSignatureDeadline = useMemo(() => getNowDateTimeLocal(), [contract?.status]);
+  const signatureDeadlineError = useMemo(() => {
+    if (!signatureDeadline) return '';
+    const d = new Date(signatureDeadline);
+    if (Number.isNaN(d.getTime()) || d.getTime() <= Date.now()) {
+      return 'Hạn ký hợp đồng phải nằm ở tương lai.';
+    }
+    return '';
+  }, [signatureDeadline]);
 
   const department = normalizeText(user?.tenPhong);
   const canEdit = ['ceo', 'admin'].includes(role) || department.includes('nhan su');
@@ -156,6 +238,16 @@ export default function ContractWorkspace({ applicationId, applicationStatus }) 
   useEffect(() => { load(); }, [applicationId, applicationStatus]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (activeClauseIds.length) setSelectedClauseIds(activeClauseIds); }, [activeClauseIds]);
 
+  useRealtimeSync(
+    () => {
+      if (applicationStatus === 'OFFER_ACCEPTED') load();
+    },
+    {
+      events: ['hrm:recruitment-sync', 'hrm:notification'],
+      paused: busy || editable,
+    }
+  );
+
   if (applicationStatus !== 'OFFER_ACCEPTED') return null;
   if (loading) return <section className="rounded-2xl border border-slate-200 bg-white p-6"><Loader2 className="animate-spin text-blue-600" /></section>;
 
@@ -181,10 +273,21 @@ export default function ContractWorkspace({ applicationId, applicationStatus }) 
     'Đã khởi tạo hợp đồng từ offer được chấp nhận',
   );
 
-  const generate = () => execute(
-    () => api.post(`/api/contracts/${contract.id}/generate`, { contractData: data, clauseIds: selectedClauseIds }, { headers: { 'Idempotency-Key': crypto.randomUUID() } }),
-    'Đã sinh lại nội dung hợp đồng',
-  );
+  const generate = () => {
+    const issuedDate = deepGet(data, 'employee.identityIssuedDate');
+    if (issuedDate && issuedDate > todayIso) {
+      return showNotification('Ngày không hợp lệ', 'Ngày cấp CCCD không được nằm ở tương lai', 'error');
+    }
+    const startDate = deepGet(data, 'employment.startDate');
+    const endDate = deepGet(data, 'employment.endDate');
+    if (startDate && endDate && endDate <= startDate) {
+      return showNotification('Ngày không hợp lệ', 'Ngày kết thúc hợp đồng phải sau ngày bắt đầu', 'error');
+    }
+    return execute(
+      () => api.post(`/api/contracts/${contract.id}/generate`, { contractData: data, clauseIds: selectedClauseIds }, { headers: { 'Idempotency-Key': crypto.randomUUID() } }),
+      'Đã sinh lại nội dung hợp đồng',
+    );
+  };
 
   const simpleAction = (path, message, body = null) => execute(
     () => api.post(`/api/contracts/${contract.id}/${path}`, body, { headers: { 'Idempotency-Key': crypto.randomUUID() } }),
@@ -203,6 +306,9 @@ export default function ContractWorkspace({ applicationId, applicationStatus }) 
 
   const sendForSignature = async () => {
     if (busy) return;
+    if (!signatureDeadline || new Date(signatureDeadline).getTime() <= Date.now()) {
+      return showNotification('Thời gian không hợp lệ', 'Hạn ký hợp đồng phải nằm ở tương lai', 'error');
+    }
     setBusy(true);
     try {
       await api.post(`/api/contracts/${contract.id}/send-for-signature`, {
@@ -298,7 +404,34 @@ export default function ContractWorkspace({ applicationId, applicationStatus }) 
         <div className="mt-5 rounded-2xl border border-violet-200 bg-violet-50 p-5">
           <h3 className="flex items-center gap-2 font-bold text-violet-950"><FileSignature size={20} />Công ty đã ký · Chờ gửi ứng viên</h3>
           <p className="mt-1 text-sm text-violet-800">Bản PDF phía công ty đã ký được lưu lúc {formatTime(contract.signedUploadedAt)}. Ứng viên chưa ký ở bước này.</p>
-          {canEdit && <div className="mt-4 flex flex-wrap items-end gap-3"><label className="text-sm font-semibold text-violet-950">Hạn ký<input type="datetime-local" value={signatureDeadline} onChange={e => setSignatureDeadline(e.target.value)} className="mt-1 block rounded-xl border border-violet-200 bg-white px-3 py-2.5 text-sm" /></label><button disabled={busy || !signatureDeadline} onClick={sendForSignature} className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"><Send size={16} />Gửi ứng viên ký</button></div>}
+          {canEdit && (
+            <div className="mt-4 flex flex-wrap items-end gap-3">
+              <label className="text-sm font-semibold text-violet-950">
+                Hạn ký *
+                <input
+                  type="datetime-local"
+                  min={minSignatureDeadline}
+                  value={signatureDeadline}
+                  onChange={e => setSignatureDeadline(e.target.value)}
+                  className={`mt-1 block rounded-xl border bg-white px-3 py-2.5 text-sm outline-none ${
+                    signatureDeadlineError ? 'border-rose-400 text-rose-700' : 'border-violet-200'
+                  }`}
+                />
+                {signatureDeadlineError && (
+                  <span className="mt-1 flex items-center gap-1 text-xs font-medium text-rose-600">
+                    <AlertTriangle size={12} /> {signatureDeadlineError}
+                  </span>
+                )}
+              </label>
+              <button
+                disabled={busy || !signatureDeadline || Boolean(signatureDeadlineError)}
+                onClick={sendForSignature}
+                className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Send size={16} />Gửi ứng viên ký
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -334,7 +467,7 @@ export default function ContractWorkspace({ applicationId, applicationStatus }) 
           {FIELD_GROUPS.map(([title, fields]) => (
             <div key={title} className="rounded-xl border border-slate-200 p-4">
               <h3 className="font-bold text-slate-900">{title}</h3>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">{fields.map(([path, label, type]) => <Field key={path} path={path} label={label} type={type} data={data} disabled={!editable} onChange={(key, value) => setData(current => deepSet(current, key, value))} />)}</div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">{fields.map(([path, label, type]) => <Field key={path} path={path} label={label} type={type} data={data} disabled={!editable} todayIso={todayIso} onChange={(key, value) => setData(current => deepSet(current, key, value))} />)}</div>
             </div>
           ))}
 
@@ -358,9 +491,16 @@ export default function ContractWorkspace({ applicationId, applicationStatus }) 
             </div>}
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {editable && <button disabled={busy} onClick={generate} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white"><RefreshCw size={16} />Lưu và sinh hợp đồng</button>}
-            {editable && <button disabled={busy} onClick={() => simpleAction('submit-legal', 'Đã gửi pháp chế rà soát')} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white"><Send size={16} />Gửi pháp chế</button>}
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-2">
+              {editable && <button disabled={busy} onClick={generate} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white cursor-pointer disabled:opacity-50"><RefreshCw size={16} />Lưu và sinh hợp đồng</button>}
+              {editable && <button disabled={busy} onClick={() => simpleAction('submit-legal', 'Đã gửi pháp chế rà soát')} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white cursor-pointer disabled:opacity-50"><Send size={16} />Gửi pháp chế</button>}
+            </div>
+            {editable && (
+              <p className="text-xs text-slate-500">
+                Bước 1: Bấm <strong>Lưu và sinh hợp đồng</strong> để lưu thông tin vừa nhập và cập nhật bản xem trước. Bước 2: Bấm <strong>Gửi pháp chế</strong> để chuyển duyệt.
+              </p>
+            )}
           </div>
 
           {contract.status === 'ISSUED' && canEdit && <div className="rounded-xl border border-violet-200 bg-violet-50 p-4"><h3 className="flex items-center gap-2 font-bold text-violet-950"><UploadCloud size={18} />Upload PDF phía công ty đã ký</h3><p className="mt-1 text-xs text-violet-700">PDF tối đa 5MB; hệ thống lưu bản gốc bất biến, URL, tên file, SHA-256 và người upload. Đây chưa phải bản đủ chữ ký hai bên.</p><div className="mt-3 flex flex-wrap gap-2"><input type="file" accept="application/pdf,.pdf" onChange={e => setSignedFile(e.target.files?.[0] || null)} className="min-w-0 flex-1 rounded-lg bg-white p-2 text-sm" /><button disabled={busy || !signedFile} onClick={uploadSigned} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Lưu bản công ty ký</button></div></div>}

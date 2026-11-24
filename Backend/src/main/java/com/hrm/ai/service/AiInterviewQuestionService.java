@@ -47,12 +47,15 @@ public class AiInterviewQuestionService {
         try {
             String response = geminiClientService.callGemini(prompt, 60, 1).block();
             String text = geminiClientService.extractTextFromGeminiResponse(response);
-            return parseQuestions(text);
+            List<String> parsed = parseQuestions(text);
+            if (!parsed.isEmpty()) {
+                return parsed;
+            }
         } catch (Exception e) {
-            log.error("[AiInterviewQuestion] Lỗi khi generate câu hỏi vòng 1 cho application {}: {}",
+            log.warn("[AiInterviewQuestion] Gemini tạm gián đoạn khi tạo câu hỏi vòng 1 cho application {} ({}), dùng bộ câu hỏi chuẩn hóa dự phòng.",
                     applicationId, e.getMessage());
-            throw AppException.conflict("Không thể tạo câu hỏi phỏng vấn online: " + e.getMessage());
         }
+        return buildFallbackRound1Questions(application);
     }
 
     /**
@@ -79,12 +82,47 @@ public class AiInterviewQuestionService {
         try {
             String response = geminiClientService.callGemini(prompt, 60, 1).block();
             String text = geminiClientService.extractTextFromGeminiResponse(response);
-            return parseQuestions(text);
+            List<String> parsed = parseQuestions(text);
+            if (!parsed.isEmpty()) {
+                return parsed;
+            }
         } catch (Exception e) {
-            log.error("[AiInterviewQuestion] Lỗi khi generate câu hỏi vòng 2 cho application {}: {}",
+            log.warn("[AiInterviewQuestion] Gemini tạm gián đoạn khi tạo câu hỏi vòng 2 cho application {} ({}), dùng bộ câu hỏi chuẩn hóa dự phòng.",
                     applicationId, e.getMessage());
-            throw AppException.conflict("Không thể tạo câu hỏi phỏng vấn: " + e.getMessage());
         }
+        return buildFallbackRound2Questions(application);
+    }
+
+    private List<String> buildFallbackRound1Questions(com.hrm.recruitment.entity.Application application) {
+        String title = application.getJobPosting() != null && application.getJobPosting().getTitle() != null
+                ? application.getJobPosting().getTitle() : "vị trí ứng tuyển";
+        String level = application.getJobPosting() != null && application.getJobPosting().getCapBac() != null
+                ? application.getJobPosting().getCapBac() : "chuyên môn";
+        return List.of(
+                "Hãy giới thiệu ngắn gọn về quá trình làm việc và dự án tiêu biểu nhất bạn đã triển khai liên quan đến vị trí " + title + ".",
+                "Trong dự án gần nhất, bạn đảm nhiệm vai trò kỹ thuật cụ thể nào và phần kiến trúc nào do bạn trực tiếp thiết kế?",
+                "Bạn đánh giá thế nào về độ thành thạo của mình với các công nghệ cốt lõi yêu cầu ở cấp bậc " + level + "? Hãy nêu một bài toán khó bạn từng giải quyết.",
+                "Bạn đã áp dụng Clean Architecture, kiểm thử tự động (Unit/Integration Test) và Code Review như thế nào trong các dự án trước?",
+                "Khi phát sinh lỗi hiệu năng hoặc sự cố trên môi trường production, quy trình khoanh vùng và xử lý của bạn là gì?",
+                "Hãy mô tả cách bạn phối hợp với Backend/Frontend, QA và Product trong quy trình Agile/Scrum khi làm việc online hoặc hybrid.",
+                "Trong CV bạn có nêu các chỉ số cải thiện hiệu năng/chất lượng — bạn có thể chia sẻ cách đo lường trước và sau khi tối ưu không?",
+                "Kỳ vọng của bạn về lộ trình phát triển chuyên môn trong 1–2 năm tới khi gia nhập vị trí " + title + " là gì?"
+        );
+    }
+
+    private List<String> buildFallbackRound2Questions(com.hrm.recruitment.entity.Application application) {
+        String title = application.getJobPosting() != null && application.getJobPosting().getTitle() != null
+                ? application.getJobPosting().getTitle() : "vị trí ứng tuyển";
+        return List.of(
+                "Hãy kể về một lần dự án bạn tham gia bị chậm tiến độ sát ngày bàn giao — bạn đã chủ động trao đổi với quản lý và cả nhóm như thế nào để gỡ nút thắt?",
+                "Khi nhận một yêu cầu công việc từ Product hoặc khách hàng nhưng thông tin còn mơ hồ và thay đổi giữa chừng, bạn thường xử lý theo cách nào?",
+                "Bạn từng gặp bất đồng quan điểm với đồng đội hoặc cấp trên trong quá trình làm việc chưa? Cuối cùng hai bên đã thống nhất giải pháp ra sao?",
+                "Hãy chia sẻ một sai sót đáng nhớ nhất bạn từng mắc phải trong công việc, bạn đã chịu trách nhiệm khắc phục thế nào và rút ra bài học gì?",
+                "Trong 30 đến 90 ngày đầu tiên khi gia nhập đội ngũ ở vị trí " + title + ", bạn dự định ưu tiên làm những gì để nhanh chóng hòa nhập và tạo giá trị?",
+                "Bạn thích làm việc trong một đội ngũ và với phong cách quản lý như thế nào để phát huy tốt nhất năng lực của mình?",
+                "Mục tiêu nghề nghiệp của bạn trong 1–2 năm tới là gì và bạn kỳ vọng công ty sẽ hỗ trợ những điều kiện nào cho lộ trình đó?",
+                "Ngoài yếu tố thu nhập, đâu là 2–3 tiêu chí quan trọng nhất giúp bạn quyết định gắn bó lâu dài với một môi trường làm việc?"
+        );
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -194,11 +232,11 @@ public class AiInterviewQuestionService {
 
     private String buildPrompt(String jd, String cv, String round1Context) {
         return """
-                Bạn là chuyên gia tuyển dụng giúp chuẩn bị câu hỏi phỏng vấn VÒNG 2 (phỏng vấn TRỰC TIẾP, gặp mặt tại văn phòng).
+                Bạn là chuyên gia nhân sự hỗ trợ Trưởng phòng / Giám đốc phòng ban và HR chuẩn bị câu hỏi phỏng vấn VÒNG 2 (phỏng vấn TRỰC TIẾP tại văn phòng — Hiring Manager & Culture Fit trước khi chốt Offer).
 
-                Ngữ cảnh:
-                - Ứng viên đã qua vòng 1 (phỏng vấn online sơ bộ).
-                - Vòng 2 là phỏng vấn chuyên sâu với cấp lãnh đạo, tập trung vào năng lực thực tế, tình huống cụ thể và văn hóa tổ chức.
+                Ngữ cảnh quan trọng:
+                - Ứng viên ĐÃ VƯỢT QUA VÒNG 1 (vòng kiểm tra chuyên môn kỹ thuật sâu: ngôn ngữ lập trình, framework, cơ sở dữ liệu, kiến trúc hệ thống và xác minh CV).
+                - Vòng 2 diễn ra trực tiếp với cấp Quản lý phòng ban và HR, mục tiêu KHÔNG phải hỏi lại lý thuyết hay bài tập kỹ thuật thuần túy của Vòng 1, mà nhằm đánh giá: năng lực làm việc thực tế trong đội ngũ, tư duy giải quyết vấn đề & chịu trách nhiệm (ownership), độ phù hợp văn hóa doanh nghiệp (culture/team fit), làm rõ điểm hội đồng Vòng 1 còn băn khoăn, và định hướng gắn bó trước khi bước vào đàm phán Offer.
 
                 MÔ TẢ CÔNG VIỆC (JD):
                 %s
@@ -206,19 +244,23 @@ public class AiInterviewQuestionService {
                 TÓM TẮT CV ỨNG VIÊN:
                 %s
 
-                KẾT QUẢ VÒNG 1:
+                KẾT QUẢ & NHẬN XÉT VÒNG 1:
                 %s
 
-                Hãy tạo ĐÚNG 8 câu hỏi phỏng vấn trực tiếp vòng 2. Yêu cầu:
-                1. Câu hỏi phải dành cho phỏng vấn gặp mặt trực tiếp (không phải online), mang tính chuyên sâu.
-                2. Bổ sung/đào sâu vào điểm còn nghi vấn hoặc chưa rõ từ vòng 1 (nếu có kết quả vòng 1).
-                3. Bao gồm câu hỏi tình huống thực tế (STAR method: Situation, Task, Action, Result).
-                4. Bao gồm câu hỏi về kỳ vọng nghề nghiệp, phong cách làm việc và văn hóa tổ chức.
-                5. Tránh lặp lại câu hỏi lý thuyết cơ bản (đã hỏi vòng 1 online).
-                6. Viết tiếng Việt, ngắn gọn, rõ ràng.
+                Hãy tạo ĐÚNG 8 câu hỏi phỏng vấn trực tiếp Vòng 2 theo cơ cấu chuẩn sau:
+                - 2–3 câu tình huống thực tế & phối hợp đội ngũ (xử lý áp lực deadline, xung đột quan điểm trong team, sai sót từng gặp và cách tự khắc phục, thích nghi khi yêu cầu thay đổi).
+                - 2 câu về tư duy làm việc, tinh thần chủ động (ownership), kế hoạch hòa nhập 30–90 ngày đầu và cách phối hợp với quản lý/đồng nghiệp trực tiếp tại văn phòng.
+                - 1–2 câu đào sâu các điểm còn lấn cấn hoặc cần kiểm chứng thêm từ nhận xét Vòng 1 (nếu Vòng 1 đã khen tốt thì hỏi về khả năng nâng tầm vai trò, ví dụ từ Junior lên Middle/Senior hoặc hỗ trợ team).
+                - 1–2 câu về văn hóa tổ chức, định hướng nghề nghiệp 1–2 năm tới và yếu tố quyết định gắn bó lâu dài (KHÔNG hỏi trực tiếp mức lương cụ thể vì phần đàm phán lương thực hiện ở bước riêng).
+
+                Quy tắc bắt buộc về giọng văn và nội dung:
+                1. TUYỆT ĐỐI KHÔNG lặp lại các câu hỏi kiểm tra lý thuyết, cú pháp, framework, SQL/Transaction, JWT hay bài toán thuật toán/kiến trúc thuần túy vốn thuộc Vòng 1.
+                2. KHÔNG dùng các cụm từ sáo rỗng hoặc thuật ngữ lý thuyết phỏng vấn như "theo phương pháp STAR", "mô hình STAR", "STAR method" trong câu hỏi — hãy hỏi tự nhiên như Giám đốc/Trưởng phòng đang đối thoại trực tiếp với ứng viên.
+                3. Cá nhân hóa sát với cấp bậc, kinh nghiệm trong CV và nhận xét Vòng 1 của ứng viên.
+                4. Viết tiếng Việt tự nhiên, ngắn gọn, súc tích, dễ trao đổi trực tiếp.
 
                 Chỉ trả về danh sách 8 câu hỏi, mỗi câu trên một dòng, bắt đầu bằng số thứ tự (ví dụ: "1. Câu hỏi...").
-                Không giải thích, không thêm tiêu đề, chỉ trả về đúng 8 dòng câu hỏi.
+                Không giải thích, không thêm tiêu đề hay phân nhóm, chỉ trả về đúng 8 dòng câu hỏi.
                 """.formatted(jd, cv, round1Context);
     }
 

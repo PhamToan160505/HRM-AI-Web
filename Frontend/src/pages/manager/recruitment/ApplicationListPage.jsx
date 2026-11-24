@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../../../services/api';
 import { useNotification } from '../../../context/NotificationContext';
 import { useAuth } from '../../../context/AuthContext';
+import useRealtimeSync from '../../../hooks/useRealtimeSync';
 
 export default function ApplicationListPage() {
   const navigate = useNavigate();
@@ -88,6 +89,17 @@ export default function ApplicationListPage() {
       fetchApplications();
     }
   }, [selectedCampaign, currentPage, selectedStatus, sortMode, minEvidence, mustHaveOnly]);
+
+  useRealtimeSync(
+    () => {
+      if (selectedCampaign) {
+        fetchApplications();
+      } else {
+        fetchCampaignStats();
+      }
+    },
+    { events: ['hrm:recruitment-sync', 'hrm:notification'] }
+  );
 
   useEffect(() => {
     if (!selectedCampaign) {

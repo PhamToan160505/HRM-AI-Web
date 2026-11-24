@@ -81,7 +81,7 @@ public class InterviewController {
     }
 
     @PostMapping("/interviews/{interviewId}/complete")
-    @PreAuthorize("hasAnyRole('TRUONG_PHONG','GIAM_DOC_PHONG_BAN','CEO','ADMIN')")
+    @PreAuthorize("hasAnyRole('NHAN_VIEN','TRUONG_PHONG','GIAM_DOC_PHONG_BAN','CEO','ADMIN')")
     public ResponseEntity<ApiResponse<InterviewService.InterviewView>> complete(
             @PathVariable Long interviewId,
             @RequestBody InterviewService.ConclusionRequest request,
@@ -117,7 +117,7 @@ public class InterviewController {
      * Gọi Gemini AI — chỉ HR/manager có quyền tạo lịch mới được truy cập.
      */
     @GetMapping("/applications/{applicationId}/round1-questions")
-    @PreAuthorize("hasAnyRole('TRUONG_PHONG','GIAM_DOC_PHONG_BAN','CEO','ADMIN')")
+    @PreAuthorize("hasAnyRole('NHAN_VIEN','TRUONG_PHONG','GIAM_DOC_PHONG_BAN','CEO','ADMIN')")
     public ResponseEntity<ApiResponse<List<String>>> round1Questions(
             @PathVariable Long applicationId) {
         return ResponseEntity.ok(ApiResponse.ok(
@@ -127,10 +127,10 @@ public class InterviewController {
 
     /**
      * Tạo câu hỏi phỏng vấn vòng 2 (onsite/trực tiếp) dựa trên kết quả vòng 1 và JD.
-     * Gọi Gemini AI — chỉ HR/manager có quyền tạo lịch mới được truy cập.
+     * Gọi Gemini AI — chỉ HR/manager/hội đồng kỹ thuật mới được truy cập.
      */
     @GetMapping("/applications/{applicationId}/round2-questions")
-    @PreAuthorize("hasAnyRole('TRUONG_PHONG','GIAM_DOC_PHONG_BAN','CEO','ADMIN')")
+    @PreAuthorize("hasAnyRole('NHAN_VIEN','TRUONG_PHONG','GIAM_DOC_PHONG_BAN','CEO','ADMIN')")
     public ResponseEntity<ApiResponse<List<String>>> round2Questions(
             @PathVariable Long applicationId) {
         return ResponseEntity.ok(ApiResponse.ok(

@@ -183,7 +183,23 @@ export function validateOfferFields(fields, terms) {
   if (!terms.trim()) return 'Vui lòng nhập điều khoản offer';
   const salary = Number(String(fields.luongCoBan).replace(/\D/g, ''));
   if (!salary) return 'Lương cơ bản phải lớn hơn 0';
+  const probationMonths = Number(fields.probationMonths);
+  if (Number.isNaN(probationMonths) || probationMonths < 0 || probationMonths > 6) {
+    return 'Thời gian thử việc phải từ 0 đến 6 tháng';
+  }
   if (Number(fields.probationRate) <= 0 || Number(fields.probationRate) > 100) return 'Tỷ lệ lương thử việc không hợp lệ';
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const todayIso = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const maxDate = new Date(now);
+  maxDate.setFullYear(maxDate.getFullYear() + 1);
+  const maxIso = `${maxDate.getFullYear()}-${pad(maxDate.getMonth() + 1)}-${pad(maxDate.getDate())}`;
+  if (fields.startDate < todayIso) {
+    return 'Ngày bắt đầu dự kiến không được nằm trong quá khứ';
+  }
+  if (fields.startDate > maxIso) {
+    return 'Ngày bắt đầu dự kiến không được vượt quá 1 năm kể từ hôm nay';
+  }
   if (fields.contractType === 'FIXED_TERM' && Number(fields.contractDurationMonths) <= 0) return 'Vui lòng nhập thời hạn hợp đồng';
   return null;
 }

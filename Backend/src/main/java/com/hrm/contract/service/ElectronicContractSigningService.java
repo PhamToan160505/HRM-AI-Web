@@ -58,6 +58,12 @@ public class ElectronicContractSigningService {
     private final DepartmentRepository departmentRepository;
     private final NotificationService notificationService;
 
+    private static final java.time.ZoneId VN_ZONE = java.time.ZoneId.of("Asia/Ho_Chi_Minh");
+
+    private LocalDateTime nowVn() {
+        return LocalDateTime.now(VN_ZONE);
+    }
+
     @Value("${app.public-web-base-url:${APP_PUBLIC_WEB_BASE_URL:http://localhost:5173}}")
     private String publicWebBaseUrl;
 
@@ -69,8 +75,9 @@ public class ElectronicContractSigningService {
         if (!List.of("COMPANY_SIGNED", "SENT_TO_CANDIDATE", "CANDIDATE_VIEWED").contains(contract.status())) {
             throw AppException.conflict("Phải có bản hợp đồng phía công ty đã ký trước khi gửi ứng viên");
         }
-        LocalDateTime deadline = expiresAt == null ? LocalDateTime.now().plusDays(7) : expiresAt;
-        if (!deadline.isAfter(LocalDateTime.now().plusMinutes(15))) {
+        LocalDateTime now = nowVn();
+        LocalDateTime deadline = expiresAt == null ? now.plusDays(7) : expiresAt;
+        if (!deadline.isAfter(now.plusMinutes(15))) {
             throw AppException.badRequest("Hạn ký phải sau thời điểm hiện tại ít nhất 15 phút");
         }
         if (contract.email() == null || contract.email().isBlank()) {
@@ -105,7 +112,7 @@ public class ElectronicContractSigningService {
     public PublicSigningView publicView(String rawToken) {
         SigningSession session = requireSession(rawToken, true);
         if (session.viewedAt() == null) {
-            jdbcTemplate.update("UPDATE contract_signing_sessions SET viewed_at = NOW(6) WHERE id = ?", session.id());
+            jdbcTemplate.update("UPDATE contract_signing_sessions SET viewed_at = ? WHERE id = ?", nowVn(), session.id());
             if ("SENT_TO_CANDIDATE".equals(session.contractStatus())) {
                 jdbcTemplate.update("UPDATE employment_contracts SET status = 'CANDIDATE_VIEWED', row_version = row_version + 1 WHERE id = ?", session.contractId());
                 appendEvent(session.contractId(), "CANDIDATE_VIEWED", "SENT_TO_CANDIDATE",
@@ -122,17 +129,18 @@ public class ElectronicContractSigningService {
         if (!List.of("ACTIVE", "OTP_VERIFIED").contains(session.sessionStatus())) {
             throw AppException.conflict("Phiên ký không còn nhận OTP");
         }
-        if (session.lastOtpSentAt() != null && session.lastOtpSentAt().plusSeconds(60).isAfter(LocalDateTime.now())) {
+        LocalDateTime now = nowVn();
+        if (session.lastOtpSentAt() != null && session.lastOtpSentAt().plusSeconds(60).isAfter(now)) {
             throw AppException.conflict("Vui lòng chờ 60 giây trước khi yêu cầu mã OTP mới");
         }
         String otp = tokenService.newOtp();
         jdbcTemplate.update("""
                 UPDATE contract_signing_sessions
-                SET otp_hash = ?, otp_expires_at = DATE_ADD(NOW(6), INTERVAL 10 MINUTE),
-                    otp_attempts = 0, last_otp_sent_at = NOW(6), status = 'ACTIVE',
+                SET otp_hash = ?, otp_expires_at = ?,
+                    otp_attempts = 0, last_otp_sent_at = ?, status = 'ACTIVE',
                     verification_proof_hash = NULL, verification_expires_at = NULL
                 WHERE id = ?
-                """, tokenService.hash(rawToken + ":" + otp), session.id());
+                """, tokenService.hash(rawToken + ":" + otp), now.plusMinutes(10), now, session.id());
         emailService.sendContractSigningOtp(session.email(), session.candidateName(), otp);
         return new OtpResult(maskEmail(session.email()), 600);
     }
@@ -140,8 +148,9 @@ public class ElectronicContractSigningService {
     @Transactional
     public VerificationResult verifyOtp(String rawToken, String otp) {
         SigningSession session = requireSession(rawToken, false);
+        LocalDateTime now = nowVn();
         if (session.otpHash() == null || session.otpExpiresAt() == null
-                || session.otpExpiresAt().isBefore(LocalDateTime.now())) {
+                || session.otpExpiresAt().isBefore(now)) {
             throw AppException.badRequest("Mã OTP đã hết hạn; vui lòng yêu cầu mã mới");
         }
         if (session.otpAttempts() >= 5) {
@@ -154,10 +163,10 @@ public class ElectronicContractSigningService {
         String proof = tokenService.newVerificationProof();
         jdbcTemplate.update("""
                 UPDATE contract_signing_sessions
-                SET status = 'OTP_VERIFIED', otp_verified_at = NOW(6), otp_hash = NULL,
-                    verification_proof_hash = ?, verification_expires_at = DATE_ADD(NOW(6), INTERVAL 30 MINUTE)
+                SET status = 'OTP_VERIFIED', otp_verified_at = ?, otp_hash = NULL,
+                    verification_proof_hash = ?, verification_expires_at = ?
                 WHERE id = ?
-                """, tokenService.hash(rawToken + ":" + proof), session.id());
+                """, now, tokenService.hash(rawToken + ":" + proof), now.plusMinutes(30), session.id());
         appendEvent(session.contractId(), "CANDIDATE_OTP_VERIFIED", session.contractStatus(),
                 session.contractStatus(), null, null, "otp-verified:" + session.id());
         return new VerificationResult(proof, 1800);
@@ -182,7 +191,7 @@ public class ElectronicContractSigningService {
 
         try {
             byte[] source = companyPdfBytes(session.contractId(), session.companyFileUrl(), session.generatedHtml(), session.contractNumber());
-            LocalDateTime signedAt = LocalDateTime.now();
+            LocalDateTime signedAt = nowVn();
             byte[] completed = appendSignatureEvidence(source, signerName, method, signatureData,
                     signedAt, ipAddress, session.contractNumber());
             String sha = sha256(completed);
@@ -229,10 +238,10 @@ public class ElectronicContractSigningService {
         SigningSession session = requireVerified(rawToken, command.verificationProof());
         String reason = required(command.reason(), "Lý do từ chối ký");
         int claimed = jdbcTemplate.update("""
-                UPDATE contract_signing_sessions SET status = 'DECLINED', declined_at = NOW(6),
+                UPDATE contract_signing_sessions SET status = 'DECLINED', declined_at = ?,
                     decline_reason = ?, ip_address = ?, user_agent = ?, verification_proof_hash = NULL
                 WHERE id = ? AND status = 'OTP_VERIFIED'
-                """, reason, trimTo(ipAddress, 100), trimTo(userAgent, 500), session.id());
+                """, nowVn(), reason, trimTo(ipAddress, 100), trimTo(userAgent, 500), session.id());
         if (claimed != 1) throw AppException.conflict("Phiên ký đã được xử lý ở một yêu cầu khác");
         jdbcTemplate.update("UPDATE employment_contracts SET status = 'DECLINED', row_version = row_version + 1 WHERE id = ?",
                 session.contractId());
@@ -261,9 +270,9 @@ public class ElectronicContractSigningService {
         if (seats.isEmpty()) throw AppException.conflict("Không tìm thấy suất tuyển dụng đã được ứng viên chấp nhận");
         Map<String, Object> seat = seats.get(0);
         jdbcTemplate.update("""
-                UPDATE employment_contracts SET status = 'ACTIVE', activated_by = ?, activated_at = NOW(6),
+                UPDATE employment_contracts SET status = 'ACTIVE', activated_by = ?, activated_at = ?,
                     row_version = row_version + 1 WHERE id = ?
-                """, actorId, contractId);
+                """, actorId, nowVn(), contractId);
         appendEvent(contractId, "CONTRACT_ACTIVATED", "CANDIDATE_SIGNED", "ACTIVE", actorId,
                 null, idempotencyKey);
         String payload = """
@@ -323,7 +332,7 @@ public class ElectronicContractSigningService {
     private SigningSession requireVerified(String rawToken, String proof) {
         SigningSession session = requireSession(rawToken, false);
         if (!"OTP_VERIFIED".equals(session.sessionStatus()) || session.verificationExpiresAt() == null
-                || session.verificationExpiresAt().isBefore(LocalDateTime.now())
+                || session.verificationExpiresAt().isBefore(nowVn())
                 || !tokenService.matches(rawToken + ":" + proof, session.verificationProofHash())) {
             throw AppException.forbidden("Phiên xác thực OTP không hợp lệ hoặc đã hết hạn");
         }
@@ -356,7 +365,7 @@ public class ElectronicContractSigningService {
                 rs.getString("email"), rs.getString("job_title")), tokenService.hash(rawToken));
         if (rows.isEmpty()) throw AppException.notFound("Liên kết ký không tồn tại hoặc đã bị thu hồi");
         SigningSession session = rows.get(0);
-        if (session.expiresAt().isBefore(LocalDateTime.now()) && List.of("ACTIVE", "OTP_VERIFIED").contains(session.sessionStatus())) {
+        if (session.expiresAt().isBefore(nowVn()) && List.of("ACTIVE", "OTP_VERIFIED").contains(session.sessionStatus())) {
             jdbcTemplate.update("UPDATE contract_signing_sessions SET status = 'EXPIRED' WHERE id = ?", session.id());
             jdbcTemplate.update("UPDATE employment_contracts SET status = 'SIGNING_EXPIRED' WHERE id = ?", session.contractId());
             throw AppException.conflict("Liên kết ký hợp đồng đã hết hạn");

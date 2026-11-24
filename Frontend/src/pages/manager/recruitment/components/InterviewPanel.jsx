@@ -1,14 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarDays, CheckCircle2, ChevronDown, ChevronUp, Clock3, HelpCircle, Loader2, MapPin, MessageSquareText, RefreshCw, Users, XCircle } from 'lucide-react';
+import { AlertTriangle, CalendarDays, CheckCircle2, ChevronDown, ChevronUp, Clock3, Cpu, HelpCircle, Loader2, MapPin, MessageSquareText, RefreshCw, Users, XCircle } from 'lucide-react';
 import api from '../../../../services/api';
 import { useAuth } from '../../../../context/AuthContext';
 import { useNotification } from '../../../../context/NotificationContext';
+import useRealtimeSync from '../../../../hooks/useRealtimeSync';
 
 const roundFromStatus = (status) => status === 'PENDING_INTERVIEW_1' ? 1
   : status === 'PENDING_INTERVIEW_2' ? 2 : null;
 
 const INTERVIEW_STATUS_MAP = {
   SCHEDULED: 'Đã lên lịch',
+  DONE: 'Đã hoàn tất',
   COMPLETED: 'Đã hoàn tất',
   CANCELLED: 'Đã hủy',
   RESCHEDULED: 'Đã đổi lịch',
@@ -24,9 +26,12 @@ const INTERVIEW_MODE_MAP = {
 
 const ROLE_MAP = {
   LEAD: 'Chủ trì',
-  MEMBER: 'Người phỏng vấn',
+  MEMBER: 'Thành viên hội đồng',
   HR: 'HR phụ trách',
-  INTERVIEWER: 'Người phỏng vấn'
+  INTERVIEWER: 'Thành viên hội đồng',
+  NHAN_VIEN: 'Kỹ sư chuyên môn',
+  TRUONG_PHONG: 'Trưởng phòng',
+  GIAM_DOC_PHONG_BAN: 'Giám đốc phòng ban'
 };
 
 const RECOMMENDATION_MAP = {
@@ -48,19 +53,47 @@ const AI_FLAG_LABELS = {
 
 const formatAiClaim = (claim) => AI_FLAG_LABELS[claim] || claim;
 
-export default function InterviewPanel({ applicationId, applicationStatus, verifyPoints = [], suggestedQuestions = [], jobTitle = '' }) {
+const toDateTimeLocalValue = (date) => {
+  if (!date || Number.isNaN(date.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
+
+const formatVndInput = (raw) => {
+  if (raw === null || raw === undefined) return '';
+  const digits = String(raw).replace(/\D/g, '').replace(/^0+/, '');
+  if (!digits) return '';
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+};
+
+const parseVndNumber = (raw) => {
+  const digits = String(raw ?? '').replace(/\D/g, '');
+  if (!digits) return null;
+  const num = Number(digits);
+  return Number.isFinite(num) && num > 0 ? num : null;
+};
+
+const formatVndDisplay = (amount) => {
+  const num = typeof amount === 'number' ? amount : parseVndNumber(amount);
+  if (!num) return '—';
+  return `${Math.round(num).toLocaleString('vi-VN')} VNĐ`;
+};
+
+export default function InterviewPanel({ applicationId, applicationStatus, verifyPoints = [], suggestedQuestions = [], jobTitle = '', onInterviewStateChange }) {
   const { user } = useAuth();
   const { showNotification } = useNotification();
   const round = roundFromStatus(applicationStatus);
   const [interviews, setInterviews] = useState([]);
   const [people, setPeople] = useState([]);
+  const [techSuggestions, setTechSuggestions] = useState([]);
+  const [loadingTechSuggestions, setLoadingTechSuggestions] = useState(false);
   const [access, setAccess] = useState({ canSchedule: false, participant: false });
   const [busy, setBusy] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [showScheduleForm, setShowScheduleForm] = useState(false);
   const [showFeedbackForm, setShowFeedbackForm] = useState(false);
-  const [schedule, setSchedule] = useState({ start: '', end: '', mode: 'ONLINE', location: '', meetingUrl: '', lead: '' });
+  const [schedule, setSchedule] = useState({ start: '', end: '', mode: 'ONLINE', location: '', meetingUrl: '', lead: '', participants: [] });
   const [feedback, setFeedback] = useState({ score: '70', recommendation: 'PASS', comments: '' });
   const [conclusion, setConclusion] = useState('');
   const [negotiation, setNegotiation] = useState({ currentSalary: '', expectedSalary: '', preliminarySalary: '', allowances: '', expectations: '', notes: '' });
@@ -106,9 +139,11 @@ export default function InterviewPanel({ applicationId, applicationStatus, verif
     }
   }, [applicationId]);
 
-  const load = useCallback(async () => {
-    setLoadingData(true);
-    setLoadError('');
+  const load = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) {
+      setLoadingData(true);
+      setLoadError('');
+    }
     try {
       const [interviewRes, accessRes] = await Promise.all([
         api.get(`/api/recruitment/applications/${applicationId}/interviews`),
@@ -127,13 +162,23 @@ export default function InterviewPanel({ applicationId, applicationStatus, verif
         setShowScheduleForm(false);
       }
     } finally {
-      setLoadingData(false);
+      if (!silent) setLoadingData(false);
     }
   }, [applicationId]);
 
   useEffect(() => {
-    load().catch(error => setLoadError(error.response?.data?.message || 'Không thể tải dữ liệu phỏng vấn.'));
+    load({ silent: false }).catch(error => setLoadError(error.response?.data?.message || 'Không thể tải dữ liệu phỏng vấn.'));
   }, [load]);
+
+  useRealtimeSync(
+    () => {
+      load({ silent: true }).catch(() => {});
+    },
+    {
+      events: ['hrm:recruitment-sync', 'hrm:notification'],
+      paused: showScheduleForm || showFeedbackForm || busy,
+    }
+  );
 
   const current = useMemo(() => interviews
     .filter(item => item.roundNumber === round)
@@ -145,6 +190,244 @@ export default function InterviewPanel({ applicationId, applicationStatus, verif
   useEffect(() => {
     setShowFeedbackForm(false);
   }, [current?.id]);
+
+  useEffect(() => {
+    const saved = current?.negotiation;
+    if (!saved) return;
+    const savedAllowanceRaw = saved.allowances?.amount ?? saved.allowances?.description ?? '';
+    setNegotiation({
+      currentSalary: saved.currentSalary ? formatVndInput(Math.round(Number(saved.currentSalary))) : '',
+      expectedSalary: saved.expectedSalary ? formatVndInput(Math.round(Number(saved.expectedSalary))) : '',
+      preliminarySalary: saved.preliminarySalary ? formatVndInput(Math.round(Number(saved.preliminarySalary))) : '',
+      allowances: savedAllowanceRaw ? formatVndInput(savedAllowanceRaw) : '',
+      expectations: saved.otherExpectations || '',
+      notes: saved.notes || '',
+    });
+  }, [current?.id, current?.negotiation?.recordedAt]);
+
+  // Đồng bộ điều kiện mở khóa nút "Duyệt chuyển bước" lên ApplicationDetailPage (khớp 1-1 với Backend requireReadyToPass)
+  useEffect(() => {
+    if (typeof onInterviewStateChange !== 'function') return;
+    if (!round) {
+      onInterviewStateChange({ ready: true, loading: false, blockers: [] });
+      return;
+    }
+    if (loadingData) {
+      onInterviewStateChange({ ready: false, loading: true, blockers: [] });
+      return;
+    }
+
+    const latestDone = interviews
+      .filter((item) => item.roundNumber === round && (item.status === 'DONE' || item.status === 'COMPLETED'))
+      .sort((a, b) => b.attemptNumber - a.attemptNumber)[0];
+    const target = latestDone || current;
+    const blockers = [];
+
+    if (!target || ['RESCHEDULED', 'NO_SHOW', 'CANCELLED'].includes(target.status)) {
+      blockers.push(`Chưa có lịch phỏng vấn Vòng ${round} đang hoạt động (HR phụ trách chiến dịch cần tạo lịch).`);
+    } else {
+      const requiredParticipants = (target.participants || []).filter(
+        (p) => p.feedbackRequired && p.invitationStatus !== 'DECLINED'
+      );
+      const pendingConfirm = requiredParticipants.filter((p) => p.invitationStatus !== 'ACCEPTED');
+      const missingFeedback = requiredParticipants.filter(
+        (p) => p.invitationStatus === 'ACCEPTED' && !p.submittedAt
+      );
+
+      if (pendingConfirm.length > 0) {
+        blockers.push(
+          `Chưa xác nhận lời mời phỏng vấn: ${pendingConfirm.map((p) => `${p.name} (${ROLE_MAP[p.role] || p.role})`).join(', ')}.`
+        );
+      }
+      if (missingFeedback.length > 0) {
+        blockers.push(
+          `Chưa gửi phiếu feedback: ${missingFeedback.map((p) => `${p.name} (${ROLE_MAP[p.role] || p.role})`).join(', ')}.`
+        );
+      }
+
+      const isDone = target.status === 'DONE' || target.status === 'COMPLETED';
+      if (!isDone) {
+        const leadPerson = (target.participants || []).find((p) => p.userId === target.leadUserId);
+        const leadLabel = leadPerson ? leadPerson.name : 'Người chủ trì';
+        blockers.push(`Chủ trì (${leadLabel}) chưa bấm "Hoàn tất buổi phỏng vấn" và ghi kết luận tổng hợp.`);
+      } else if (!target.conclusion || !String(target.conclusion).trim()) {
+        blockers.push(`Thiếu kết luận tổng hợp của buổi phỏng vấn Vòng ${round}.`);
+      }
+
+      if (round === 2 && !target.negotiation) {
+        blockers.push('HR phụ trách chiến dịch chưa lưu kết quả đàm phán lương sơ bộ của Vòng 2.');
+      }
+    }
+
+    onInterviewStateChange({
+      ready: blockers.length === 0,
+      loading: false,
+      blockers,
+    });
+  }, [onInterviewStateChange, round, loadingData, interviews, current]);
+
+  // Module 2 (HR ↔ Tech): Gợi ý Hội đồng Kỹ thuật dựa trên Tech Skills, % tải dự án và lịch nghỉ phép
+  const interviewDateOnly = schedule.start ? String(schedule.start).slice(0, 10) : '';
+  useEffect(() => {
+    if (!access.canSchedule || !applicationId) {
+      setTechSuggestions([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingTechSuggestions(true);
+    api
+      .get('/api/tech-hr/interviewer-suggestions', {
+        params: {
+          applicationId,
+          ...(interviewDateOnly ? { interviewDate: interviewDateOnly } : {}),
+        },
+      })
+      .then((res) => {
+        if (!cancelled) {
+          setTechSuggestions(res.data?.data || []);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setTechSuggestions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingTechSuggestions(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [access.canSchedule, applicationId, interviewDateOnly]);
+
+  const allEligiblePeople = useMemo(() => {
+    const map = new Map();
+    people.forEach((p) => {
+      const canLeadR1 = p.canLeadRound1 !== false;
+      const canLeadR2 = p.canLeadRound2 !== undefined
+        ? Boolean(p.canLeadRound2)
+        : p.role !== 'NHAN_VIEN';
+      map.set(String(p.id), {
+        ...p,
+        canLeadRound1: canLeadR1,
+        canLeadRound2: canLeadR2,
+      });
+    });
+    techSuggestions.forEach((s) => {
+      const key = String(s.userId);
+      const canLeadR1 = s.canLeadRound1 !== false;
+      const canLeadR2 = s.canLeadRound2 !== undefined
+        ? Boolean(s.canLeadRound2)
+        : (s.role === 'TRUONG_PHONG' || s.role === 'GIAM_DOC_PHONG_BAN');
+      if (!map.has(key)) {
+        map.set(key, {
+          id: s.userId,
+          name: `${s.hoTen}${s.chucVu ? ` (${s.chucVu})` : ''}`,
+          role: s.role || 'NHAN_VIEN',
+          canLeadRound1: canLeadR1,
+          canLeadRound2: canLeadR2,
+        });
+      }
+    });
+    return Array.from(map.values());
+  }, [people, techSuggestions]);
+
+  const leadEligibleOptions = useMemo(() => {
+    return allEligiblePeople.filter((p) => (round === 2 ? p.canLeadRound2 : p.canLeadRound1));
+  }, [allEligiblePeople, round]);
+
+  const panelMemberOptions = useMemo(() => {
+    return allEligiblePeople.filter((p) => String(p.id) !== String(schedule.lead));
+  }, [allEligiblePeople, schedule.lead]);
+
+  const selectLead = useCallback((userIdStr) => {
+    const normalized = String(userIdStr || '');
+    setSchedule((prev) => ({
+      ...prev,
+      lead: normalized,
+      participants: (prev.participants || []).filter((uid) => String(uid) !== normalized),
+    }));
+  }, []);
+
+  const toggleParticipant = useCallback((userIdStr) => {
+    const normalized = String(userIdStr || '');
+    if (!normalized) return;
+    setSchedule((prev) => {
+      if (String(prev.lead) === normalized) return prev;
+      const exists = (prev.participants || []).some((uid) => String(uid) === normalized);
+      return {
+        ...prev,
+        participants: exists
+          ? (prev.participants || []).filter((uid) => String(uid) !== normalized)
+          : [...(prev.participants || []), normalized],
+      };
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!schedule.lead) return;
+    const stillValidLead = leadEligibleOptions.some((p) => String(p.id) === String(schedule.lead));
+    if (!stillValidLead && leadEligibleOptions.length > 0) {
+      setSchedule((prev) => ({ ...prev, lead: '' }));
+    }
+  }, [round, leadEligibleOptions, schedule.lead]);
+
+  const round1Reference = useMemo(() => {
+    if (round !== 2) return null;
+    return interviews
+      .filter((item) => item.roundNumber === 1 && ['DONE', 'COMPLETED', 'SCHEDULED'].includes(item.status))
+      .sort((a, b) => b.attemptNumber - a.attemptNumber)[0] || null;
+  }, [interviews, round]);
+
+  const minScheduleStartLocal = useMemo(() => {
+    const now = new Date();
+    const r1End = round1Reference?.scheduledEnd ? new Date(round1Reference.scheduledEnd) : null;
+    const minDate = r1End && r1End.getTime() > now.getTime() ? r1End : now;
+    return toDateTimeLocalValue(minDate);
+  }, [round1Reference, showScheduleForm, round]);
+
+  const scheduleValidation = useMemo(() => {
+    let startError = '';
+    if (schedule.start) {
+      const startDate = new Date(schedule.start);
+      if (Number.isNaN(startDate.getTime())) {
+        startError = 'Định dạng thời gian không hợp lệ.';
+      } else {
+        const now = new Date();
+        if (startDate.getTime() < now.getTime() - 60 * 1000) {
+          startError = 'Thời gian bắt đầu phỏng vấn không được nằm trong quá khứ.';
+        } else {
+          const maxFuture = new Date(now);
+          maxFuture.setMonth(maxFuture.getMonth() + 6);
+          if (startDate.getTime() > maxFuture.getTime()) {
+            startError = 'Thời gian phỏng vấn không được vượt quá 6 tháng kể từ hiện tại.';
+          } else if (round === 2 && round1Reference?.scheduledEnd) {
+            const r1End = new Date(round1Reference.scheduledEnd);
+            if (!Number.isNaN(r1End.getTime()) && startDate.getTime() < r1End.getTime()) {
+              const r1Label = r1End.toLocaleString('vi-VN', {
+                hour: '2-digit',
+                minute: '2-digit',
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+              });
+              startError = `Phỏng vấn Vòng 2 phải diễn ra sau khi kết thúc Vòng 1 (${r1Label}).`;
+            }
+          }
+        }
+      }
+    }
+
+    let meetingUrlError = '';
+    const trimmedUrl = (schedule.meetingUrl || '').trim();
+    if (trimmedUrl && !/^https?:\/\/\S+$/i.test(trimmedUrl)) {
+      meetingUrlError = 'Link họp online phải bắt đầu bằng http:// hoặc https://.';
+    }
+
+    return {
+      startError,
+      meetingUrlError,
+      hasError: Boolean(startError || meetingUrlError),
+    };
+  }, [schedule.start, schedule.meetingUrl, round, round1Reference]);
 
   if (!round) return null;
 
@@ -168,8 +451,18 @@ export default function InterviewPanel({ applicationId, applicationStatus, verif
     location: schedule.location || null,
     meetingUrl: schedule.meetingUrl || null,
     leadUserId: Number(schedule.lead),
-    participants: [] // Backend tự thêm người chủ trì vào; email sẽ gửi cho ứng viên qua outbox
-  }).then(result => { setShowScheduleForm(false); return result; }), current?.status === 'SCHEDULED' ? 'Đã đặt lại lịch, gửi lại lời mời và giữ lịch sử cũ.' : 'Đã tạo lịch, gửi email cho ứng viên và lời mời cho người phỏng vấn.');
+    participants: (schedule.participants || [])
+      .filter((uid) => String(uid) !== String(schedule.lead))
+      .map((uid) => ({
+        userId: Number(uid),
+        role: 'INTERVIEWER',
+        feedbackRequired: true,
+      })),
+  }).then(result => {
+    setShowScheduleForm(false);
+    setSchedule((prev) => ({ ...prev, participants: [] }));
+    return result;
+  }), current?.status === 'SCHEDULED' ? 'Đã đặt lại lịch, gửi lại lời mời và giữ lịch sử cũ.' : 'Đã tạo lịch, gửi email cho ứng viên và lời mời cho hội đồng phỏng vấn.');
 
   const submitFeedback = () => run(() => api.put(`/api/recruitment/interviews/${current.id}/feedback`, {
     criteriaScores: { overall: Number(feedback.score) },
@@ -195,16 +488,37 @@ export default function InterviewPanel({ applicationId, applicationStatus, verif
     decision === 'ACCEPTED' ? 'Bạn đã chấp nhận lời mời phỏng vấn.' : 'Bạn đã từ chối lời mời phỏng vấn.'
   );
 
-  const saveNegotiation = () => run(() => api.put(`/api/recruitment/interviews/${current.id}/salary-negotiation`, {
-    currentSalary: negotiation.currentSalary ? Number(negotiation.currentSalary) : null,
-    expectedSalary: Number(negotiation.expectedSalary),
-    preliminarySalary: Number(negotiation.preliminarySalary),
-    allowances: { description: negotiation.allowances },
-    otherExpectations: negotiation.expectations || null,
-    notes: negotiation.notes
-  }), 'Đã lưu kết quả đàm phán sơ bộ.');
+  const saveNegotiation = () => {
+    const currentSal = parseVndNumber(negotiation.currentSalary);
+    const expectedSal = parseVndNumber(negotiation.expectedSalary);
+    const preliminarySal = parseVndNumber(negotiation.preliminarySalary);
+    const allowanceAmount = parseVndNumber(negotiation.allowances);
+    return run(() => api.put(`/api/recruitment/interviews/${current.id}/salary-negotiation`, {
+      currentSalary: currentSal,
+      expectedSalary: expectedSal,
+      preliminarySalary: preliminarySal,
+      allowances: {
+        amount: allowanceAmount,
+        description: allowanceAmount ? formatVndDisplay(allowanceAmount) : '',
+      },
+      otherExpectations: negotiation.expectations || null,
+      notes: negotiation.notes
+    }), 'Đã lưu kết quả đàm phán sơ bộ.');
+  };
 
   const activeR1Q = round1Questions.length > 0 ? round1Questions : suggestedQuestions;
+  const isBeforeScheduledStart = Boolean(
+    current?.scheduledStart && Date.now() < new Date(current.scheduledStart).getTime()
+  );
+  const scheduledStartLabel = current?.scheduledStart
+    ? new Date(current.scheduledStart).toLocaleString('vi-VN', {
+        hour: '2-digit',
+        minute: '2-digit',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      })
+    : '';
 
   return (
     <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -226,8 +540,30 @@ export default function InterviewPanel({ applicationId, applicationStatus, verif
       {!loadingData && access.canSchedule && (!current || ['RESCHEDULED', 'NO_SHOW', 'CANCELLED'].includes(current.status) || showScheduleForm) && (
         <div className="grid gap-4 rounded-xl bg-slate-50 p-5 md:grid-cols-2">
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600">Thời gian phỏng vấn (Thời gian bắt đầu)</label>
-            <input type="datetime-local" value={schedule.start} onChange={e => setSchedule({ ...schedule, start: e.target.value })} className="w-full rounded-lg border border-slate-200 bg-white p-2.5 text-sm" />
+            <label className="mb-1 block text-xs font-medium text-slate-600">Thời gian phỏng vấn (Thời gian bắt đầu) *</label>
+            <input
+              type="datetime-local"
+              min={minScheduleStartLocal}
+              value={schedule.start}
+              onChange={e => setSchedule({ ...schedule, start: e.target.value })}
+              className={`w-full rounded-lg border bg-white p-2.5 text-sm outline-none transition ${
+                scheduleValidation.startError
+                  ? 'border-rose-400 ring-2 ring-rose-100 text-rose-700'
+                  : 'border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
+              }`}
+            />
+            {scheduleValidation.startError ? (
+              <p className="mt-1.5 flex items-center gap-1 text-xs font-medium text-rose-600">
+                <AlertTriangle size={13} className="shrink-0" />
+                <span>{scheduleValidation.startError}</span>
+              </p>
+            ) : (
+              <p className="mt-1 text-[11px] text-slate-500">
+                {round === 2 && round1Reference?.scheduledEnd
+                  ? `Phải từ thời điểm hiện tại trở đi và sau Vòng 1 (${new Date(round1Reference.scheduledEnd).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' })}).`
+                  : 'Chỉ chọn thời điểm từ hiện tại trở đi (thời lượng mặc định 45 phút).'}
+              </p>
+            )}
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-600">Hình thức phỏng vấn</label>
@@ -243,13 +579,208 @@ export default function InterviewPanel({ applicationId, applicationStatus, verif
               </select>
             )}
           </div>
-          <div className="md:col-span-2 sm:col-span-1">
-            <label className="mb-1 block text-xs font-medium text-slate-600">Người chủ trì phỏng vấn</label>
-            <select value={schedule.lead} onChange={e => setSchedule({ ...schedule, lead: e.target.value })} className="w-full rounded-lg border border-slate-200 bg-white p-2.5 text-sm">
+          <div className="md:col-span-2">
+            <div className="mb-1 flex items-center justify-between gap-2 flex-wrap">
+              <label className="block text-xs font-medium text-slate-600">Người chủ trì phỏng vấn *</label>
+              <span className="text-[11px] font-medium text-slate-500">
+                {round === 1
+                  ? 'Vòng 1: Quản lý phòng ban, Senior/Tech Lead (CN) hoặc HR phụ trách'
+                  : 'Vòng 2: Bắt buộc Quản lý phòng ban (Trưởng phòng/Giám đốc) hoặc HR phụ trách'}
+              </span>
+            </div>
+            <select value={schedule.lead} onChange={e => selectLead(e.target.value)} className="w-full rounded-lg border border-slate-200 bg-white p-2.5 text-sm">
               <option value="">-- Chọn người chủ trì --</option>
-              {people.map(person => <option key={person.id} value={person.id}>{person.name} · {ROLE_MAP[person.role] || person.role}</option>)}
+              {leadEligibleOptions.map(person => (
+                <option key={person.id} value={person.id}>
+                  {person.name} · {ROLE_MAP[person.role] || person.role}
+                </option>
+              ))}
             </select>
           </div>
+
+          {/* Chọn thêm Thành viên hội đồng cùng tham gia (tùy chọn) */}
+          <div className="md:col-span-2 rounded-xl border border-slate-200 bg-white p-4 space-y-2.5">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div>
+                <p className="text-xs font-bold text-slate-800">
+                  Thành viên hội đồng cùng tham gia <span className="font-normal text-slate-400">(Tùy chọn)</span>
+                </p>
+                <p className="text-[11px] text-slate-500">
+                  Mời thêm Kỹ sư Senior/Tech Lead hoặc Quản lý cùng chấm điểm độc lập trước khi Chủ trì kết luận
+                </p>
+              </div>
+              <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                {(schedule.participants || []).length > 0
+                  ? `Đã chọn ${(schedule.participants || []).length} thành viên`
+                  : 'Chưa chọn thêm'}
+              </span>
+            </div>
+            {panelMemberOptions.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {panelMemberOptions.map((person) => {
+                  const isPicked = (schedule.participants || []).some((uid) => String(uid) === String(person.id));
+                  return (
+                    <button
+                      key={person.id}
+                      type="button"
+                      onClick={() => toggleParticipant(String(person.id))}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${
+                        isPicked
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/60'
+                      }`}
+                    >
+                      <span>{isPicked ? '✓' : '+'}</span>
+                      <span>{person.name}</span>
+                      <span className={`text-[10px] ${isPicked ? 'text-indigo-100' : 'text-slate-400'}`}>
+                        · {ROLE_MAP[person.role] || person.role}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400 italic">Không còn thành viên hợp lệ khác để mời thêm.</p>
+            )}
+          </div>
+
+          {/* Module 2 (HR ↔ Tech): Gợi ý Hội đồng Kỹ thuật từ Tech Skills & Bench */}
+          {(loadingTechSuggestions || techSuggestions.length > 0) && (
+            <div className="md:col-span-2 rounded-xl border border-blue-200 bg-white p-4 space-y-3">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 flex items-center justify-center">
+                    <Cpu size={15} />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-900">
+                      Gợi ý Hội đồng Kỹ thuật (Chỉ Senior / Expert / Tech Lead &amp; Quản lý CN)
+                    </p>
+                    <p className="text-[11px] text-slate-500">
+                      {round === 1
+                        ? `Vòng 1 (Kỹ thuật): Có thể chọn làm Chủ trì hoặc Mời vào hội đồng${interviewDateOnly ? ` ngày ${interviewDateOnly}` : ''}`
+                        : `Vòng 2 (Chốt & Đàm phán): Quản lý chủ trì; Senior/Tech Lead tham gia vai trò Thành viên hội đồng${interviewDateOnly ? ` ngày ${interviewDateOnly}` : ''}`}
+                    </p>
+                  </div>
+                </div>
+                {loadingTechSuggestions && <Loader2 size={14} className="animate-spin text-blue-600" />}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                {techSuggestions.slice(0, 6).map((s) => {
+                  const uidStr = String(s.userId);
+                  const isLead = String(schedule.lead) === uidStr;
+                  const isMember = (schedule.participants || []).some((uid) => String(uid) === uidStr);
+                  const canBeLead = round === 2
+                    ? (s.canLeadRound2 !== undefined ? Boolean(s.canLeadRound2) : (s.role === 'TRUONG_PHONG' || s.role === 'GIAM_DOC_PHONG_BAN'))
+                    : (s.canLeadRound1 !== false);
+                  const badgeStyle =
+                    s.availabilityBadge === 'OPTIMAL'
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : s.availabilityBadge === 'BUSY'
+                      ? 'bg-amber-50 text-amber-800 border-amber-200'
+                      : s.availabilityBadge === 'ON_LEAVE'
+                      ? 'bg-slate-100 text-slate-600 border-slate-300'
+                      : 'bg-rose-50 text-rose-700 border-rose-200';
+                  const badgeLabel =
+                    s.availabilityBadge === 'OPTIMAL'
+                      ? 'Sẵn sàng tốt'
+                      : s.availabilityBadge === 'BUSY'
+                      ? 'Bận vừa'
+                      : s.availabilityBadge === 'ON_LEAVE'
+                      ? 'Đang nghỉ phép'
+                      : 'Quá tải';
+                  return (
+                    <div
+                      key={s.userId}
+                      className={`p-3 rounded-xl border text-xs transition flex flex-col justify-between gap-2 ${
+                        isLead
+                          ? 'bg-blue-50/70 border-blue-400 ring-1 ring-blue-300'
+                          : isMember
+                          ? 'bg-indigo-50/60 border-indigo-300 ring-1 ring-indigo-200'
+                          : 'bg-slate-50/70 border-slate-200'
+                      }`}
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="font-bold text-slate-900 truncate">{s.hoTen}</p>
+                            <p className="text-[11px] text-slate-500 truncate">{s.chucVu || 'Kỹ sư phần mềm'}</p>
+                          </div>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${badgeStyle}`}>
+                            {badgeLabel} · Tải {s.totalAllocation}%
+                          </span>
+                        </div>
+                        {s.matchedSkills?.length > 0 && (
+                          <div className="flex flex-wrap gap-1 pt-0.5">
+                            {s.matchedSkills.map((sk, idx) => (
+                              <span key={idx} className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                                {sk}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {s.recommendationReason && (
+                          <p className="text-[11px] text-slate-600">{s.recommendationReason}</p>
+                        )}
+                      </div>
+
+                      {s.onLeaveThatDay ? (
+                        <button
+                          type="button"
+                          disabled
+                          className="w-full py-1.5 px-2.5 rounded-lg text-[11px] font-bold bg-slate-100 text-slate-500 border border-slate-200 cursor-not-allowed"
+                        >
+                          Đang nghỉ phép ngày này
+                        </button>
+                      ) : canBeLead ? (
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => selectLead(uidStr)}
+                            className={`py-1.5 px-2 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                              isLead
+                                ? 'bg-blue-700 text-white'
+                                : 'bg-white hover:bg-blue-600 hover:text-white text-blue-700 border border-blue-200'
+                            }`}
+                          >
+                            {isLead ? '✓ Đang Chủ trì' : 'Chọn Chủ trì'}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isLead}
+                            onClick={() => toggleParticipant(uidStr)}
+                            className={`py-1.5 px-2 rounded-lg text-[11px] font-bold transition cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed ${
+                              isMember
+                                ? 'bg-indigo-600 text-white'
+                                : 'bg-white hover:bg-indigo-600 hover:text-white text-indigo-700 border border-indigo-200'
+                            }`}
+                          >
+                            {isMember ? '✓ Trong hội đồng' : '+ Vào hội đồng'}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-1">
+                          <button
+                            type="button"
+                            onClick={() => toggleParticipant(uidStr)}
+                            className={`w-full py-1.5 px-2.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                              isMember
+                                ? 'bg-indigo-600 text-white'
+                                : 'bg-white hover:bg-indigo-600 hover:text-white text-indigo-700 border border-indigo-200'
+                            }`}
+                          >
+                            {isMember ? '✓ Đã mời vào hội đồng (Vòng 2)' : '+ Mời vào hội đồng chuyên môn'}
+                          </button>
+                          <p className="text-[10px] text-slate-400 text-center">Vòng 2 yêu cầu Quản lý phòng ban chủ trì</p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {(round !== 1 && schedule.mode !== 'ONLINE') && (
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-600">Địa điểm phỏng vấn</label>
@@ -258,13 +789,28 @@ export default function InterviewPanel({ applicationId, applicationStatus, verif
           )}
           <div className={(round === 1 || schedule.mode === 'ONLINE') ? "md:col-span-2" : ""}>
             <label className="mb-1 block text-xs font-medium text-slate-600">Link họp online (Google Meet / Zoom...)</label>
-            <input placeholder="https://meet.google.com/..." value={schedule.meetingUrl} onChange={e => setSchedule({ ...schedule, meetingUrl: e.target.value })} className="w-full rounded-lg border border-slate-200 bg-white p-2.5 text-sm" />
+            <input
+              placeholder="https://meet.google.com/..."
+              value={schedule.meetingUrl}
+              onChange={e => setSchedule({ ...schedule, meetingUrl: e.target.value })}
+              className={`w-full rounded-lg border bg-white p-2.5 text-sm outline-none transition ${
+                scheduleValidation.meetingUrlError
+                  ? 'border-rose-400 ring-2 ring-rose-100 text-rose-700'
+                  : 'border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
+              }`}
+            />
+            {scheduleValidation.meetingUrlError && (
+              <p className="mt-1.5 flex items-center gap-1 text-xs font-medium text-rose-600">
+                <AlertTriangle size={13} className="shrink-0" />
+                <span>{scheduleValidation.meetingUrlError}</span>
+              </p>
+            )}
           </div>
           <p className="md:col-span-2 text-xs text-slate-500 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
             📧 Ứng viên sẽ nhận email; người phỏng vấn sẽ nhận lời mời nội bộ và phải xác nhận tham gia.
           </p>
-          <button disabled={busy || !schedule.start || !schedule.lead} onClick={() => scheduleInterview()}
-            className="md:col-span-2 rounded-lg bg-blue-600 px-4 py-2.5 font-semibold text-white disabled:opacity-50 hover:bg-blue-700 transition">
+          <button disabled={busy || !schedule.start || !schedule.lead || scheduleValidation.hasError} onClick={() => scheduleInterview()}
+            className="md:col-span-2 rounded-lg bg-blue-600 px-4 py-2.5 font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-700 transition">
             Tạo lịch phỏng vấn Vòng {round}
           </button>
         </div>
@@ -282,6 +828,15 @@ export default function InterviewPanel({ applicationId, applicationStatus, verif
             <p className="flex items-center gap-2 text-sm"><Clock3 size={16} className="text-blue-600" />{new Date(current.scheduledStart).toLocaleString('vi-VN')} – {new Date(current.scheduledEnd).toLocaleTimeString('vi-VN')}</p>
             <p className="flex items-center gap-2 text-sm"><MapPin size={16} className="text-blue-600" />{INTERVIEW_MODE_MAP[current.interviewMode] || current.interviewMode} · {current.location || current.meetingUrl || 'Chưa ghi địa điểm'}</p>
             <p className="flex items-center gap-2 text-sm sm:col-span-2"><Users size={16} className="text-blue-600" />{current.participants.map(item => item.name).join(', ')}</p>
+            {current.completedBeforeSchedule && (
+              <div className="sm:col-span-2 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
+                <AlertTriangle size={14} className="text-amber-600 shrink-0" />
+                <span>
+                  Dấu vết kiểm toán: Buổi phỏng vấn được bấm hoàn tất trước giờ hẹn dự kiến ({scheduledStartLabel})
+                  {current.completedAt ? ` lúc ${new Date(current.completedAt).toLocaleString('vi-VN')}` : ''}.
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Câu hỏi phỏng vấn online – chỉ hiển thị ở vòng 1 */}
@@ -461,6 +1016,14 @@ export default function InterviewPanel({ applicationId, applicationStatus, verif
 
           {current.status === 'SCHEDULED' && myFeedback?.invitationStatus === 'ACCEPTED' && showFeedbackForm && (
             <div className="grid gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 md:grid-cols-2">
+              {isBeforeScheduledStart && (
+                <div className="md:col-span-2 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-xs text-amber-900">
+                  <AlertTriangle size={15} className="text-amber-600 shrink-0 mt-0.5" />
+                  <span>
+                    <strong>Lưu ý kiểm toán:</strong> Lịch phỏng vấn dự kiến bắt đầu lúc <strong>{scheduledStartLabel}</strong>. Bạn đang nhập phiếu đánh giá trước giờ hẹn — thời điểm gửi sẽ được lưu vết kiểm toán để Trưởng phòng đối chiếu.
+                  </span>
+                </div>
+              )}
               <input type="number" min="0" max="100" value={feedback.score} onChange={e => setFeedback({ ...feedback, score: e.target.value })} className="rounded-lg border border-blue-200 p-2.5" placeholder="Điểm 0–100" />
               <select value={feedback.recommendation} onChange={e => setFeedback({ ...feedback, recommendation: e.target.value })} className="rounded-lg border border-blue-200 p-2.5">
                 <option value="PASS">Đạt</option><option value="FAIL">Không đạt</option><option value="HOLD">Cần cân nhắc</option>
@@ -473,38 +1036,190 @@ export default function InterviewPanel({ applicationId, applicationStatus, verif
             </div>
           )}
 
-          <div className="space-y-2">{current.participants.map(item => <div key={item.userId} className="flex items-start justify-between gap-4 rounded-lg border border-slate-100 p-3 text-sm">
-            <div><strong>{item.name}</strong><span className="ml-2 text-slate-500 font-medium">({ROLE_MAP[item.role] || item.role})</span>{item.comments && <p className="mt-1 text-slate-600">{item.comments}</p>}</div>
-            <div className="flex shrink-0 flex-col items-end gap-2">
-              <span className={item.submittedAt ? 'font-semibold text-emerald-600' : current.status === 'NO_SHOW' ? 'font-semibold text-slate-500' : item.invitationStatus === 'DECLINED' ? 'font-semibold text-rose-600' : item.invitationStatus === 'PENDING' ? 'font-semibold text-indigo-600' : 'text-amber-600'}>
-                {item.submittedAt ? `${item.overallScore} điểm · ${RECOMMENDATION_MAP[item.recommendation] || item.recommendation}` : current.status === 'NO_SHOW' ? 'Không feedback · Vắng mặt' : item.invitationStatus === 'DECLINED' ? 'Đã từ chối' : item.invitationStatus === 'PENDING' ? 'Chờ xác nhận' : 'Chưa feedback'}
-              </span>
-              {item.userId === user?.userId && current.status === 'SCHEDULED' && item.invitationStatus === 'ACCEPTED' && (
-                <button disabled={busy} onClick={openFeedbackForm} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
-                  {item.submittedAt ? 'Sửa feedback' : 'Nhập feedback'}
-                </button>
-              )}
-            </div>
-          </div>)}</div>
+          <div className="space-y-2">{current.participants.map(item => {
+            const isEarlyFeedback = Boolean(
+              item.submittedBeforeSchedule ||
+              (item.submittedAt && current.scheduledStart && new Date(item.submittedAt) < new Date(current.scheduledStart))
+            );
+            return (
+              <div key={item.userId} className="flex items-start justify-between gap-4 rounded-lg border border-slate-100 p-3 text-sm">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <strong>{item.name}</strong>
+                    <span className="text-slate-500 font-medium">({ROLE_MAP[item.role] || item.role})</span>
+                    {isEarlyFeedback && (
+                      <span
+                        title={`Gửi lúc ${new Date(item.submittedAt).toLocaleString('vi-VN')} (trước giờ hẹn ${scheduledStartLabel})`}
+                        className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800"
+                      >
+                        <AlertTriangle size={11} className="text-amber-600" />
+                        Gửi trước giờ hẹn
+                      </span>
+                    )}
+                  </div>
+                  {item.comments && <p className="mt-1 text-slate-600">{item.comments}</p>}
+                  {item.submittedAt && (
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      Gửi phiếu lúc {new Date(item.submittedAt).toLocaleString('vi-VN')}
+                    </p>
+                  )}
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-2">
+                  <span className={item.submittedAt ? 'font-semibold text-emerald-600' : current.status === 'NO_SHOW' ? 'font-semibold text-slate-500' : item.invitationStatus === 'DECLINED' ? 'font-semibold text-rose-600' : item.invitationStatus === 'PENDING' ? 'font-semibold text-indigo-600' : 'text-amber-600'}>
+                    {item.submittedAt ? `${item.overallScore} điểm · ${RECOMMENDATION_MAP[item.recommendation] || item.recommendation}` : current.status === 'NO_SHOW' ? 'Không feedback · Vắng mặt' : item.invitationStatus === 'DECLINED' ? 'Đã từ chối' : item.invitationStatus === 'PENDING' ? 'Chờ xác nhận' : 'Chưa feedback'}
+                  </span>
+                  {item.userId === user?.userId && current.status === 'SCHEDULED' && item.invitationStatus === 'ACCEPTED' && (
+                    <button disabled={busy} onClick={openFeedbackForm} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+                      {item.submittedAt ? 'Sửa feedback' : 'Nhập feedback'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}</div>
 
           {round === 2 && current.status === 'SCHEDULED' && access.canSchedule && (
-            <div className="grid gap-3 rounded-xl border border-violet-200 bg-violet-50 p-4 md:grid-cols-2">
-              <input type="number" min="1" placeholder="Lương hiện tại (tự nguyện)" value={negotiation.currentSalary} onChange={e => setNegotiation({ ...negotiation, currentSalary: e.target.value })} className="rounded-lg border border-violet-200 p-2.5" />
-              <input type="number" min="1" placeholder="Mức mong muốn" value={negotiation.expectedSalary} onChange={e => setNegotiation({ ...negotiation, expectedSalary: e.target.value })} className="rounded-lg border border-violet-200 p-2.5" />
-              <input type="number" min="1" placeholder="Mức thống nhất sơ bộ" value={negotiation.preliminarySalary} onChange={e => setNegotiation({ ...negotiation, preliminarySalary: e.target.value })} className="rounded-lg border border-violet-200 p-2.5" />
-              <input placeholder="Phụ cấp" value={negotiation.allowances} onChange={e => setNegotiation({ ...negotiation, allowances: e.target.value })} className="rounded-lg border border-violet-200 p-2.5" />
-              <input placeholder="Kỳ vọng khác" value={negotiation.expectations} onChange={e => setNegotiation({ ...negotiation, expectations: e.target.value })} className="rounded-lg border border-violet-200 p-2.5 md:col-span-2" />
-              <textarea placeholder="Ghi chú đàm phán bắt buộc" value={negotiation.notes} onChange={e => setNegotiation({ ...negotiation, notes: e.target.value })} className="rounded-lg border border-violet-200 p-2.5 md:col-span-2" />
-              <button disabled={busy || !negotiation.expectedSalary || !negotiation.preliminarySalary || !negotiation.notes.trim()} onClick={saveNegotiation} className="rounded-lg bg-violet-600 px-4 py-2 font-semibold text-white disabled:opacity-50 md:col-span-2">Lưu đàm phán sơ bộ</button>
+            <div className="space-y-3 rounded-xl border border-violet-200 bg-violet-50/80 p-4">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div>
+                  <p className="text-sm font-bold text-violet-950">Đàm phán lương sơ bộ (Vòng 2)</p>
+                  <p className="text-xs text-violet-700">Chỉ HR phụ trách chiến dịch ghi nhận — các trường tiền tệ tự động định dạng theo VNĐ.</p>
+                </div>
+                {current.negotiation && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                    <CheckCircle2 size={13} /> Đã lưu kết quả đàm phán
+                  </span>
+                )}
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-violet-900">Lương hiện tại (tự nguyện)</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="VD: 15.000.000"
+                      value={negotiation.currentSalary}
+                      onChange={e => setNegotiation({ ...negotiation, currentSalary: formatVndInput(e.target.value) })}
+                      className="w-full rounded-lg border border-violet-200 bg-white py-2.5 pl-3 pr-14 text-sm font-medium text-slate-800 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200 tabular-nums"
+                    />
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">VNĐ</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-violet-900">Mức mong muốn *</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="VD: 20.000.000"
+                      value={negotiation.expectedSalary}
+                      onChange={e => setNegotiation({ ...negotiation, expectedSalary: formatVndInput(e.target.value) })}
+                      className="w-full rounded-lg border border-violet-200 bg-white py-2.5 pl-3 pr-14 text-sm font-medium text-slate-800 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200 tabular-nums"
+                    />
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">VNĐ</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-violet-900">Mức thống nhất sơ bộ *</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="VD: 18.000.000"
+                      value={negotiation.preliminarySalary}
+                      onChange={e => setNegotiation({ ...negotiation, preliminarySalary: formatVndInput(e.target.value) })}
+                      className="w-full rounded-lg border border-violet-200 bg-white py-2.5 pl-3 pr-14 text-sm font-medium text-slate-800 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200 tabular-nums"
+                    />
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">VNĐ</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-violet-900">Phụ cấp dự kiến (nếu có)</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="VD: 1.500.000"
+                      value={negotiation.allowances}
+                      onChange={e => setNegotiation({ ...negotiation, allowances: formatVndInput(e.target.value) })}
+                      className="w-full rounded-lg border border-violet-200 bg-white py-2.5 pl-3 pr-14 text-sm font-medium text-slate-800 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200 tabular-nums"
+                    />
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">VNĐ</span>
+                  </div>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-xs font-semibold text-violet-900">Kỳ vọng khác</label>
+                  <input
+                    placeholder="VD: Thời gian nhận việc, chế độ review lương, thiết bị làm việc..."
+                    value={negotiation.expectations}
+                    onChange={e => setNegotiation({ ...negotiation, expectations: e.target.value })}
+                    className="w-full rounded-lg border border-violet-200 bg-white p-2.5 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-xs font-semibold text-violet-900">Ghi chú đàm phán bắt buộc *</label>
+                  <textarea
+                    placeholder="Ghi nhận tóm tắt kết quả trao đổi lương, phúc lợi và điều kiện nhận việc..."
+                    value={negotiation.notes}
+                    onChange={e => setNegotiation({ ...negotiation, notes: e.target.value })}
+                    className="w-full min-h-20 rounded-lg border border-violet-200 bg-white p-2.5 text-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200"
+                  />
+                </div>
+
+                <button
+                  disabled={busy || !parseVndNumber(negotiation.expectedSalary) || !parseVndNumber(negotiation.preliminarySalary) || !negotiation.notes.trim()}
+                  onClick={saveNegotiation}
+                  className="md:col-span-2 rounded-lg bg-violet-600 hover:bg-violet-700 px-4 py-2.5 font-semibold text-white transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  {current.negotiation ? 'Cập nhật đàm phán sơ bộ' : 'Lưu đàm phán sơ bộ'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {round === 2 && current.status !== 'SCHEDULED' && current.negotiation && access.canSchedule && (
+            <div className="rounded-xl border border-violet-200 bg-violet-50/70 p-4 text-xs text-violet-950 space-y-1.5">
+              <p className="text-sm font-bold text-violet-900">Kết quả đàm phán lương sơ bộ đã lưu</p>
+              <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-4 pt-1 tabular-nums">
+                <div><span className="text-violet-700">Lương hiện tại:</span> <strong>{formatVndDisplay(current.negotiation.currentSalary)}</strong></div>
+                <div><span className="text-violet-700">Mức mong muốn:</span> <strong>{formatVndDisplay(current.negotiation.expectedSalary)}</strong></div>
+                <div><span className="text-violet-700">Thống nhất sơ bộ:</span> <strong className="text-emerald-700">{formatVndDisplay(current.negotiation.preliminarySalary)}</strong></div>
+                <div><span className="text-violet-700">Phụ cấp:</span> <strong>{formatVndDisplay(current.negotiation.allowances?.amount ?? current.negotiation.allowances?.description)}</strong></div>
+              </div>
+              {current.negotiation.notes && <p className="text-violet-800 pt-1">Ghi chú: {current.negotiation.notes}</p>}
             </div>
           )}
 
           {current.status === 'SCHEDULED' && current.leadUserId === user?.userId && myFeedback?.invitationStatus === 'ACCEPTED' && (
             <div className="flex flex-col gap-3 rounded-xl bg-slate-50 p-4">
+              {isBeforeScheduledStart && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-xs text-amber-900">
+                  <AlertTriangle size={15} className="text-amber-600 shrink-0 mt-0.5" />
+                  <span>
+                    <strong>Cảnh báo hoàn tất sớm:</strong> Lịch phỏng vấn dự kiến lúc <strong>{scheduledStartLabel}</strong>. Chỉ bấm hoàn tất trước giờ hẹn nếu buổi phỏng vấn đã thực sự diễn ra sớm hơn lịch; hệ thống sẽ gắn dấu vết kiểm toán.
+                  </span>
+                </div>
+              )}
               <textarea value={conclusion} onChange={e => setConclusion(e.target.value)} className="min-h-24 rounded-lg border border-slate-200 p-3" placeholder="Kết luận tổng hợp của người chủ trì" />
               <div className="flex gap-2">
                 <button disabled={busy || !allRequiredDone || !conclusion.trim()} onClick={completeInterview} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 font-semibold text-white disabled:opacity-50"><CheckCircle2 size={17} /> Hoàn tất buổi phỏng vấn</button>
-                {access.canSchedule && <button disabled={busy} onClick={() => run(() => api.post(`/api/recruitment/interviews/${current.id}/no-show`), 'Đã ghi nhận vắng mặt.')} className="rounded-lg border border-rose-200 px-4 py-2 font-semibold text-rose-600">Vắng mặt</button>}
+                {access.canSchedule && (
+                  <button
+                    disabled={busy || isBeforeScheduledStart}
+                    title={isBeforeScheduledStart ? `Chưa đến giờ phỏng vấn (${scheduledStartLabel}) — không thể đánh dấu vắng mặt trước giờ hẹn` : undefined}
+                    onClick={() => run(() => api.post(`/api/recruitment/interviews/${current.id}/no-show`), 'Đã ghi nhận vắng mặt.')}
+                    className="rounded-lg border border-rose-200 px-4 py-2 font-semibold text-rose-600 disabled:opacity-45 disabled:cursor-not-allowed"
+                  >
+                    Vắng mặt
+                  </button>
+                )}
               </div>
               {!allRequiredDone && <p className="text-xs text-amber-700">Chưa thể hoàn tất vì còn thiếu feedback bắt buộc.</p>}
             </div>

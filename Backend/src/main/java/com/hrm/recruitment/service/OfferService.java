@@ -483,15 +483,19 @@ public class OfferService {
         if (command == null || command.baseSalary() == null || command.baseSalary().signum() <= 0) {
             throw AppException.badRequest("Lương cơ bản phải lớn hơn 0");
         }
-        if (command.probationMonths() == null || command.probationMonths() < 0) {
-            throw AppException.badRequest("Số tháng thử việc không hợp lệ");
+        if (command.probationMonths() == null || command.probationMonths() < 0 || command.probationMonths() > 6) {
+            throw AppException.badRequest("Số tháng thử việc phải từ 0 đến 6 tháng");
         }
         if (command.probationSalaryRate() == null || command.probationSalaryRate().signum() <= 0
                 || command.probationSalaryRate().compareTo(new BigDecimal("100")) > 0) {
             throw AppException.badRequest("Tỷ lệ lương thử việc phải lớn hơn 0 và không vượt 100");
         }
-        if (command.expectedStartDate() == null || command.expectedStartDate().isBefore(LocalDate.now())) {
+        LocalDate todayVn = LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
+        if (command.expectedStartDate() == null || command.expectedStartDate().isBefore(todayVn)) {
             throw AppException.badRequest("Ngày bắt đầu dự kiến không được nằm trong quá khứ");
+        }
+        if (command.expectedStartDate().isAfter(todayVn.plusYears(1))) {
+            throw AppException.badRequest("Ngày bắt đầu dự kiến không được vượt quá 1 năm kể từ hôm nay");
         }
         if (trim(command.contractTerms()) == null) {
             throw AppException.badRequest("Điều khoản hợp đồng là bắt buộc");

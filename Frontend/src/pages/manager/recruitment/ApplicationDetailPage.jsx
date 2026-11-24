@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, X, Sparkles, Loader2, FileText, XCircle } from 'lucide-react';
+import { ArrowLeft, Check, X, Sparkles, Loader2, FileText, XCircle, AlertCircle, Lock } from 'lucide-react';
 import { useNotification } from '../../../context/NotificationContext';
 import { useAuth } from '../../../context/AuthContext';
 import api, { apiAi } from '../../../services/api';
+import useRealtimeSync from '../../../hooks/useRealtimeSync';
 
 import ApplicationAttachmentsBlock from './components/ApplicationAttachmentsBlock';
 import ApplicationPersonalInfoForm from './components/ApplicationPersonalInfoForm';
@@ -64,6 +65,20 @@ export default function ApplicationDetailPage() {
   const [offerActivity, setOfferActivity] = useState([]);
   const [offerModalLoading, setOfferModalLoading] = useState(false);
   const [approveActionLoading, setApproveActionLoading] = useState(false);
+  const [interviewGate, setInterviewGate] = useState({ ready: true, loading: false, blockers: [] });
+  const handleInterviewStateChange = useCallback((nextState) => {
+    setInterviewGate((prev) => {
+      if (
+        prev.ready === nextState.ready &&
+        prev.loading === nextState.loading &&
+        prev.blockers.length === nextState.blockers.length &&
+        prev.blockers.every((item, idx) => item === nextState.blockers[idx])
+      ) {
+        return prev;
+      }
+      return nextState;
+    });
+  }, []);
   const latestAi = aiAnalyses[0];
   const aiComputedResult = latestAi?.computedResult || {};
   const aiCriteria = Array.isArray(aiComputedResult.criteria) ? aiComputedResult.criteria : [];
@@ -108,34 +123,48 @@ export default function ApplicationDetailPage() {
     }
   };
 
-  const reloadApplication = async () => {
+  const reloadApplication = useCallback(async () => {
     const response = await api.get(`/api/recruitment/applications/${id}`);
     if (response.data.success) setApplication(response.data.data);
-  };
+  }, [id]);
+
+  const fetchAllDetail = useCallback(async ({ silent = false } = {}) => {
+    try {
+      const [appRes, logsRes, analysesRes] = await Promise.all([
+        api.get(`/api/recruitment/applications/${id}`),
+        api.get(`/api/recruitment/applications/${id}/ai-logs`),
+        api.get(`/api/recruitment/applications/${id}/ai-analyses`),
+      ]);
+      if (appRes.data.success) {
+        setApplication(appRes.data.data);
+        try {
+          if (appRes.data.data.extractedData) {
+            setExtractedData(JSON.parse(appRes.data.data.extractedData));
+          }
+        } catch (e) { console.error('Parse JSON lỗi', e); }
+      }
+      if (logsRes.data.success) {
+        setAiLogs(logsRes.data.data);
+      }
+      if (analysesRes.data.success) setAiAnalyses(analysesRes.data.data || []);
+    } catch {
+      // ignore background silent error
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }, [id]);
 
   useEffect(() => {
-    const fetchApp = api.get(`/api/recruitment/applications/${id}`);
-    const fetchLogs = api.get(`/api/recruitment/applications/${id}/ai-logs`);
-    const fetchAnalyses = api.get(`/api/recruitment/applications/${id}/ai-analyses`);
-    
-    Promise.all([fetchApp, fetchLogs, fetchAnalyses])
-      .then(([appRes, logsRes, analysesRes]) => {
-        if (appRes.data.success) {
-          setApplication(appRes.data.data);
-          try {
-            if (appRes.data.data.extractedData) {
-              setExtractedData(JSON.parse(appRes.data.data.extractedData));
-            }
-          } catch (e) { console.error("Parse JSON lỗi", e); }
-        }
-        if (logsRes.data.success) {
-          setAiLogs(logsRes.data.data);
-        }
-        if (analysesRes.data.success) setAiAnalyses(analysesRes.data.data || []);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, [id]);
+    fetchAllDetail({ silent: false });
+  }, [fetchAllDetail]);
+
+  useRealtimeSync(
+    () => fetchAllDetail({ silent: true }),
+    {
+      events: ['hrm:recruitment-sync', 'hrm:notification'],
+      paused: approveModal.isOpen || rejectModal.isOpen || submitModal.isOpen || approveActionLoading,
+    }
+  );
 
   useEffect(() => {
     const canView = role === 'admin' || role === 'ceo'
@@ -219,6 +248,11 @@ export default function ApplicationDetailPage() {
       if (state === 'OFFER_INTERNALLY_APPROVED' || state === 'OFFER_EXPIRED') {
         if (!approveModal.fields.responseDeadline) {
           showNotification('Thiếu thông tin', 'Vui lòng chọn hạn phản hồi offer', 'error');
+          return;
+        }
+        const deadlineDate = new Date(approveModal.fields.responseDeadline);
+        if (Number.isNaN(deadlineDate.getTime()) || deadlineDate.getTime() <= Date.now()) {
+          showNotification('Thời gian không hợp lệ', 'Hạn phản hồi offer phải ở tương lai', 'error');
           return;
         }
         const offers = await api.get(`/api/recruitment/applications/${id}/offers`);
@@ -461,14 +495,28 @@ export default function ApplicationDetailPage() {
             )}
           </div>
           <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
-            {canApprove() && (
-                <button 
+            {canApprove() && (() => {
+              const isInterviewStep = ['PENDING_INTERVIEW_1', 'PENDING_INTERVIEW_2'].includes(application?.approvalStatus);
+              const isBlocked = isInterviewStep && (interviewGate.loading || !interviewGate.ready);
+              const blockTooltip = interviewGate.loading
+                ? 'Đang kiểm tra trạng thái hội đồng phỏng vấn...'
+                : interviewGate.blockers.join(' ');
+              return (
+                <button
+                  type="button"
+                  disabled={isBlocked}
+                  title={isBlocked ? blockTooltip : undefined}
                   onClick={openApproveModal}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-medium transition-colors text-sm border bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200"
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-lg font-medium transition-colors text-sm border ${
+                    isBlocked
+                      ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                      : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200 cursor-pointer'
+                  }`}
                 >
-                  <Check size={16} /> {approveActionLabel}
+                  {isBlocked ? <Lock size={15} /> : <Check size={16} />} {approveActionLabel}
                 </button>
-            )}
+              );
+            })()}
             {canReject() && (
                 <button 
                   onClick={() => setRejectModal({ isOpen: true, reason: '' })}
@@ -487,6 +535,24 @@ export default function ApplicationDetailPage() {
           </button>
         </div>
       </div>
+
+      {canApprove() && ['PENDING_INTERVIEW_1', 'PENDING_INTERVIEW_2'].includes(application?.approvalStatus) && !interviewGate.loading && interviewGate.blockers.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/90 px-5 py-3.5 text-amber-950 shadow-2xs">
+          <div className="flex items-start gap-3">
+            <AlertCircle size={18} className="text-amber-600 shrink-0 mt-0.5" />
+            <div className="space-y-1 text-sm">
+              <p className="font-bold text-amber-900">
+                Chưa thể bấm &ldquo;{approveActionLabel}&rdquo; — Cần hoàn tất các điều kiện phỏng vấn sau:
+              </p>
+              <ul className="list-disc pl-5 space-y-0.5 text-xs text-amber-900/90">
+                {interviewGate.blockers.map((reason, idx) => (
+                  <li key={idx}>{reason}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
 
       {offerLink && (
         <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
@@ -510,6 +576,8 @@ export default function ApplicationDetailPage() {
         applicationId={Number(id)}
         applicationStatus={application.approvalStatus}
         verifyPoints={latestAi?.computedResult?.verify_points || []}
+        jobTitle={application.jobPosting?.title || ''}
+        onInterviewStateChange={handleInterviewStateChange}
       />
 
       {/* Main Content Area */}
@@ -961,8 +1029,13 @@ export default function ApplicationDetailPage() {
                 <OfferReviewPanel offers={offerHistory} application={application} />
                 <p className="text-sm text-slate-600">Khi gửi, hệ thống sẽ giữ một suất tuyển và phát hành link phản hồi mới.</p>
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1">Hạn phản hồi</label>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Hạn phản hồi *</label>
                   <input type="datetime-local"
+                    min={(() => {
+                      const d = new Date();
+                      const pad = (n) => String(n).padStart(2, '0');
+                      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+                    })()}
                     className="w-full border border-slate-200 rounded-xl p-2.5 bg-slate-50 text-sm"
                     value={approveModal.fields.responseDeadline}
                     onChange={(e) => setApproveModal({...approveModal, fields: {...approveModal.fields, responseDeadline: e.target.value}})} />

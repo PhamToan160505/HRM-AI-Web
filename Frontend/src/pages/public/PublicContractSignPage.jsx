@@ -1,6 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { CheckCircle2, FileSignature, Loader2, LockKeyhole, MailCheck, PenLine, ShieldCheck, X } from 'lucide-react';
+import { CheckCircle2, Clock, FileSignature, Loader2, LockKeyhole, MailCheck, PenLine, ShieldCheck, X } from 'lucide-react';
 import { useParams } from 'react-router-dom';
+
+const formatCountdown = (totalSeconds) => {
+  const safe = Math.max(0, Math.floor(totalSeconds || 0));
+  const m = Math.floor(safe / 60);
+  const s = safe % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+};
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
@@ -25,7 +32,10 @@ export default function PublicContractSignPage() {
   const [error, setError] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState('');
+  const [otpSecondsLeft, setOtpSecondsLeft] = useState(0);
+  const [resendCooldown, setResendCooldown] = useState(0);
   const [proof, setProof] = useState('');
+  const [proofSecondsLeft, setProofSecondsLeft] = useState(0);
   const [method, setMethod] = useState('DRAWN');
   const [signerName, setSignerName] = useState('');
   const [typedSignature, setTypedSignature] = useState('');
@@ -40,20 +50,41 @@ export default function PublicContractSignPage() {
       .finally(() => setLoading(false));
   }, [token]);
 
+  useEffect(() => {
+    if (!otpSent && !proof) return;
+    const timer = window.setInterval(() => {
+      setOtpSecondsLeft(prev => (prev > 0 ? prev - 1 : 0));
+      setResendCooldown(prev => (prev > 0 ? prev - 1 : 0));
+      setProofSecondsLeft(prev => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [otpSent, proof]);
+
   const sendOtp = async () => {
     setBusy(true); setError('');
-    try { await request(`/public/contracts/sign/${encodeURIComponent(token)}/otp`, { method: 'POST' }); setOtpSent(true); }
+    try {
+      const data = await request(`/public/contracts/sign/${encodeURIComponent(token)}/otp`, { method: 'POST' });
+      setOtpSent(true);
+      setOtp('');
+      setOtpSecondsLeft(Number(data?.expiresInSeconds) > 0 ? Number(data.expiresInSeconds) : 600);
+      setResendCooldown(60);
+    }
     catch (e) { setError(e.message); }
     finally { setBusy(false); }
   };
 
   const verifyOtp = async () => {
+    if (otpSecondsLeft <= 0) {
+      setError('Mã OTP đã hết hạn; vui lòng yêu cầu mã mới.');
+      return;
+    }
     setBusy(true); setError('');
     try {
       const data = await request(`/public/contracts/sign/${encodeURIComponent(token)}/verify-otp`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ otp }),
       });
       setProof(data.verificationProof);
+      setProofSecondsLeft(Number(data?.expiresInSeconds) > 0 ? Number(data.expiresInSeconds) : 1800);
     } catch (e) { setError(e.message); }
     finally { setBusy(false); }
   };
@@ -124,7 +155,66 @@ export default function PublicContractSignPage() {
     <div className="mx-auto grid max-w-7xl gap-6 px-5 py-8 lg:grid-cols-[minmax(0,1fr)_390px]">
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="border-b p-5"><p className="text-xs font-bold uppercase tracking-wider text-blue-600">{contract.contractNumber}</p><h1 className="mt-1 text-2xl font-bold">Hợp đồng lao động</h1><p className="mt-1 text-sm text-slate-500">{contract.candidateName} · {contract.jobTitle}</p></div><iframe title="Hợp đồng" srcDoc={contract.generatedHtml} className="h-[760px] w-full" /></section>
       <aside className="space-y-4 lg:sticky lg:top-5 lg:self-start">
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h2 className="flex items-center gap-2 font-bold"><LockKeyhole className="text-blue-600" size={20} />Xác thực người ký</h2><p className="mt-2 text-sm text-slate-600">OTP sẽ được gửi tới {contract.candidateEmailMasked}. Link hết hạn {formatTime(contract.expiresAt)}.</p>{!proof && <>{!otpSent ? <button disabled={busy} onClick={sendOtp} className="mt-4 w-full rounded-xl bg-blue-600 px-4 py-3 font-bold text-white disabled:opacity-50">{busy ? 'Đang gửi...' : 'Gửi mã OTP'}</button> : <div className="mt-4 space-y-3"><input value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="Nhập 6 số OTP" className="w-full rounded-xl border p-3 text-center text-xl font-bold tracking-[0.3em]" /><button disabled={busy || otp.length !== 6} onClick={verifyOtp} className="w-full rounded-xl bg-blue-600 px-4 py-3 font-bold text-white disabled:opacity-50">Xác thực OTP</button><button onClick={sendOtp} className="w-full text-sm font-semibold text-blue-600">Gửi lại OTP</button></div>}</>}{proof && <div className="mt-4 flex items-center gap-2 rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-700"><MailCheck size={18} />Email đã được xác thực</div>}</section>
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="flex items-center gap-2 font-bold"><LockKeyhole className="text-blue-600" size={20} />Xác thực người ký</h2>
+          <p className="mt-2 text-sm text-slate-600">OTP sẽ được gửi tới {contract.candidateEmailMasked}. Link hết hạn {formatTime(contract.expiresAt)}.</p>
+          {!proof && (
+            <>
+              {!otpSent ? (
+                <div className="mt-4 space-y-2.5">
+                  <p className="flex items-center gap-1.5 text-xs text-slate-500">
+                    <Clock size={14} className="text-blue-600 shrink-0" />
+                    <span>Mỗi mã OTP có hiệu lực trong <strong>10 phút</strong> kể từ lúc gửi.</span>
+                  </p>
+                  <button disabled={busy} onClick={sendOtp} className="w-full rounded-xl bg-blue-600 px-4 py-3 font-bold text-white hover:bg-blue-700 transition disabled:opacity-50 cursor-pointer">
+                    {busy ? 'Đang gửi...' : 'Gửi mã OTP'}
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-4 space-y-3">
+                  <div className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-xs font-semibold tabular-nums ${
+                    otpSecondsLeft === 0
+                      ? 'border-rose-200 bg-rose-50 text-rose-700'
+                      : otpSecondsLeft <= 60
+                      ? 'border-amber-200 bg-amber-50 text-amber-800'
+                      : 'border-blue-200 bg-blue-50 text-blue-800'
+                  }`}>
+                    <span className="inline-flex items-center gap-1.5">
+                      <Clock size={14} className="shrink-0" />
+                      {otpSecondsLeft === 0 ? 'Mã OTP đã hết hạn' : 'Mã OTP còn hiệu lực'}
+                    </span>
+                    <span className="font-bold">{formatCountdown(otpSecondsLeft)}</span>
+                  </div>
+                  <input value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="Nhập 6 số OTP" className="w-full rounded-xl border p-3 text-center text-xl font-bold tracking-[0.3em] tabular-nums" />
+                  <button disabled={busy || otp.length !== 6 || otpSecondsLeft === 0} onClick={verifyOtp} className="w-full rounded-xl bg-blue-600 px-4 py-3 font-bold text-white hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer">
+                    {otpSecondsLeft === 0 ? 'OTP đã hết hạn — Hãy gửi lại' : 'Xác thực OTP'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy || resendCooldown > 0}
+                    onClick={sendOtp}
+                    className="w-full text-sm font-semibold text-blue-600 hover:underline disabled:text-slate-400 disabled:no-underline disabled:cursor-not-allowed cursor-pointer tabular-nums"
+                  >
+                    {resendCooldown > 0 ? `Gửi lại OTP sau ${resendCooldown}s` : 'Gửi lại OTP'}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+          {proof && (
+            <div className="mt-4 space-y-1.5 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700">
+              <div className="flex items-center gap-2 font-semibold">
+                <MailCheck size={18} />Email đã được xác thực
+              </div>
+              <p className="flex items-center gap-1.5 text-xs text-emerald-800 tabular-nums">
+                <Clock size={13} />
+                {proofSecondsLeft > 0
+                  ? `Phiên ký hợp lệ trong ${formatCountdown(proofSecondsLeft)}`
+                  : 'Phiên xác thực đã hết hạn — vui lòng tải lại trang để xác thực lại.'}
+              </p>
+            </div>
+          )}
+        </section>
         {proof && <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h2 className="flex items-center gap-2 font-bold"><PenLine className="text-blue-600" size={20} />Tạo chữ ký</h2><label className="mt-4 block text-sm font-semibold">Họ tên người ký<input value={signerName} onChange={e => setSignerName(e.target.value)} className="mt-1.5 w-full rounded-xl border p-3" /></label><div className="mt-4 grid grid-cols-3 gap-2">{[['DRAWN','Vẽ'],['TYPED','Gõ tên'],['UPLOADED','Tải ảnh']].map(([value,label]) => <button key={value} onClick={() => setMethod(value)} className={`rounded-lg border px-2 py-2 text-xs font-bold ${method === value ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-200'}`}>{label}</button>)}</div>{method === 'DRAWN' && <div className="mt-3"><canvas ref={canvasRef} width="640" height="220" onPointerDown={startDraw} onPointerMove={draw} onPointerUp={stopDraw} onPointerCancel={stopDraw} className="h-32 w-full touch-none rounded-xl border border-dashed border-blue-300 bg-blue-50/30" /><button onClick={clearCanvas} className="mt-1 text-xs font-semibold text-slate-500">Xóa và vẽ lại</button></div>}{method === 'TYPED' && <input value={typedSignature} onChange={e => setTypedSignature(e.target.value)} className="mt-3 w-full rounded-xl border p-4 text-center text-2xl italic" />}{method === 'UPLOADED' && <div className="mt-3"><input type="file" accept="image/png,image/jpeg" onChange={uploadSignature} className="w-full text-sm" />{uploadedSignature && <img src={uploadedSignature} alt="Chữ ký" className="mt-2 h-24 max-w-full object-contain" />}</div>}<label className="mt-4 flex items-start gap-3 rounded-xl bg-slate-50 p-3 text-sm"><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} className="mt-1" /><span>{contract.consentText}</span></label><button disabled={busy || !consent || !signerName.trim()} onClick={complete} className="mt-4 w-full rounded-xl bg-emerald-600 px-4 py-3 font-bold text-white disabled:opacity-50">Ký và hoàn tất hợp đồng</button><details className="mt-4"><summary className="cursor-pointer text-sm font-semibold text-rose-600">Tôi không đồng ý ký</summary><textarea value={declineReason} onChange={e => setDeclineReason(e.target.value)} placeholder="Lý do từ chối" className="mt-2 min-h-20 w-full rounded-xl border p-3 text-sm" /><button disabled={busy || !declineReason.trim()} onClick={decline} className="mt-2 w-full rounded-xl border border-rose-200 px-4 py-2 text-sm font-bold text-rose-700">Xác nhận từ chối ký</button></details></section>}
         {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</div>}
       </aside>

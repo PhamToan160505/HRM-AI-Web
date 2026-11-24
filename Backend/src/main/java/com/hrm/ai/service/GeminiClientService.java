@@ -3,11 +3,14 @@ package com.hrm.ai.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.netty.resolver.DefaultAddressResolverGroup;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
+import reactor.netty.http.client.HttpClient;
 import reactor.util.retry.Retry;
 
 import java.time.Duration;
@@ -28,7 +31,12 @@ public class GeminiClientService {
                                @Value("${app.gemini.base-url}") String baseUrl,
                                @Value("${app.gemini.api-key}") String apiKey) {
         this.apiKey = apiKey;
+        // Dùng OS/JVM DNS resolver (DefaultAddressResolverGroup) thay vì Netty async DNS
+        // để khắc phục triệt để lỗi "Failed to resolve 'generativelanguage.googleapis.com' [A(1), AAAA(28)]" trên Windows.
+        HttpClient httpClient = HttpClient.create()
+                .resolver(DefaultAddressResolverGroup.INSTANCE);
         this.webClient = webClientBuilder
+                .clientConnector(new ReactorClientHttpConnector(httpClient))
                 .baseUrl(baseUrl)
                 .defaultHeader("Content-Type", "application/json")
                 .build();
@@ -47,15 +55,20 @@ public class GeminiClientService {
     public Mono<String> callGemini(String prompt, int timeoutSeconds, int maxRetry) {
         String url = "/models/" + model + ":generateContent?key=" + apiKey;
 
-        String requestBody = """
-            {
-              "contents": [{
-                "parts": [{"text": "%s"}]
-              }]
-            }
-            """.formatted(escapeJson(prompt));
+        String requestBody;
+        try {
+            ObjectNode rootNode = objectMapper.createObjectNode();
+            rootNode.putArray("contents")
+                    .addObject()
+                    .putArray("parts")
+                    .addObject()
+                    .put("text", prompt == null ? "" : prompt);
+            requestBody = objectMapper.writeValueAsString(rootNode);
+        } catch (Exception e) {
+            return Mono.error(new RuntimeException("Lỗi serialize JSON cho Gemini: " + e.getMessage()));
+        }
 
-        log.debug("[Gemini] Calling model={}, promptLen={}", model, prompt.length());
+        log.debug("[Gemini] Calling model={}, promptLen={}", model, prompt != null ? prompt.length() : 0);
 
         return webClient.post()
                 .uri(url)

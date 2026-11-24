@@ -7,6 +7,7 @@ import com.hrm.exception.AppException;
 import com.hrm.recruitment.controller.RecruitmentController.CriteriaSuggestionRequest;
 import com.hrm.recruitment.controller.RecruitmentController.ScreeningCriterionRequest;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.text.Normalizer;
@@ -15,6 +16,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AiCriteriaSuggestionService {
@@ -63,38 +65,48 @@ public class AiCriteriaSuggestionService {
                 request.title(), value(request.level()), value(request.workMode()),
                 value(request.description()), value(request.requirements()));
 
-        String response = geminiClientService.callGemini(
-                prompt,
-                configurationService.requireInteger("ai.timeout_seconds"),
-                configurationService.requireInteger("ai.max_retry")).block();
-        String modelText = geminiClientService.extractTextFromGeminiResponse(response);
-        JsonNode root = parseJson(modelText);
-        JsonNode criteriaNode = root.isArray() ? root : root.path("criteria");
-        if (!criteriaNode.isArray() || criteriaNode.size() < 3 || criteriaNode.size() > 8) {
-            throw AppException.badRequest("AI phải đề xuất từ 3 đến 8 tiêu chí hợp lệ");
-        }
-
-        List<DraftCriterion> drafts = new ArrayList<>();
-        for (JsonNode item : criteriaNode) {
-            String name = item.path("name").asText("").trim();
-            String type = item.path("type").asText("").trim().toUpperCase(Locale.ROOT);
-            int weight = item.path("weight").asInt(0);
-            String evidenceExpected = item.path("evidenceExpected").asText("").trim();
-            if (name.isBlank() || evidenceExpected.isBlank() || weight <= 0
-                    || (!"MUST".equals(type) && !"NICE".equals(type))) {
-                throw AppException.badRequest("AI trả về tiêu chí chưa đầy đủ hoặc không hợp lệ");
+        try {
+            String response = geminiClientService.callGemini(
+                    prompt,
+                    configurationService.requireInteger("ai.timeout_seconds"),
+                    configurationService.requireInteger("ai.max_retry")).block();
+            String modelText = geminiClientService.extractTextFromGeminiResponse(response);
+            JsonNode root = parseJson(modelText);
+            JsonNode criteriaNode = root.isArray() ? root : root.path("criteria");
+            if (!criteriaNode.isArray() || criteriaNode.size() < 3 || criteriaNode.size() > 8) {
+                throw AppException.badRequest("AI phải đề xuất từ 3 đến 8 tiêu chí hợp lệ");
             }
-            rejectSensitiveCriterion(name + " " + evidenceExpected);
-            List<String> synonyms = new ArrayList<>();
-            if (item.path("synonyms").isArray()) {
-                item.path("synonyms").forEach(value -> {
-                    String synonym = value.asText("").trim();
-                    if (!synonym.isBlank() && synonyms.size() < 10) synonyms.add(synonym);
-                });
-            }
-            drafts.add(new DraftCriterion(name, type, weight, synonyms, evidenceExpected));
-        }
 
+            List<DraftCriterion> drafts = new ArrayList<>();
+            for (JsonNode item : criteriaNode) {
+                String name = item.path("name").asText("").trim();
+                String type = item.path("type").asText("").trim().toUpperCase(Locale.ROOT);
+                int weight = item.path("weight").asInt(0);
+                String evidenceExpected = item.path("evidenceExpected").asText("").trim();
+                if (name.isBlank() || evidenceExpected.isBlank() || weight <= 0
+                        || (!"MUST".equals(type) && !"NICE".equals(type))) {
+                    throw AppException.badRequest("AI trả về tiêu chí chưa đầy đủ hoặc không hợp lệ");
+                }
+                rejectSensitiveCriterion(name + " " + evidenceExpected);
+                List<String> synonyms = new ArrayList<>();
+                if (item.path("synonyms").isArray()) {
+                    item.path("synonyms").forEach(value -> {
+                        String synonym = value.asText("").trim();
+                        if (!synonym.isBlank() && synonyms.size() < 10) synonyms.add(synonym);
+                    });
+                }
+                drafts.add(new DraftCriterion(name, type, weight, synonyms, evidenceExpected));
+            }
+
+            return normalizeWeights(drafts);
+        } catch (Exception ex) {
+            log.warn("[AI Criteria] Gemini tạm gián đoạn hoặc trả về dữ liệu chưa chuẩn ({}), dùng bộ quy tắc dự phòng từ JD/Yêu cầu.",
+                    ex.getMessage());
+            return buildRuleBasedFallback(request);
+        }
+    }
+
+    private List<ScreeningCriterionRequest> normalizeWeights(List<DraftCriterion> drafts) {
         int rawTotal = drafts.stream().mapToInt(DraftCriterion::weight).sum();
         List<ScreeningCriterionRequest> normalized = new ArrayList<>();
         int allocated = 0;
@@ -114,6 +126,66 @@ public class AiCriteriaSuggestionService {
                     draft.synonyms(), draft.evidenceExpected()));
         }
         return normalized;
+    }
+
+    private List<ScreeningCriterionRequest> buildRuleBasedFallback(CriteriaSuggestionRequest request) {
+        List<DraftCriterion> drafts = new ArrayList<>();
+        String title = value(request.title()).trim();
+        String level = value(request.level()).trim();
+        String requirements = value(request.requirements());
+
+        // Bóc tách kỹ năng gạch đầu dòng từ phần Yêu cầu (VD: "- Flutter (Tối thiểu: MIDDLE)")
+        List<String> extractedBullets = new ArrayList<>();
+        for (String line : requirements.split("\\r?\\n")) {
+            String clean = line.replaceFirst("^\\s*[-•*+]\\s*", "").trim();
+            if (clean.length() >= 3 && clean.length() <= 100
+                    && !clean.toLowerCase(Locale.ROOT).startsWith("kỹ năng kỹ thuật bắt buộc")) {
+                extractedBullets.add(clean);
+            }
+        }
+
+        if (!extractedBullets.isEmpty()) {
+            String primarySkill = extractedBullets.get(0);
+            drafts.add(new DraftCriterion(
+                    "Năng lực chuyên môn chính: " + primarySkill,
+                    "MUST",
+                    40,
+                    List.of(title, primarySkill),
+                    "Thể hiện rõ kinh nghiệm thực tế, dự án đã triển khai và thời gian làm việc với " + primarySkill + " trong CV."));
+            if (extractedBullets.size() >= 2) {
+                String secondSkill = extractedBullets.get(1);
+                drafts.add(new DraftCriterion(
+                        "Kỹ năng kỹ thuật bổ trợ: " + secondSkill,
+                        "MUST",
+                        25,
+                        List.of(secondSkill),
+                        "Có dự án thực tế, công cụ hoặc sản phẩm cụ thể chứng minh khả năng áp dụng " + secondSkill + "."));
+            }
+        } else {
+            drafts.add(new DraftCriterion(
+                    "Kinh nghiệm chuyên môn vị trí " + title,
+                    "MUST",
+                    40,
+                    List.of(title),
+                    "Liệt kê rõ các dự án đã tham gia, vai trò đảm nhiệm và thời gian kinh nghiệm phù hợp với vị trí " + title + "."));
+        }
+
+        drafts.add(new DraftCriterion(
+                level.isBlank() ? "Mức độ kinh nghiệm & Dự án thực tế" : "Kinh nghiệm phù hợp cấp bậc " + level,
+                "MUST",
+                25,
+                level.isBlank() ? List.of("Kinh nghiệm dự án") : List.of(level, title + " " + level),
+                "Mô tả cụ thể quy mô hệ thống, trách nhiệm chính, kết quả định lượng và thời gian đảm nhiệm tương đương cấp bậc "
+                        + (level.isBlank() ? "yêu cầu" : level) + "."));
+
+        drafts.add(new DraftCriterion(
+                "Chất lượng sản phẩm, kiến trúc & phối hợp nhóm",
+                "NICE",
+                20,
+                List.of("Clean Architecture", "Code Review", "Git", "Agile", "Scrum"),
+                "Có bằng chứng về thiết kế kiến trúc, tối ưu hiệu năng, viết test, quy trình Git/CI-CD hoặc chứng chỉ chuyên môn liên quan."));
+
+        return normalizeWeights(drafts);
     }
 
     private JsonNode parseJson(String raw) {
