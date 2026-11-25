@@ -24,6 +24,7 @@ import { useAuth } from '../../context/AuthContext';
 import NotificationBell from '../common/NotificationBell';
 import api from '../../services/api';
 import ChatWidget from '../chat/ChatWidget';
+import { departmentKind, roleBase } from '../../pages/sales/salesUtils';
 
 const roleLabels = {
   ceo: 'Tổng Giám Đốc',
@@ -123,6 +124,14 @@ function SidebarContent({ role, tenPhong, onClose, hasUnreadChat }) {
           : role === 'truong_phong' ? managerNav
             : employeeNav;
 
+  const salesDepartment = departmentKind(tenPhong);
+  if (role === 'ceo' || (role !== 'admin' && salesDepartment !== 'OTHER')) {
+    navItems.splice(1, 0, {
+      to: `${roleBase(role)}/sales`, icon: Briefcase,
+      label: role === 'ceo' || salesDepartment === 'SALES' ? 'Kinh doanh' : 'Bàn giao Kinh doanh',
+    });
+  }
+
   return (
     <div className="flex flex-col h-full bg-gradient-to-b from-[#1E3A8A] to-[#102A67]">
       {/* Logo */}
@@ -177,6 +186,7 @@ export function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [hasUnreadChat, setHasUnreadChat] = useState(false);
 
@@ -214,9 +224,11 @@ export function AppLayout() {
   return (
     <div className="flex h-screen overflow-hidden bg-[#F4F7FC]">
       {/* Desktop sidebar */}
-      <aside className="hidden lg:flex flex-col w-64 shrink-0 shadow-2xl overflow-hidden relative z-20">
-        <SidebarContent role={role} tenPhong={tenPhong} hasUnreadChat={hasUnreadChat} />
-      </aside>
+      {desktopSidebarOpen && (
+        <aside id="desktop-app-sidebar" className="hidden lg:flex flex-col w-64 shrink-0 shadow-2xl overflow-hidden relative z-20">
+          <SidebarContent role={role} tenPhong={tenPhong} hasUnreadChat={hasUnreadChat} />
+        </aside>
+      )}
 
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
@@ -225,7 +237,7 @@ export function AppLayout() {
             className="fixed inset-0 bg-slate-900/40 z-40 lg:hidden backdrop-blur-sm animate-fade-in"
             onClick={() => setSidebarOpen(false)}
           />
-          <aside className="fixed left-0 top-0 bottom-0 w-64 shadow-2xl overflow-hidden z-50 flex flex-col lg:hidden animate-slide-in-right bg-gradient-to-b from-[#1E3A8A] to-[#102A67]">
+          <aside id="mobile-app-sidebar" className="fixed left-0 top-0 bottom-0 w-64 shadow-2xl overflow-hidden z-50 flex flex-col lg:hidden animate-slide-in-right bg-gradient-to-b from-[#1E3A8A] to-[#102A67]">
             <SidebarContent role={role} tenPhong={tenPhong} onClose={() => setSidebarOpen(false)} hasUnreadChat={hasUnreadChat} />
           </aside>
         </>
@@ -235,11 +247,25 @@ export function AppLayout() {
       <div className="flex flex-col flex-1 min-w-0">
         <header className="h-16 bg-white/80 backdrop-blur-xl border-b border-slate-200/60 shadow-[0_2px_10px_rgba(0,0,0,0.02)] flex items-center px-6 gap-4 shrink-0 z-10">
           <button
-            onClick={() => setSidebarOpen(true)}
+            type="button"
+            onClick={() => setSidebarOpen((open) => !open)}
             className="lg:hidden text-slate-500 hover:text-slate-800 p-2 rounded-full hover:bg-slate-100 transition-smooth"
-            aria-label="Mở menu"
+            aria-label={sidebarOpen ? 'Thu gọn menu' : 'Mở menu'}
+            aria-expanded={sidebarOpen}
+            aria-controls="mobile-app-sidebar"
           >
             <Menu size={18} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setDesktopSidebarOpen((open) => !open)}
+            className="hidden lg:inline-flex items-center justify-center rounded-lg border border-slate-200 p-2 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-blue-600"
+            aria-label={desktopSidebarOpen ? 'Thu gọn menu' : 'Mở menu'}
+            title={desktopSidebarOpen ? 'Thu gọn menu' : 'Mở menu'}
+            aria-expanded={desktopSidebarOpen}
+            aria-controls="desktop-app-sidebar"
+          >
+            <Menu size={20} />
           </button>
 
           <div className="flex-1" />
