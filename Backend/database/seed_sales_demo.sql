@@ -1,5 +1,5 @@
 -- DU LIEU GIA LAP DE KIEM THU MODULE KINH DOANH.
--- Chon database local/test da chay migration V22 truoc khi thuc thi.
+-- Chon database local/test da chay migration V33 truoc khi thuc thi.
 -- Tai khoan moi co mat khau SalesDemo@123 (BCrypt). Khong sua tai khoan cu.
 -- Chay lai giu nguyen tien trinh demo da thao tac. Moc ngay tinh theo luc nap.
 SET NAMES utf8mb4;
@@ -32,7 +32,7 @@ BEGIN
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.tables
                    WHERE table_schema=DATABASE() AND table_name='sales_contract_history') THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Can chay backend/Flyway V22 truoc khi nap demo.';
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Can chay backend/Flyway V33 truoc khi nap demo.';
     END IF;
     SELECT GET_LOCK(CONCAT(DATABASE(), ':sales_demo_v1'), 10) INTO lock_claimed;
     IF lock_claimed <> 1 THEN

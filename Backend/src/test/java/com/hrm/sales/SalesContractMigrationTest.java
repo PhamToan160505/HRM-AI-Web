@@ -19,7 +19,7 @@ class SalesContractMigrationTest {
         }
         try {
             var source=new DriverManagerDataSource(server+schema,"root","");
-            Flyway.configure().dataSource(source).target("21").locations("classpath:db/migration").load().migrate();
+            Flyway.configure().dataSource(source).target("32").locations("classpath:db/migration").load().migrate();
             var jdbc=new JdbcTemplate(source);
             Long department=jdbc.queryForObject("SELECT id FROM departments WHERE ten_phong='Kinh doanh' LIMIT 1",Long.class);
             jdbc.update("INSERT INTO users(id,ho_ten,email,password_hash,role,department_id,active,created_at,so_nguoi_phu_thuoc) VALUES (900001,'Nhân viên','legacy@example.test','test-only','NHAN_VIEN',?,b'1',NOW(6),0)",department);
