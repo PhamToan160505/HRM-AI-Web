@@ -52,6 +52,7 @@ import CeoTechProjectsPage from './pages/tech/ceo/CeoTechProjectsPage';
 import MyTechProjectsPage from './pages/tech/MyTechProjectsPage';
 import TechProjectDetailPage from './pages/tech/TechProjectDetailPage';
 import FinanceTechHubPage from './pages/finance/FinanceTechHubPage';
+import SalesRoute, { SalesRedirect } from './pages/sales/SalesRoute';
 
 /**
  * App Router — cấu trúc route theo SKILL_react-frontend-patterns.md mục 1.
@@ -76,6 +77,7 @@ export default function App() {
 
           {/* ── Public routes ─────────────────────────────── */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/sales" element={<RequireRole roles={['ceo', 'giam_doc_phong_ban', 'truong_phong', 'nhan_vien']}><SalesRedirect /></RequireRole>} />
 
           {/* Placeholder cho trang public apply (Bước 4) */}
           {/* Placeholder cho trang public apply (Bước 4) */}
@@ -112,6 +114,7 @@ export default function App() {
           >
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<CeoDashboardPage />} />
+            <Route path="sales" element={<SalesRoute />} />
             <Route path="employees" element={<EmployeeListPage />} />
             <Route path="lifecycle" element={<EmployeeLifecyclePage />} />
             <Route path="recruitment" element={<RecruitmentLayout />}>
@@ -157,6 +160,7 @@ export default function App() {
           >
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<DirectorDashboardPage />} />
+            <Route path="sales" element={<SalesRoute />} />
             <Route path="tech-projects" element={<TechProjectListPage />} />
             <Route path="tech-projects/:id" element={<TechProjectDetailPage />} />
             <Route path="employees" element={<EmployeeListPage />} />
@@ -203,6 +207,7 @@ export default function App() {
           >
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<ManagerDashboardPage />} />
+            <Route path="sales" element={<SalesRoute />} />
             <Route path="tech-projects" element={<TechProjectListPage />} />
             <Route path="tech-projects/:id" element={<TechProjectDetailPage />} />
             <Route path="employees" element={<EmployeeListPage />} />
@@ -249,6 +254,7 @@ export default function App() {
           >
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<EmployeeDashboardPage />} />
+            <Route path="sales" element={<SalesRoute />} />
             <Route path="face-enroll" element={
                 <div className="p-8">
                     <FaceEnrollment />
