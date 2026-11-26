@@ -60,7 +60,7 @@ public class SalesCommercialService {
                 && clean(command.exceptionNote()) == null) throw AppException.badRequest("Cần giải trình yêu cầu khác chuẩn / ngoại lệ");
         if (command.technicalDepartmentId()!=null) {
             var department = workspace.row("SELECT * FROM departments WHERE id=?",command.technicalDepartmentId());
-            if (!"TECHNICAL".equals(SalesAccess.kind(text(department,"ten_phong")))) throw AppException.badRequest("Chọn phòng Kỹ thuật thẩm định");
+            if (!"TECHNICAL".equals(SalesAccess.kind(text(department,"ten_phong")))) throw AppException.badRequest("Chọn Phòng Công nghệ thẩm định");
         }
         // Lock catalog entries in a stable order and capture their version and price floor.
         var products = new TreeMap<Long,Map<String,Object>>();
@@ -123,7 +123,7 @@ public class SalesCommercialService {
             }
             var decision = SalesPricingService.evaluate(policy,quote,lines);
             if (command.action().equals("SEND") && !decision.level().equals("STANDARD")) throw AppException.conflict("Báo giá cần thẩm định/phê duyệt. Chọn Xác định tuyến duyệt để chuyển đúng cấp.");
-            if (decision.technical() && quote.get("technical_department_id")==null) throw AppException.badRequest("Báo giá cần thẩm định Kỹ thuật. Hãy tạo phiên bản có phòng Kỹ thuật được chỉ định.");
+            if (decision.technical() && quote.get("technical_department_id")==null) throw AppException.badRequest("Báo giá cần thẩm định từ Phòng Công nghệ. Hãy tạo phiên bản có Phòng Công nghệ được chỉ định.");
             target = decision.technical() ? "PENDING_TECHNICAL" : decision.level().equals("STANDARD") ? (command.action().equals("SEND") ? "SENT" : "APPROVED") : "PENDING_APPROVAL";
             jdbc.update("""
                     UPDATE sales_quotations SET pricing_policy_id=?,policy_snapshot=?,approval_level=?,routing_reasons=?,technical_status=? WHERE id=?
@@ -173,7 +173,7 @@ public class SalesCommercialService {
         if (!"CONFIRMED".equals(text(contract,"status"))) throw AppException.conflict("Chỉ bàn giao hợp đồng đã được quản lý xác nhận bản ký");
         var recipient = workspace.row("SELECT * FROM departments WHERE id=?",command.recipientDepartmentId());
         if (!Set.of("ACCOUNTING","TECHNICAL").contains(SalesAccess.kind(text(recipient,"ten_phong")))) {
-            throw AppException.badRequest("Chỉ bàn giao cho phòng Kế toán hoặc Kỹ thuật");
+            throw AppException.badRequest("Chỉ bàn giao cho Phòng Tài chính - Kế toán hoặc Phòng Công nghệ");
         }
         var existing = jdbc.queryForList("SELECT * FROM sales_handovers WHERE contract_id=? AND recipient_department_id=? FOR UPDATE",
                 contractId,command.recipientDepartmentId());

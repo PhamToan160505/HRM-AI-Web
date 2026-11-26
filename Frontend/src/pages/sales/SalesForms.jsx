@@ -97,7 +97,7 @@ export function SalesFormFields({ type, form, setForm, data, context }) {
         {check('strategicException', 'Ngoại lệ chiến lược, miễn phí hoặc chấp nhận bán lỗ')}
       </fieldset>
       {field('exceptionNote', 'Giải trình yêu cầu khác chuẩn / ngoại lệ', { maxLength: 2000, required: ['customScope', 'newTechnology', 'resourceException', 'exclusiveRights', 'strategicException'].some(key => form[key]) })}
-      {select('technicalDepartmentId', 'Phòng Kỹ thuật thẩm định (cần khi tùy chỉnh phạm vi / công nghệ)', options(context.technicalDepartments || [], row => row.ten_phong), false)}
+      {select('technicalDepartmentId', 'Phòng Công nghệ thẩm định (cần khi tùy chỉnh phạm vi / công nghệ)', options(context.technicalDepartments || [], row => row.ten_phong), false)}
     </div>;
   }
 
@@ -132,7 +132,7 @@ export function SalesFormFields({ type, form, setForm, data, context }) {
   if (type === 'handover') return <div className="space-y-4">
     <p className="text-sm text-slate-600">Phòng nhận sẽ xem thông tin khách hàng, hợp đồng, phạm vi, mốc nghiệm thu và điều kiện thanh toán.</p>
     {select('recipientDepartmentId', 'Phòng nhận', options(context.recipients, row => row.ten_phong))}
-    {context.recipients.length === 0 && <p role="alert" className="text-sm text-rose-700">Cần tạo phòng Kế toán hoặc Kỹ thuật trong quản lý phòng ban trước khi bàn giao.</p>}
+    {context.recipients.length === 0 && <p role="alert" className="text-sm text-rose-700">Cần tạo Phòng Tài chính - Kế toán hoặc Phòng Công nghệ trong quản lý phòng ban trước khi bàn giao.</p>}
   </div>;
 
   if (type === 'transition') return <div className="space-y-4">

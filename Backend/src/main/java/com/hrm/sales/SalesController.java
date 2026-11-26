@@ -33,7 +33,7 @@ public class SalesController {
     public ApiResponse<?> technicalQueue(@AuthenticationPrincipal CustomUserDetails user) { return ApiResponse.ok(technical.queue(user.getUserId())); }
     @PostMapping("/quotations/{id}/technical-review")
     public ApiResponse<?> technicalReview(@AuthenticationPrincipal CustomUserDetails user,@PathVariable long id,@Valid @RequestBody TechnicalReview command) {
-        technical.review(user.getUserId(),id,command); return ApiResponse.ok(null,"Đã ghi nhận thẩm định Kỹ thuật");
+        technical.review(user.getUserId(),id,command); return ApiResponse.ok(null,"Đã ghi nhận thẩm định từ Phòng Công nghệ");
     }
 
     @GetMapping("/context")

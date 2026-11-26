@@ -85,7 +85,7 @@ public class SalesPricingService {
         BigDecimal amount = catalog.max(gross).max(total);
         boolean technical = !standard || flag(quote,"custom_scope") || flag(quote,"new_technology") || flag(quote,"resource_exception");
         List<String> reasons = new ArrayList<>();
-        if (technical) reasons.add("Cần Kỹ thuật thẩm định phạm vi, công sức, tiến độ và nguồn lực");
+        if (technical) reasons.add("Cần Phòng Công nghệ thẩm định phạm vi, công sức, tiến độ và nguồn lực");
         boolean exceptional = false;
         if (total.signum()==0) { exceptional = true; reasons.add("Miễn phí toàn bộ báo giá"); }
         if (belowLineFloor || total.compareTo(floor) < 0) { exceptional = true; reasons.add("Giá sau giảm dưới giá sàn"); }

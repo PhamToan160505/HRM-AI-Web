@@ -16,7 +16,7 @@ export function SalesPolicyPanel({ policy, ceo, open }) {
       { id: 'manager', level: 'Trưởng phòng', amount: policy.manager_max, discount: policy.manager_discount, condition: 'Đủ cả hạn mức giá trị, chiết khấu và giá sàn' },
       { id: 'director', level: 'Giám đốc Kinh doanh', amount: policy.director_max, discount: policy.director_discount, condition: 'Đủ cả hạn mức giá trị, chiết khấu và giá sàn' },
     ]} columns={[{ key: 'level', label: 'Cấp xử lý' }, { key: 'amount', label: 'Giá trị tối đa', render: row => money(row.amount) }, { key: 'discount', label: 'Giảm tối đa', render: row => `${row.discount}%` }, { key: 'condition', label: 'Điều kiện' }]} />
-    <p className="text-sm text-slate-700">CEO duyệt khi vượt hạn mức Giám đốc, dưới giá sàn, miễn phí, điều khoản khác chuẩn, độc quyền nền tảng hoặc ngoại lệ nguồn lực/chiến lược. Tùy chỉnh phạm vi hoặc công nghệ được Kỹ thuật thẩm định trước. Người lập không tự duyệt ngoại lệ.</p>
+    <p className="text-sm text-slate-700">CEO duyệt khi vượt hạn mức Giám đốc, dưới giá sàn, miễn phí, điều khoản khác chuẩn, độc quyền nền tảng hoặc ngoại lệ nguồn lực/chiến lược. Tùy chỉnh phạm vi hoặc công nghệ được Phòng Công nghệ thẩm định trước. Người lập không tự duyệt ngoại lệ.</p>
     <div className="rounded-lg border border-slate-200 bg-white p-4"><h3 className="mb-2 font-semibold">Điều khoản chuẩn</h3><p className="whitespace-pre-wrap text-sm">{policy.standard_terms || 'Chưa thiết lập điều khoản chuẩn.'}</p></div>
     <p className="text-sm text-slate-600">Lý do công bố · {policy.change_reason}{policy.ceo_delegate_id && ` · Đã ủy quyền duyệt cấp CEO cho người dùng #${policy.ceo_delegate_id}`}</p>
   </section>;
@@ -33,7 +33,7 @@ export function QuoteRoutingDetail({ detail }) {
     {quote.pricing_policy_id && <p>Áp dụng chính sách #{quote.pricing_policy_id}. Hạn mức tại thời điểm trình: chuẩn {money(snapshot?.standard_max)} · Trưởng phòng {money(snapshot?.manager_max)} / {snapshot?.manager_discount}% · Giám đốc {money(snapshot?.director_max)} / {snapshot?.director_discount}%.</p>}
     {quote.exception_note && <p className="whitespace-pre-wrap">Giải trình · {quote.exception_note}</p>}
     {detail.reviews?.map(review => <div key={review.id} className="space-y-1 border-t border-blue-200 pt-3">
-      <p className="font-semibold">Kỹ thuật · {review.reviewer_name} · {review.approved ? 'Khả thi' : 'Trả về'} · {review.effort_days} ngày công</p>
+      <p className="font-semibold">Phòng Công nghệ · {review.reviewer_name} · {review.approved ? 'Khả thi' : 'Trả về'} · {review.effort_days} ngày công</p>
       <p>{review.feasibility}</p><p>Tiến độ · {review.delivery_plan}</p><p>Nguồn lực · {review.resource_needs}</p>
       {review.requires_executive && <p>Cần CEO quyết định nguồn lực / chi phí.</p>}
     </div>)}

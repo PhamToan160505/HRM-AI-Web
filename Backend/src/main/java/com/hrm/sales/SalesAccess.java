@@ -38,11 +38,16 @@ public class SalesAccess {
     }
 
     public static String kind(String name) {
+        if (name == null) return "OTHER";
         String text = Normalizer.normalize(name, Normalizer.Form.NFD).replaceAll("\\p{M}", "")
-                .replace('đ', 'd').replace('Đ', 'D').toLowerCase(java.util.Locale.ROOT).trim();
+                .replace('đ', 'd').replace('Đ', 'D').toLowerCase(java.util.Locale.ROOT)
+                .replaceAll("\\s+", " ").trim();
         if (text.equals("kinh doanh") || text.equals("phong kinh doanh")) return "SALES";
-        if (text.equals("ke toan") || text.equals("phong ke toan")) return "ACCOUNTING";
-        if (text.equals("ky thuat") || text.equals("phong ky thuat")) return "TECHNICAL";
+        if (text.equals("tai chinh - ke toan") || text.equals("phong tai chinh - ke toan")
+                || text.equals("tai chinh ke toan") || text.equals("phong tai chinh ke toan")
+                || text.equals("ke toan") || text.equals("phong ke toan")) return "ACCOUNTING";
+        if (text.equals("cong nghe") || text.equals("phong cong nghe")
+                || text.equals("ky thuat") || text.equals("phong ky thuat")) return "TECHNICAL";
         return "OTHER";
     }
 

@@ -10,7 +10,7 @@ import { SalesPolicyPanel, QuoteRoutingDetail } from './SalesPricingPanels';
 import { labels, money, dateText, approvalLabels } from './salesUtils';
 
 const emptyData = { customers: [], opportunities: [], activities: [], products: [], quotations: [], contracts: [], handovers: [] };
-const tabLabels = { overview: 'Tổng quan', customers: 'Khách hàng', opportunities: 'Cơ hội', activities: 'Chăm sóc', products: 'Sản phẩm & dịch vụ', quotations: 'Báo giá', contracts: 'Hợp đồng', handovers: 'Bàn giao', policy: 'Chính sách giá', technical: 'Thẩm định Kỹ thuật' };
+const tabLabels = { overview: 'Tổng quan', customers: 'Khách hàng', opportunities: 'Cơ hội', activities: 'Chăm sóc', products: 'Sản phẩm & dịch vụ', quotations: 'Báo giá', contracts: 'Hợp đồng', handovers: 'Bàn giao', policy: 'Chính sách giá', technical: 'Thẩm định Công nghệ' };
 const formTitles = { customer: 'Khách hàng', contact: 'Người liên hệ', opportunity: 'Cơ hội bán hàng', activity: 'Lịch chăm sóc', product: 'Sản phẩm / dịch vụ', quotation: 'Lập phiên bản báo giá', contract: 'Nháp hợp đồng', handover: 'Bàn giao hợp đồng' };
 
 export default function SalesPage() {
@@ -185,7 +185,7 @@ export default function SalesPage() {
 
   return <div className="mx-auto max-w-[1600px] space-y-6 p-4 sm:p-6">
     <div className="flex flex-wrap items-start justify-between gap-4">
-      <div><h1 className="text-2xl font-bold tracking-tight text-slate-900">{context.sales ? 'Phòng Kinh doanh' : context.technicalReviewer ? 'Thẩm định & bàn giao Kỹ thuật' : 'Tiếp nhận bàn giao'}</h1><p className="mt-1 text-sm text-slate-600">{context.sales ? 'Khách hàng, cơ hội và giao dịch trong một luồng làm việc.' : 'Xác nhận hợp đồng và yêu cầu từ phòng Kinh doanh.'}</p></div>
+      <div><h1 className="text-2xl font-bold tracking-tight text-slate-900">{context.sales ? 'Phòng Kinh doanh' : context.technicalReviewer ? 'Thẩm định & bàn giao Phòng Công nghệ' : 'Tiếp nhận bàn giao'}</h1><p className="mt-1 text-sm text-slate-600">{context.sales ? 'Khách hàng, cơ hội và giao dịch trong một luồng làm việc.' : 'Xác nhận hợp đồng và yêu cầu từ phòng Kinh doanh.'}</p></div>
       <button onClick={reload} disabled={busy} className={buttonClass}><RefreshCw size={16} />Làm mới</button>
     </div>
     <nav aria-label="Nghiệp vụ Kinh doanh" className="flex gap-5 overflow-x-auto border-b border-slate-200">{visibleTabs.map(item => <button key={item} onClick={() => setParams({ tab: item })} className={`whitespace-nowrap border-b-2 pb-3 text-sm font-semibold ${currentTab === item ? 'border-blue-700 text-blue-800' : 'border-transparent text-slate-600 hover:text-blue-700'}`}>{tabLabels[item]}</button>)}</nav>
@@ -236,7 +236,7 @@ export default function SalesPage() {
     {currentTab === 'products' && <section className="space-y-4">
       <Toolbar title="Danh mục sản phẩm & dịch vụ" onAdd={context.director ? () => productForm() : null} />
       <p className="text-sm text-slate-600">Giám đốc Kinh doanh / CEO quản lý giá niêm yết, giá sàn và phạm vi gói chuẩn.</p>
-      <DataTable rows={data.products} columns={[{ key: 'name', label: 'Sản phẩm / dịch vụ' }, { key: 'unit', label: 'Đơn vị' }, valueColumn('unit_price'), { key: 'floor_price', label: 'Giá sàn', render: row => money(row.floor_price) }, { key: 'standard_scope', label: 'Phạm vi chuẩn', render: row => <><p>{row.standard_scope}</p><p className="mt-1 text-blue-800">{row.standard_package ? 'Gói chuẩn' : 'Cần thẩm định Kỹ thuật'}</p></> }, { key: 'active', label: 'Tình trạng', render: row => row.active ? 'Đang cung cấp' : 'Ngừng cung cấp' }, { key: 'action', label: 'Thao tác', render: row => context.director && actionButton('Chỉnh sửa', () => productForm(row)) }]} />
+      <DataTable rows={data.products} columns={[{ key: 'name', label: 'Sản phẩm / dịch vụ' }, { key: 'unit', label: 'Đơn vị' }, valueColumn('unit_price'), { key: 'floor_price', label: 'Giá sàn', render: row => money(row.floor_price) }, { key: 'standard_scope', label: 'Phạm vi chuẩn', render: row => <><p>{row.standard_scope}</p><p className="mt-1 text-blue-800">{row.standard_package ? 'Gói chuẩn' : 'Cần Phòng Công nghệ thẩm định'}</p></> }, { key: 'active', label: 'Tình trạng', render: row => row.active ? 'Đang cung cấp' : 'Ngừng cung cấp' }, { key: 'action', label: 'Thao tác', render: row => context.director && actionButton('Chỉnh sửa', () => productForm(row)) }]} />
     </section>}
 
     {currentTab === 'quotations' && <section className="space-y-4">
@@ -244,7 +244,7 @@ export default function SalesPage() {
       {!data.policy?.enabled && <p role="status" className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">CEO cần công bố hạn mức tại Chính sách giá trước khi trình báo giá mới. Bạn vẫn có thể lưu nháp; báo giá đã duyệt tiếp tục xử lý.</p>}
       <DataTable rows={data.quotations} columns={[{ key: 'revision', label: 'Báo giá', render: row => <button className="font-semibold text-blue-800 hover:underline" onClick={() => inspectQuote(row)}>#{row.id} · v{row.revision}</button> }, customerColumn, { key: 'opportunity_title', label: 'Cơ hội' }, valueColumn('total_amount'), dateColumn('valid_until', 'Hiệu lực đến'), { key: 'approval_level', label: 'Cấp duyệt', render: row => <><p>{approvalLabels[row.approval_level] || 'Chưa xác định'}</p><p className="mt-1 text-xs text-slate-500">{row.routing_reasons}</p></> }, stateColumn, { key: 'action', label: 'Thao tác', render: row => actions(<>
         <button className={buttonClass} onClick={() => download(row)} aria-label={`Tải PDF báo giá ${row.id}`}><Download size={16} />PDF</button>
-        {row.status === 'DRAFT' && <>{actionButton('Xác định tuyến duyệt', () => transition('quotations', row, 'SUBMIT', 'Kiểm tra chính sách và chuyển duyệt', false, 'Gói chuẩn đủ điều kiện được hệ thống xác nhận ngay; các trường hợp khác chuyển Kỹ thuật hoặc cấp duyệt tương ứng.'))}{actionButton('Gửi trực tiếp theo giá chuẩn', () => transition('quotations', row, 'SEND', 'Ghi nhận gửi báo giá chuẩn', false, 'Chỉ thành công khi hệ thống xác nhận đúng chính sách chuẩn. Xác nhận bạn đã chuyển đúng phiên bản này cho khách hàng.'))}</>}
+        {row.status === 'DRAFT' && <>{actionButton('Xác định tuyến duyệt', () => transition('quotations', row, 'SUBMIT', 'Kiểm tra chính sách và chuyển duyệt', false, 'Gói chuẩn đủ điều kiện được hệ thống xác nhận ngay; các trường hợp khác chuyển Phòng Công nghệ hoặc cấp duyệt tương ứng.'))}{actionButton('Gửi trực tiếp theo giá chuẩn', () => transition('quotations', row, 'SEND', 'Ghi nhận gửi báo giá chuẩn', false, 'Chỉ thành công khi hệ thống xác nhận đúng chính sách chuẩn. Xác nhận bạn đã chuyển đúng phiên bản này cho khách hàng.'))}</>}
         {row.can_approve && row.status === 'PENDING_APPROVAL' && <>{actionButton('Duyệt', () => transition('quotations', row, 'APPROVE', 'Duyệt báo giá', false, row.routing_reasons))}{actionButton('Trả về', () => transition('quotations', row, 'RETURN', 'Trả về báo giá', true))}</>}
         {row.status === 'APPROVED' && actionButton('Ghi nhận đã gửi', () => transition('quotations', row, 'SEND', 'Ghi nhận gửi báo giá', false, 'Xác nhận bạn đã chuyển đúng bản báo giá này cho khách hàng qua kênh trao đổi đã thống nhất.'))}
         {row.status === 'SENT' && <>{actionButton('Chấp thuận', () => transition('quotations', row, 'ACCEPT', 'Khách hàng chấp thuận', true, 'Ghi ngày, kênh trao đổi và căn cứ xác nhận của khách hàng.'))}{actionButton('Từ chối', () => transition('quotations', row, 'DECLINE', 'Khách hàng từ chối'))}</>}
@@ -272,7 +272,7 @@ export default function SalesPage() {
     {currentTab === 'policy' && <SalesPolicyPanel policy={data.policy} ceo={context.ceo} open={open} />}
 
     {currentTab === 'technical' && <section className="space-y-4">
-      <Toolbar title="Báo giá được giao thẩm định Kỹ thuật" />
+      <Toolbar title="Báo giá được giao Phòng Công nghệ thẩm định" />
       <DataTable rows={data.technicalReviews || []} columns={[{ key: 'id', label: 'Báo giá', render: row => `#${row.id} · v${row.revision}` }, { key: 'opportunity_title', label: 'Dự án' }, dateColumn('valid_until', 'Hạn báo giá'), { key: 'scope', label: 'Phạm vi', render: row => <div className="space-y-2"><ul>{row.lines.map(line => <li key={line.id}>{line.description} · {line.quantity} {line.unit}</li>)}</ul><p>{row.exception_note}</p><p className="whitespace-pre-wrap">{row.terms}</p></div> }, { key: 'action', label: 'Thao tác', render: row => actionButton('Thẩm định', () => open('technicalReview', { version: row.version, approved: true, effortDays: '', feasibility: '', deliveryPlan: '', resourceNeeds: '', requiresExecutive: false, scopeSummary: row.lines.map(line => `${line.description} · ${line.quantity} ${line.unit}`).join('\n') }, { quoteId: row.id, title: `Thẩm định báo giá #${row.id}` })) }]} />
     </section>}
 

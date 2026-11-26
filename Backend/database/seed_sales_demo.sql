@@ -46,14 +46,14 @@ BEGIN
     SELECT 'Kinh doanh','Quản lý khách hàng và kinh doanh',b'0',NOW(6)
     WHERE NOT EXISTS (SELECT 1 FROM departments WHERE LOWER(TRIM(ten_phong)) IN ('kinh doanh','phòng kinh doanh'));
     INSERT INTO departments(ten_phong,mo_ta,is_lock,created_at)
-    SELECT 'Kế toán','Phòng Kế toán',b'0',NOW(6)
-    WHERE NOT EXISTS (SELECT 1 FROM departments WHERE LOWER(TRIM(ten_phong)) IN ('kế toán','phòng kế toán'));
+    SELECT 'Tài chính - Kế toán','Phòng Tài chính - Kế toán',b'0',NOW(6)
+    WHERE NOT EXISTS (SELECT 1 FROM departments WHERE LOWER(TRIM(ten_phong)) IN ('tài chính - kế toán','phòng tài chính - kế toán','kế toán','phòng kế toán'));
     INSERT INTO departments(ten_phong,mo_ta,is_lock,created_at)
-    SELECT 'Kỹ thuật','Phòng Kỹ thuật',b'0',NOW(6)
-    WHERE NOT EXISTS (SELECT 1 FROM departments WHERE LOWER(TRIM(ten_phong)) IN ('kỹ thuật','phòng kỹ thuật'));
+    SELECT 'Công nghệ','Phòng Công nghệ',b'0',NOW(6)
+    WHERE NOT EXISTS (SELECT 1 FROM departments WHERE LOWER(TRIM(ten_phong)) IN ('công nghệ','phòng công nghệ','kỹ thuật','phòng kỹ thuật'));
     SELECT MIN(id) INTO sales_department FROM departments WHERE LOWER(TRIM(ten_phong)) IN ('kinh doanh','phòng kinh doanh');
-    SELECT MIN(id) INTO accounting_department FROM departments WHERE LOWER(TRIM(ten_phong)) IN ('kế toán','phòng kế toán');
-    SELECT MIN(id) INTO technical_department FROM departments WHERE LOWER(TRIM(ten_phong)) IN ('kỹ thuật','phòng kỹ thuật');
+    SELECT MIN(id) INTO accounting_department FROM departments WHERE LOWER(TRIM(ten_phong)) IN ('tài chính - kế toán','phòng tài chính - kế toán','kế toán','phòng kế toán');
+    SELECT MIN(id) INTO technical_department FROM departments WHERE LOWER(TRIM(ten_phong)) IN ('công nghệ','phòng công nghệ','kỹ thuật','phòng kỹ thuật');
 
     DROP TEMPORARY TABLE IF EXISTS sales_demo_users;
     CREATE TEMPORARY TABLE sales_demo_users (
@@ -64,9 +64,9 @@ BEGIN
         ('79000102','employee-a@sales.example.test','[DEMO-KD] Nguyễn An','NHAN_VIEN',sales_department),
         ('79000103','employee-b@sales.example.test','[DEMO-KD] Trần Bình','NHAN_VIEN',sales_department),
         ('79000104','director@sales.example.test','[DEMO-KD] Giám đốc Kinh doanh','GIAM_DOC_PHONG_BAN',sales_department),
-        ('79000302','technical-manager@sales.example.test','[DEMO-KD] Trưởng phòng Kỹ thuật','TRUONG_PHONG',technical_department),
-        ('79000201','accounting@sales.example.test','[DEMO-KD] Người nhận Kế toán','NHAN_VIEN',accounting_department),
-        ('79000301','technical@sales.example.test','[DEMO-KD] Người nhận Kỹ thuật','NHAN_VIEN',technical_department);
+        ('79000302','technical-manager@sales.example.test','[DEMO-KD] Trưởng phòng Công nghệ','TRUONG_PHONG',technical_department),
+        ('79000201','accounting@sales.example.test','[DEMO-KD] Người nhận Tài chính - Kế toán','NHAN_VIEN',accounting_department),
+        ('79000301','technical@sales.example.test','[DEMO-KD] Người nhận Công nghệ','NHAN_VIEN',technical_department);
     IF EXISTS (
         SELECT 1 FROM users u JOIN sales_demo_users d ON u.email=d.email OR u.ma_nhan_vien=d.code
         WHERE u.email<>d.email OR u.ma_nhan_vien<>d.code OR u.ma_nhan_vien IS NULL

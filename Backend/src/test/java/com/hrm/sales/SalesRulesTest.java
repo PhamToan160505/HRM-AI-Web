@@ -37,7 +37,11 @@ class SalesRulesTest {
     @Test
     void normalizesExistingDepartmentNames() {
         assertEquals("SALES",SalesAccess.kind(" Phòng Kinh Doanh "));
+        assertEquals("TECHNICAL",SalesAccess.kind("Công nghệ"));
+        assertEquals("TECHNICAL",SalesAccess.kind("Phòng Công nghệ"));
         assertEquals("TECHNICAL",SalesAccess.kind("Kỹ thuật"));
+        assertEquals("ACCOUNTING",SalesAccess.kind("Tài chính - Kế toán"));
+        assertEquals("ACCOUNTING",SalesAccess.kind("Phòng Tài chính - Kế toán"));
         assertEquals("ACCOUNTING",SalesAccess.kind("Kế toán"));
         assertEquals("OTHER",SalesAccess.kind("Nhân sự"));
     }

@@ -1,7 +1,7 @@
 export const labels = {
   NEW: 'Mới tiếp nhận', QUALIFIED: 'Đã xác định nhu cầu', PROPOSAL: 'Đề xuất giải pháp',
   NEGOTIATION: 'Đàm phán', WON: 'Chốt thành công', LOST: 'Chốt thất bại',
-  DRAFT: 'Bản nháp', PENDING_TECHNICAL: 'Chờ Kỹ thuật thẩm định', PENDING_APPROVAL: 'Chờ duyệt', RETURNED: 'Cần bổ sung',
+  DRAFT: 'Bản nháp', PENDING_TECHNICAL: 'Chờ Phòng Công nghệ thẩm định', PENDING_APPROVAL: 'Chờ duyệt', RETURNED: 'Cần bổ sung',
   APPROVED: 'Đã duyệt', SENT: 'Đã gửi khách hàng', ACCEPTED: 'Đã chấp thuận',
   PENDING_REVIEW: 'Chờ rà soát hợp đồng', READY_TO_SIGN: 'Sẵn sàng ký', SIGNED_PENDING_CONFIRMATION: 'Chờ đối chiếu bản ký', SIGNED_RETURNED: 'Cần bổ sung bản ký', CONFIRMED: 'Đã xác nhận bản ký', CANCELLED: 'Đã hủy nháp', SUPERSEDED: 'Đã được thay thế',
   DECLINED: 'Đã từ chối', PENDING: 'Chờ tiếp nhận',
@@ -20,9 +20,16 @@ export function dateText(value) {
 }
 
 export function departmentKind(name = '') {
-  const value = (name ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').toLowerCase().trim();
+  const value = (name ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd')
+    .toLowerCase().replace(/\s+/g, ' ').trim();
   if (['kinh doanh', 'phong kinh doanh'].includes(value)) return 'SALES';
-  if (['ke toan', 'phong ke toan', 'ky thuat', 'phong ky thuat'].includes(value)) return 'RECEIVER';
+  if ([
+    'tai chinh - ke toan', 'phong tai chinh - ke toan',
+    'tai chinh ke toan', 'phong tai chinh ke toan',
+    'cong nghe', 'phong cong nghe',
+    'ke toan', 'phong ke toan',
+    'ky thuat', 'phong ky thuat',
+  ].includes(value)) return 'RECEIVER';
   return 'OTHER';
 }
 
